@@ -1,0 +1,77 @@
+/* Force all table rows in Admin Users Page to have exactly 64px height */
+.admin-users-table tbody tr {
+  height: 64px !important;
+  max-height: 64px !important;
+  min-height: 64px !important;
+}
+
+.admin-users-table tbody tr td {
+  height: 64px !important;
+  max-height: 64px !important;
+  min-height: 64px !important;
+  vertical-align: middle !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Ensure all inner divs maintain 64px height and center content */
+.admin-users-table tbody tr td > div {
+  height: 64px !important;
+  max-height: 64px !important;
+  min-height: 64px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* First column (profile) specific styles */
+.admin-users-table tbody tr td:first-child {
+  min-width: 280px !important;
+}
+
+/* Profile avatar container - force consistent sizing */
+.admin-users-table tbody tr td:first-child > div {
+  justify-content: center !important;
+  gap: 0.75rem !important;
+}
+
+/* Profile avatar circle - force exact dimensions */
+.admin-users-table tbody tr td:first-child .relative {
+  width: 40px !important;
+  height: 40px !important;
+  flex-shrink: 0 !important;
+}
+
+.admin-users-table tbody tr td:first-child .relative > div {
+  width: 40px !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Column widths */
+.admin-users-table thead th:nth-child(1) {
+  width: 30%;
+  min-width: 280px;
+}
+
+.admin-users-table thead th:nth-child(2) {
+  width: 15%;
+}
+
+.admin-users-table thead th:nth-child(3) {
+  width: 15%;
+}
+
+.admin-users-table thead th:nth-child(4) {
+  width: 10%;
+}
+
+.admin-users-table thead th:nth-child(5) {
+  width: 12%;
+}
+
+.admin-users-table thead th:nth-child(6) {
+  width: 10%;
+}
