@@ -1,275 +1,373 @@
-import { AdminLayout } from "../components/AdminLayout";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Search,
-  Plus,
   Edit,
+  Image as ImageIcon,
+  Loader2,
+  Plus,
+  Search,
   Trash2,
   Upload,
   X,
-  MapPin,
-  Heart,
-  MessageCircle,
-  Image as ImageIcon,
 } from "lucide-react";
-import { ImageWithFallback } from "../components/figma/ImageWithFallback";
-import { useChatProfiles } from "../contexts/ChatProfileContext";
+import { AdminLayout } from "../components/AdminLayout";
+import { useAdminChatProfiles, useAgents } from "../hooks/useSupabase";
+import { useAuth } from "../contexts/AuthContext";
+import { supabaseAdmin } from "../../lib/supabase";
+import { ImageWithFallback } from "../components/common/ImageWithFallback";
+import { getPublicUrlForPath } from "../../lib/storage";
 
-interface ChatProfile {
-  id: number;
-  name: string;
-  age: number;
-  height?: number;
-  weight?: number;
-  job?: string;
-  imageUrl: string;
-  interests: string[];
-  bio: string;
-  isOnline: boolean;
-  chatPoints: number;
-}
+type OnlineFilter = "all" | "online" | "offline";
 
 export function AdminChatsPage() {
-  const { profiles, setProfiles } = useChatProfiles();
   const [searchTerm, setSearchTerm] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProfile, setEditingProfile] =
-    useState<ChatProfile | null>(null);
-  const [imagePreviewModal, setImagePreviewModal] = useState<
-    string | null
-  >(null);
-  const [hashtagInput, setHashtagInput] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "online" | "offline"
-  >("all");
+  const [onlineFilter, setOnlineFilter] = useState<OnlineFilter>("all");
 
-  // 삭제 확인 팝업 상태
+  const [imagePreviewModal, setImagePreviewModal] = useState<string | null>(
+    null,
+  );
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [originalImage, setOriginalImage] = useState("");
+  const [interestInput, setInterestInput] = useState("");
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteProfile, setDeleteProfile] =
-    useState<ChatProfile | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   const [formData, setFormData] = useState({
     name: "",
-    age: 25,
-    height: 0,
-    weight: 0,
+    age: 20,
+    height: "",
+    weight: "",
     job: "",
-    imageUrl: "",
-    interests: [] as string[],
     bio: "",
-    isOnline: true,
-    chatPoints: 0,
+    image: "",
+    interests: [] as string[],
+    chat_cost: "",
+    is_online: false,
+    is_active: true,
+    assigned_agent_id: "",
   });
 
-  // 모달 열릴 때 배경 스크롤 방지
+  const { adminAccount } = useAuth();
+
+  const {
+    profiles,
+    isLoading,
+    error,
+    createProfile,
+    updateProfile,
+    deleteProfile,
+  } = useAdminChatProfiles();
+
+  const { agents } = useAgents();
+
+  const filteredProfiles = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+
+    // Include all profiles (active and inactive), sort inactive to end
+    return (profiles || [])
+      .filter((p: any) => {
+        const matchesSearch =
+          term.length === 0 ||
+          String(p.name || "")
+            .toLowerCase()
+            .includes(term);
+
+        const isOnline = !!p.is_online;
+        const isActive = p.is_active !== false;
+        const matchesOnline =
+          onlineFilter === "all" ||
+          (onlineFilter === "online"
+            ? isOnline && isActive
+            : !isOnline || !isActive);
+
+        return matchesSearch && matchesOnline;
+      })
+      .sort((a: any, b: any) => {
+        // Active profiles first, inactive at the end
+        const aActive = a.is_active !== false;
+        const bActive = b.is_active !== false;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return 0;
+      });
+  }, [onlineFilter, profiles, searchTerm]);
+
   useEffect(() => {
-    const isAnyModalOpen =
-      isModalOpen ||
-      showDeleteModal ||
-      imagePreviewModal !== null;
-
-    if (isAnyModalOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
+    if (!isModalOpen && !showDeleteModal && !imagePreviewModal) {
       document.body.style.overflow = "unset";
+      return;
     }
-
+    document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [isModalOpen, showDeleteModal, imagePreviewModal]);
+  }, [imagePreviewModal, isModalOpen, showDeleteModal]);
 
-  const filteredProfiles = profiles.filter((profile) => {
-    // 검색어 필터
-    const matchesSearch = profile.name
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
+  const previewUrl = useMemo(() => {
+    if (!imageFile) return null;
+    return URL.createObjectURL(imageFile);
+  }, [imageFile]);
 
-    // 상태 필터
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "online" && profile.isOnline) ||
-      (statusFilter === "offline" && !profile.isOnline);
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
-    return matchesSearch && matchesStatus;
-  });
+  const uploadChatProfileImage = async (file: File) => {
+    const bucket = "chat-profile-images";
+    const ext = file.name.split(".").pop() || "jpg";
+    const idPart =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const filePath = `chat_profiles/${idPart}.${ext}`;
 
-  const handleOpenModal = (profile?: ChatProfile) => {
-    if (profile) {
-      setEditingProfile(profile);
-      setFormData({
-        name: profile.name,
-        age: profile.age,
-        height: profile.height,
-        weight: profile.weight,
-        job: profile.job || "",
-        imageUrl: profile.imageUrl,
-        interests: profile.interests,
-        bio: profile.bio,
-        isOnline: profile.isOnline,
-        chatPoints: profile.chatPoints || 0,
-      });
-    } else {
-      setEditingProfile(null);
-      setFormData({
-        name: "",
-        age: 25,
-        height: 0,
-        weight: 0,
-        job: "",
-        imageUrl: "",
-        interests: [] as string[],
-        bio: "",
-        isOnline: true,
-        chatPoints: 0,
-      });
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(bucket)
+      .upload(filePath, file, { upsert: true, contentType: file.type });
+
+    if (uploadError) {
+      throw uploadError;
     }
-    setHashtagInput("");
+
+    const slash = filePath.lastIndexOf("/");
+    const prefix = slash >= 0 ? filePath.slice(0, slash) : "";
+    const fileName = slash >= 0 ? filePath.slice(slash + 1) : filePath;
+
+    let objectId: string | null = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { data, error } = await supabaseAdmin.storage
+        .from(bucket)
+        .list(prefix, { limit: 100 });
+
+      if (error) {
+        throw error;
+      }
+
+      const match = (data || []).find((o: any) => String(o?.name) === fileName);
+      const id = (match as any)?.id ? String((match as any).id) : null;
+      if (id) {
+        objectId = id;
+        break;
+      }
+
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    return { filePath, objectId };
+  };
+
+  const openCreateModal = () => {
+    setEditingId(null);
+    setImageFile(null);
+    setOriginalImage("");
+    setInterestInput("");
+    setFormData({
+      name: "",
+      age: 20,
+      height: "",
+      weight: "",
+      job: "",
+      bio: "",
+      image: "",
+      interests: [],
+      chat_cost: "",
+      is_online: false,
+      is_active: true,
+      assigned_agent_id: "",
+    });
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingProfile(null);
+  const openEditModal = (id: string) => {
+    const target: any = (profiles || []).find((p: any) => p.id === id);
+    if (!target) return;
+
+    setEditingId(id);
+    setImageFile(null);
+    setOriginalImage(String(target.image || ""));
+    setInterestInput("");
+
+    const interests = Array.isArray(target.interests)
+      ? (target.interests as unknown as string[])
+      : [];
+
+    setFormData({
+      name: target.name || "",
+      age: Number(target.age || 20),
+      height: target.height ? String(target.height) : "",
+      weight: target.weight ? String(target.weight) : "",
+      job: target.job || "",
+      bio: target.bio || "",
+      image: target.image || "",
+      interests: interests.filter(Boolean),
+      chat_cost: target.chat_cost ? String(target.chat_cost) : "",
+      is_online: !!target.is_online,
+      is_active: target.is_active !== false,
+      assigned_agent_id: target.assigned_agent_id || "",
+    });
+    setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingId(null);
+    setImageFile(null);
+    setOriginalImage("");
+    setInterestInput("");
+    isSubmittingRef.current = false;
+    setIsSubmitting(false);
+  };
+
+  const addInterest = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized) return;
+    if (formData.interests.includes(normalized)) return;
+    setFormData((prev) => ({
+      ...prev,
+      interests: [...prev.interests, normalized],
+    }));
+  };
+
+  const removeInterest = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      interests: prev.interests.filter((i) => i !== value),
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingProfile) {
-      // 수정
-      setProfiles(
-        profiles.map((profile) =>
-          profile.id === editingProfile.id
-            ? {
-                ...profile,
-                name: formData.name,
-                age: formData.age,
-                height: formData.height,
-                weight: formData.weight,
-                job: formData.job,
-                imageUrl: formData.imageUrl,
-                interests: formData.interests,
-                bio: formData.bio,
-                isOnline: formData.isOnline,
-                chatPoints: formData.chatPoints,
-              }
-            : profile,
-        ),
-      );
-    } else {
-      // 새로 등록
-      const newProfile: ChatProfile = {
-        id: Math.max(...profiles.map((p) => p.id), 0) + 1,
-        name: formData.name,
-        age: formData.age,
-        height: formData.height,
-        weight: formData.weight,
-        job: formData.job,
-        imageUrl: formData.imageUrl,
+    // Use ref for synchronous guard against rapid clicks (useState is async)
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+
+    try {
+      const parseOptionalInt = (value: string) => {
+        const raw = (value || "").trim();
+        if (!raw) return null;
+
+        const match = raw.match(/\d+/);
+        if (!match) return null;
+
+        const parsed = Number(match[0]);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+
+      const uploaded = imageFile
+        ? await uploadChatProfileImage(imageFile)
+        : null;
+      const imageToSave = uploaded?.filePath ?? (formData.image.trim() || null);
+
+      const isUrlLike = (value: string) =>
+        /^(https?:\/\/|data:|blob:)/i.test(value);
+      const didManuallyChangeImage =
+        !!editingId &&
+        !uploaded?.objectId &&
+        formData.image.trim() !== originalImage;
+      const shouldClearObjectId =
+        (!uploaded?.objectId && isUrlLike(formData.image.trim())) ||
+        (!uploaded?.objectId && didManuallyChangeImage);
+
+      const payload: any = {
+        name: formData.name.trim(),
+        age: Number(formData.age),
+        height: parseOptionalInt(formData.height),
+        weight: parseOptionalInt(formData.weight),
+        job: formData.job.trim() || null,
+        bio: formData.bio.trim() || null,
+        image: imageToSave,
+        image_object_id:
+          uploaded?.objectId ?? (shouldClearObjectId ? null : undefined),
         interests: formData.interests,
-        bio: formData.bio,
-        isOnline: formData.isOnline,
-        chatPoints: formData.chatPoints,
+        chat_cost: parseOptionalInt(formData.chat_cost),
+        is_online: !!formData.is_online,
+        is_active: !!formData.is_active,
+        assigned_agent_id: formData.assigned_agent_id || null,
+        // Record admin who assigned agent (only when agent is assigned)
+        assigned_by_admin_id: formData.assigned_agent_id
+          ? adminAccount?.id || null
+          : null,
       };
-      setProfiles([newProfile, ...profiles]);
-    }
 
-    handleCloseModal();
-  };
-
-  const handleDelete = (id: number) => {
-    setProfiles(
-      profiles.filter((profile) => profile.id !== id),
-    );
-  };
-
-  // 엔터키로 삭제 확인
-  useEffect(() => {
-    if (!showDeleteModal || !deleteProfile) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        handleDelete(deleteProfile.id);
-        setShowDeleteModal(false);
-        setDeleteProfile(null);
+      if (editingId) {
+        await updateProfile(editingId, payload);
+      } else {
+        await createProfile(payload);
       }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () =>
-      window.removeEventListener("keydown", handleKeyDown);
-  }, [showDeleteModal, deleteProfile]);
-
-  const handleImageUpload = (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({
-          ...formData,
-          imageUrl: reader.result as string,
-        });
-      };
-      reader.readAsDataURL(file);
+      closeModal();
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
-  const handleAddHashtag = () => {
-    if (
-      hashtagInput.trim() &&
-      !formData.interests.includes(hashtagInput.trim())
-    ) {
-      setFormData({
-        ...formData,
-        interests: [...formData.interests, hashtagInput.trim()],
-      });
-      setHashtagInput("");
-    }
+  const openDelete = (id: string) => {
+    setDeleteTargetId(id);
+    setShowDeleteModal(true);
   };
 
-  const handleRemoveHashtag = (index: number) => {
-    setFormData({
-      ...formData,
-      interests: formData.interests.filter(
-        (_, i) => i !== index,
-      ),
-    });
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    await deleteProfile(deleteTargetId);
+    setShowDeleteModal(false);
+    setDeleteTargetId(null);
   };
+
+  const allProfiles = useMemo(() => {
+    return profiles || [];
+  }, [profiles]);
+
+  const activeProfiles = useMemo(() => {
+    return allProfiles.filter((p: any) => p.is_active !== false);
+  }, [allProfiles]);
+
+  const inactiveCount = useMemo(() => {
+    return allProfiles.filter((p: any) => p.is_active === false).length;
+  }, [allProfiles]);
+
+  const onlineCount = useMemo(() => {
+    return activeProfiles.filter((p: any) => !!p.is_online).length;
+  }, [activeProfiles]);
 
   return (
     <AdminLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-white text-3xl mb-2">
-              채팅 프로필 관리
-            </h1>
+            <h1 className="text-white text-3xl mb-2">채팅 프로필 관리</h1>
             <p className="text-gray-400">
               전체{" "}
               <span className="text-white font-semibold">
-                {profiles.length}
+                {allProfiles.length}
               </span>
-              개 • 접속중{" "}
+              개 • 활성{" "}
               <span className="text-green-500 font-semibold">
-                {profiles.filter((p) => p.isOnline).length}
+                {activeProfiles.length}
               </span>
-              명
+              개 • 비활성{" "}
+              <span className="text-gray-500 font-semibold">
+                {inactiveCount}
+              </span>
+              개
             </p>
           </div>
           <button
-            onClick={() => handleOpenModal()}
+            onClick={openCreateModal}
             className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
           >
             <Plus size={20} />새 프로필 추가
           </button>
         </div>
 
-        {/* Search */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-2 max-w-md">
           <div className="relative">
             <Search
@@ -286,138 +384,164 @@ export function AdminChatsPage() {
           </div>
         </div>
 
-        {/* Status Filter */}
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setStatusFilter("all")}
+            onClick={() => setOnlineFilter("all")}
             className={`px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap ${
-              statusFilter === "all"
+              onlineFilter === "all"
                 ? "bg-indigo-500 text-white"
                 : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
             }`}
           >
-            전체 ({profiles.length})
+            전체 ({allProfiles.length})
           </button>
           <button
-            onClick={() => setStatusFilter("online")}
+            onClick={() => setOnlineFilter("online")}
             className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-              statusFilter === "online"
+              onlineFilter === "online"
                 ? "bg-green-500 text-white"
                 : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
             }`}
           >
             <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-            온라인 ({profiles.filter((p) => p.isOnline).length})
+            온라인 ({onlineCount})
           </button>
           <button
-            onClick={() => setStatusFilter("offline")}
+            onClick={() => setOnlineFilter("offline")}
             className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-              statusFilter === "offline"
+              onlineFilter === "offline"
                 ? "bg-gray-600 text-white"
                 : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
             }`}
           >
             <span className="w-2 h-2 bg-gray-500 rounded-full"></span>
-            오프라인 (
-            {profiles.filter((p) => !p.isOnline).length})
+            오프라인/비활성 ({allProfiles.length - onlineCount})
           </button>
         </div>
 
-        {/* Profiles Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-          {filteredProfiles.map((profile) => (
-            <div
-              key={profile.id}
-              className="bg-gray-900 rounded-lg overflow-hidden border border-gray-800 hover:border-indigo-500 transition-all group flex flex-col"
-            >
-              {/* Image Container */}
-              <div className="relative aspect-[3/4] overflow-hidden">
-                <ImageWithFallback
-                  src={profile.imageUrl}
-                  alt={profile.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                {profile.isOnline && (
-                  <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-lg">
-                    <span className="w-1 h-1 bg-white rounded-full animate-pulse"></span>
-                    <span>접속중</span>
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/30 text-red-300 rounded-lg px-4 py-3 text-sm">
+            {error.message}
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="p-8 text-center text-gray-400">
+            <Loader2 className="w-6 h-6 animate-spin inline-block mr-2" />
+            불러오는 중...
+          </div>
+        ) : filteredProfiles.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">
+            프로필이 없습니다.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {filteredProfiles.map((profile: any) => {
+              const interests = Array.isArray(profile.interests)
+                ? (profile.interests as unknown as string[])
+                : [];
+              const avatarUrl = getPublicUrlForPath(
+                "chat-profile-images",
+                profile.image,
+              );
+              const isInactive = profile.is_active === false;
+
+              return (
+                <div
+                  key={profile.id}
+                  className={`bg-gray-900 rounded-lg overflow-hidden border transition-all group flex flex-col ${
+                    isInactive
+                      ? "border-gray-700 opacity-60"
+                      : "border-gray-800 hover:border-indigo-500"
+                  }`}
+                >
+                  <div className="relative aspect-[3/4] overflow-hidden">
+                    <ImageWithFallback
+                      src={avatarUrl ?? undefined}
+                      alt={profile.name || ""}
+                      className={`w-full h-full object-cover transition-transform duration-300 ${
+                        isInactive ? "grayscale" : "group-hover:scale-105"
+                      }`}
+                    />
+                    {isInactive ? (
+                      <div className="absolute top-2 right-2 bg-gray-600 text-gray-300 text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-lg">
+                        <span>비활성</span>
+                      </div>
+                    ) : !!profile.is_online ? (
+                      <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-lg">
+                        <span className="w-1 h-1 bg-white rounded-full animate-pulse"></span>
+                        <span>접속중</span>
+                      </div>
+                    ) : null}
                   </div>
-                )}
-              </div>
 
-              {/* Info */}
-              <div className="p-2 flex flex-col gap-1 flex-1">
-                <h3 className="text-white text-sm">
-                  {profile.name}{" "}
-                  <span className="text-gray-400 text-xs">
-                    {profile.age}
-                  </span>
-                </h3>
-
-                <div className="flex flex-wrap gap-0.5">
-                  {profile.interests
-                    .slice(0, 2)
-                    .map((interest, idx) => (
-                      <span
-                        key={idx}
-                        className="text-xs text-indigo-400 bg-indigo-500/20 px-1.5 py-0.5 rounded-full border border-indigo-500/30 whitespace-nowrap"
-                      >
-                        #{interest}
+                  <div className="p-2 flex flex-col gap-1 flex-1">
+                    <h3 className="text-white text-sm">
+                      {profile.name}{" "}
+                      <span className="text-gray-400 text-xs">
+                        {profile.age}
                       </span>
-                    ))}
-                  {profile.interests.length > 2 && (
-                    <span className="text-xs text-gray-500 px-1 py-0.5">
-                      +{profile.interests.length - 2}
-                    </span>
-                  )}
-                </div>
+                    </h3>
 
-                <p className="text-gray-400 text-xs line-clamp-1">
-                  {profile.bio}
-                </p>
+                    <div className="flex flex-wrap gap-0.5">
+                      {interests.slice(0, 2).map((interest, idx) => (
+                        <span
+                          key={`${profile.id}-${idx}`}
+                          className="text-xs text-indigo-400 bg-indigo-500/20 px-1.5 py-0.5 rounded-full border border-indigo-500/30 whitespace-nowrap"
+                        >
+                          #{interest}
+                        </span>
+                      ))}
+                      {interests.length > 2 && (
+                        <span className="text-xs text-gray-500 px-1 py-0.5">
+                          +{interests.length - 2}
+                        </span>
+                      )}
+                    </div>
 
-                <div className="flex gap-1 mt-auto pt-1">
-                  <button
-                    onClick={() => handleOpenModal(profile)}
-                    className="flex-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 px-1.5 py-1 rounded transition-colors flex items-center justify-center gap-1 border border-indigo-500/30 text-xs"
-                  >
-                    <Edit size={12} />
-                    수정
-                  </button>
-                  <button
-                    onClick={() => {
-                      setDeleteProfile(profile);
-                      setShowDeleteModal(true);
-                    }}
-                    className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 px-1.5 py-1 rounded transition-colors flex items-center justify-center gap-1 border border-red-500/30 text-xs"
-                  >
-                    <Trash2 size={12} />
-                    삭제
-                  </button>
+                    <p className="text-gray-400 text-xs line-clamp-1">
+                      {profile.bio || ""}
+                    </p>
+
+                    <div className="flex gap-1 mt-auto pt-1">
+                      <button
+                        onClick={() => openEditModal(profile.id)}
+                        className="flex-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 px-1.5 py-1 rounded transition-colors flex items-center justify-center gap-1 border border-indigo-500/30 text-xs"
+                      >
+                        <Edit size={12} />
+                        수정
+                      </button>
+                      <button
+                        onClick={() => openDelete(profile.id)}
+                        className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 px-1.5 py-1 rounded transition-colors flex items-center justify-center gap-1 border border-red-500/30 text-xs"
+                      >
+                        <Trash2 size={12} />
+                        삭제
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 p-4 overflow-y-auto scrollbar-hide">
           <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-lg my-8 max-h-[calc(100vh-4rem)] flex flex-col">
             <div className="bg-gray-900 border-b border-gray-800 p-3 flex items-center justify-between flex-shrink-0">
               <h2 className="text-white text-lg">
-                {editingProfile
-                  ? "프로필 수정"
-                  : "새 프로필 추가"}
+                {editingId ? "프로필 수정" : "새 프로필 추가"}
               </h2>
               <button
-                onClick={handleCloseModal}
+                onClick={closeModal}
                 className="text-gray-400 hover:text-white transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
+
             <form
               onSubmit={handleSubmit}
               className="p-4 space-y-3 overflow-y-auto flex-1 scrollbar-hide"
@@ -431,10 +555,7 @@ export function AdminChatsPage() {
                     type="text"
                     value={formData.name}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        name: e.target.value,
-                      })
+                      setFormData((p) => ({ ...p, name: e.target.value }))
                     }
                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500"
                     placeholder="이름을 입력하세요"
@@ -450,10 +571,10 @@ export function AdminChatsPage() {
                     type="number"
                     value={formData.age}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        age: parseInt(e.target.value),
-                      })
+                      setFormData((p) => ({
+                        ...p,
+                        age: Number(e.target.value),
+                      }))
                     }
                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500"
                     min="18"
@@ -467,21 +588,13 @@ export function AdminChatsPage() {
                     키 (cm)
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     value={formData.height || ""}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        height: e.target.value
-                          ? parseInt(e.target.value)
-                          : 0,
-                      })
+                      setFormData((p) => ({ ...p, height: e.target.value }))
                     }
                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500"
                     placeholder="키를 입력하세요"
-                    min="100"
-                    max="250"
-                    required
                   />
                 </div>
 
@@ -490,21 +603,13 @@ export function AdminChatsPage() {
                     몸무게 (kg)
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     value={formData.weight || ""}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        weight: e.target.value
-                          ? parseInt(e.target.value)
-                          : 0,
-                      })
+                      setFormData((p) => ({ ...p, weight: e.target.value }))
                     }
                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500"
                     placeholder="몸무게를 입력하세요"
-                    min="30"
-                    max="200"
-                    required
                   />
                 </div>
               </div>
@@ -518,14 +623,10 @@ export function AdminChatsPage() {
                     type="text"
                     value={formData.job}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        job: e.target.value,
-                      })
+                      setFormData((p) => ({ ...p, job: e.target.value }))
                     }
                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500"
                     placeholder="직업을 입력하세요"
-                    required
                   />
                 </div>
 
@@ -535,14 +636,12 @@ export function AdminChatsPage() {
                   </label>
                   <input
                     type="number"
-                    value={formData.chatPoints ?? ""}
+                    value={formData.chat_cost ?? ""}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        chatPoints: e.target.value
-                          ? parseInt(e.target.value)
-                          : 0,
-                      })
+                      setFormData((p) => ({
+                        ...p,
+                        chat_cost: e.target.value,
+                      }))
                     }
                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500"
                     placeholder="채팅 신청 포인트를 입력하세요"
@@ -553,31 +652,56 @@ export function AdminChatsPage() {
 
               <div>
                 <label className="block text-gray-400 text-sm mb-1">
+                  담당 에이전트
+                </label>
+                <select
+                  value={formData.assigned_agent_id}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      assigned_agent_id: e.target.value,
+                    }))
+                  }
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">미할당</option>
+                  {(agents || []).map((a: any) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-400 text-sm mb-1">
                   프로필 이미지
                 </label>
                 <div className="space-y-2">
                   <div className="flex gap-2">
                     <label
-                      className={`flex items-center justify-center gap-1.5 bg-gray-800 hover:bg-gray-750 border border-dashed border-gray-700 hover:border-indigo-500 rounded px-2 py-2 text-gray-400 hover:text-indigo-400 transition-colors cursor-pointer text-xs ${formData.imageUrl ? "flex-1" : "w-full"}`}
+                      className={`flex items-center justify-center gap-1.5 bg-gray-800 hover:bg-gray-750 border border-dashed border-gray-700 hover:border-indigo-500 rounded px-2 py-2 text-gray-400 hover:text-indigo-400 transition-colors cursor-pointer text-xs ${
+                        formData.image || imageFile ? "flex-1" : "w-full"
+                      }`}
                     >
                       <Upload size={14} />
                       <span>이미지 업로드</span>
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={handleImageUpload}
+                        onChange={(e) =>
+                          setImageFile(e.target.files?.[0] ?? null)
+                        }
                         className="hidden"
                       />
                     </label>
-                    {formData.imageUrl && (
+                    {(formData.image || imageFile) && (
                       <button
                         type="button"
-                        onClick={() =>
-                          setFormData({
-                            ...formData,
-                            imageUrl: "",
-                          })
-                        }
+                        onClick={() => {
+                          setImageFile(null);
+                          setFormData((p) => ({ ...p, image: "" }));
+                        }}
                         className="flex-1 flex items-center justify-center gap-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 hover:border-red-500 rounded px-2 py-2 text-red-400 hover:text-red-300 transition-colors text-xs"
                       >
                         <X size={14} />
@@ -585,23 +709,34 @@ export function AdminChatsPage() {
                       </button>
                     )}
                   </div>
-                  {formData.imageUrl && (
+
+                  {(formData.image || imageFile) && (
                     <div
-                      onClick={() =>
-                        setImagePreviewModal(formData.imageUrl)
-                      }
+                      onClick={() => {
+                        const url = imageFile
+                          ? previewUrl
+                          : getPublicUrlForPath(
+                              "chat-profile-images",
+                              formData.image,
+                            );
+                        if (url) setImagePreviewModal(url);
+                      }}
                       className="relative w-20 h-28 mx-auto rounded overflow-hidden cursor-pointer group border border-gray-700 hover:border-indigo-500 transition-colors"
                     >
                       <img
-                        src={formData.imageUrl}
+                        src={
+                          imageFile
+                            ? previewUrl || ""
+                            : getPublicUrlForPath(
+                                "chat-profile-images",
+                                formData.image,
+                              ) || ""
+                        }
                         alt="Preview"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <ImageIcon
-                          size={16}
-                          className="text-white"
-                        />
+                        <ImageIcon size={16} className="text-white" />
                       </div>
                     </div>
                   )}
@@ -615,22 +750,23 @@ export function AdminChatsPage() {
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={hashtagInput}
-                    onChange={(e) =>
-                      setHashtagInput(e.target.value)
-                    }
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddHashtag();
-                      }
+                    value={interestInput}
+                    onChange={(e) => setInterestInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      addInterest(interestInput);
+                      setInterestInput("");
                     }}
                     className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500"
                     placeholder="해시태그를 입력하세요 (엔터키 가능)"
                   />
                   <button
                     type="button"
-                    onClick={handleAddHashtag}
+                    onClick={() => {
+                      addInterest(interestInput);
+                      setInterestInput("");
+                    }}
                     className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors whitespace-nowrap text-sm"
                   >
                     추가
@@ -638,17 +774,15 @@ export function AdminChatsPage() {
                 </div>
                 {formData.interests.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    {formData.interests.map((interest, idx) => (
+                    {formData.interests.map((interest) => (
                       <span
-                        key={idx}
+                        key={interest}
                         className="text-xs text-indigo-400 bg-indigo-500/20 px-2 py-1 rounded-full border border-indigo-500/30 whitespace-nowrap flex items-center gap-1.5 group hover:bg-indigo-500/30 transition-colors"
                       >
                         #{interest}
                         <button
                           type="button"
-                          onClick={() =>
-                            handleRemoveHashtag(idx)
-                          }
+                          onClick={() => removeInterest(interest)}
                           className="text-indigo-400 hover:text-red-400 transition-colors"
                         >
                           <X size={12} />
@@ -666,49 +800,60 @@ export function AdminChatsPage() {
                 <textarea
                   value={formData.bio}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      bio: e.target.value,
-                    })
+                    setFormData((p) => ({ ...p, bio: e.target.value }))
                   }
                   className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 min-h-[200px] resize-y scrollbar-hide"
                   placeholder="자기소개를 입력하세요"
-                  required
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isOnline"
-                  checked={formData.isOnline}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      isOnline: e.target.checked,
-                    })
-                  }
-                  className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500 focus:ring-indigo-500"
-                />
-                <label
-                  htmlFor="isOnline"
-                  className="text-gray-300 text-sm"
-                >
-                  온라인 상태로 표시
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_online}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        is_online: e.target.checked,
+                      }))
+                    }
+                    className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500 focus:ring-indigo-500"
+                  />
+                  <span className="text-gray-300 text-sm">
+                    온라인 상태로 표시
+                  </span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        is_active: e.target.checked,
+                      }))
+                    }
+                    className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500 focus:ring-indigo-500"
+                  />
+                  <span className="text-gray-300 text-sm">활성</span>
                 </label>
               </div>
 
               <div className="flex gap-2 pt-2">
                 <button
                   type="submit"
-                  className="flex-1 bg-indigo-500/80 hover:bg-indigo-500 text-white px-3 py-2 rounded transition-colors shadow-lg shadow-indigo-500/20 text-sm"
+                  disabled={isSubmitting}
+                  className="flex-1 bg-indigo-500/80 hover:bg-indigo-500 disabled:bg-indigo-500/50 disabled:cursor-not-allowed text-white px-3 py-2 rounded transition-colors shadow-lg shadow-indigo-500/20 text-sm flex items-center justify-center gap-2"
                 >
-                  {editingProfile ? "수정하기" : "추가하기"}
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingId ? "수정하기" : "추가하기"}
                 </button>
                 <button
                   type="button"
-                  onClick={handleCloseModal}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded transition-colors text-sm"
+                  onClick={closeModal}
+                  disabled={isSubmitting}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 disabled:bg-gray-800/50 disabled:cursor-not-allowed text-white px-3 py-2 rounded transition-colors text-sm"
                 >
                   취소
                 </button>
@@ -718,7 +863,6 @@ export function AdminChatsPage() {
         </div>
       )}
 
-      {/* Image Preview Modal */}
       {imagePreviewModal && (
         <div
           className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4"
@@ -743,8 +887,7 @@ export function AdminChatsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && deleteProfile && (
+      {showDeleteModal && deleteTargetId && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-md">
             <div className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
@@ -753,10 +896,7 @@ export function AdminChatsPage() {
                 프로필 삭제 확인
               </h2>
               <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setDeleteProfile(null);
-                }}
+                onClick={() => setShowDeleteModal(false)}
                 className="text-gray-400 hover:text-white transition-colors"
               >
                 <X size={20} />
@@ -764,62 +904,68 @@ export function AdminChatsPage() {
             </div>
 
             <div className="p-6 space-y-4">
-              <div className="flex items-center gap-3 p-4 bg-gray-800 rounded-lg">
-                <div className="w-16 h-20 rounded overflow-hidden flex-shrink-0">
-                  <ImageWithFallback
-                    src={deleteProfile.imageUrl}
-                    alt={deleteProfile.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div>
-                  <p className="text-white font-medium">
-                    {deleteProfile.name} ({deleteProfile.age})
-                  </p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {deleteProfile.interests
-                      .slice(0, 2)
-                      .map((interest, idx) => (
-                        <span
-                          key={idx}
-                          className="text-xs text-indigo-400 bg-indigo-500/20 px-1.5 py-0.5 rounded-full"
-                        >
-                          #{interest}
-                        </span>
-                      ))}
+              {(() => {
+                const target = (profiles || []).find(
+                  (p: any) => p.id === deleteTargetId,
+                );
+                if (!target) return null;
+                const avatarUrl = getPublicUrlForPath(
+                  "chat-profile-images",
+                  target.image,
+                );
+                const interests = Array.isArray(target.interests)
+                  ? (target.interests as unknown as string[])
+                  : [];
+
+                return (
+                  <div className="flex items-center gap-3 p-4 bg-gray-800 rounded-lg">
+                    <div className="w-16 h-20 rounded overflow-hidden flex-shrink-0">
+                      <ImageWithFallback
+                        src={avatarUrl ?? undefined}
+                        alt={target.name || ""}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">
+                        {target.name} ({target.age})
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {interests.slice(0, 2).map((interest, idx) => (
+                          <span
+                            key={`${deleteTargetId}-${idx}`}
+                            className="text-xs text-indigo-400 bg-indigo-500/20 px-1.5 py-0.5 rounded-full"
+                          >
+                            #{interest}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
               <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
                 <p className="text-white text-center mb-2">
                   이 프로필을{" "}
-                  <span className="text-red-500 font-bold">
-                    삭제
-                  </span>
+                  <span className="text-red-500 font-bold">삭제</span>
                   하시겠습니까?
                 </p>
                 <p className="text-gray-400 text-sm text-center">
-                  삭제된 프로필은 복구할 수 없습니다.
+                  삭제된 프로필은 목록에서 사라지지만, 기존 채팅 내역은
+                  보존됩니다.
                 </p>
               </div>
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    setDeleteProfile(null);
-                  }}
+                  onClick={() => setShowDeleteModal(false)}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 rounded-lg transition-colors"
                 >
                   취소
                 </button>
                 <button
-                  onClick={() => {
-                    handleDelete(deleteProfile.id);
-                    setShowDeleteModal(false);
-                    setDeleteProfile(null);
-                  }}
+                  onClick={confirmDelete}
                   className="flex-1 bg-red-500/80 hover:bg-red-500 text-white px-4 py-2.5 rounded-lg transition-colors"
                 >
                   삭제하기

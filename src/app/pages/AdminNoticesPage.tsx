@@ -1,44 +1,40 @@
 import { AdminLayout } from "../components/AdminLayout";
 import { useState, useEffect } from "react";
-import {
-  Search,
-  Plus,
-  Edit,
-  Trash2,
-  Pin,
-  PinOff,
-  X,
-} from "lucide-react";
+import { Search, Plus, Edit, Trash2, Pin, PinOff, X } from "lucide-react";
+import { useAdminNotices } from "../hooks/useSupabase";
+import { useAuth } from "../contexts/AuthContext";
+import { formatKST } from "../../lib/dateUtils";
 
 interface Notice {
-  id: number;
+  id: string;
   title: string;
   content: string;
   author: string;
-  createdAt: string;
-  isPinned: boolean;
+  created_at: string;
+  is_pinned: boolean;
 }
 
 export function AdminNoticesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingNotice, setEditingNotice] =
-    useState<Notice | null>(null);
-  
+  const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
+
+  const { adminAccount } = useAuth();
+
   // 삭제 확인 팝업 상태
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteNotice, setDeleteNotice] = useState<Notice | null>(null);
-  
+
   const [formData, setFormData] = useState({
     title: "",
     content: "",
-    isPinned: false,
+    is_pinned: false,
   });
 
   // 모달 열릴 때 배경 스크롤 방지
   useEffect(() => {
     const isAnyModalOpen = isModalOpen || showDeleteModal;
-    
+
     if (isAnyModalOpen) {
       document.body.style.overflow = "hidden";
     } else {
@@ -50,52 +46,35 @@ export function AdminNoticesPage() {
     };
   }, [isModalOpen, showDeleteModal]);
 
-  const [notices, setNotices] = useState<Notice[]>([
-    {
-      id: 1,
-      title: "시스템 ���검 안내 - 2025년 12월 20일 새벽 2시부터 6시까지 정기 점검이 진행됩니다 (서비스 일시 중단 예정)",
-      content:
-        "2025년 12월 20일 새벽 2시부터 6시까지 시스템 점검이 진행됩니다.",
-      author: "관리자",
-      createdAt: "2025-12-15 09:00",
-      isPinned: true,
-    },
-    {
-      id: 2,
-      title: "새로운 기능 업데이트",
-      content:
-        "커플 미션 기능이 추가되었습니다. 많은 이용 부탁드립니다.",
-      author: "관리자",
-      createdAt: "2025-12-14 15:30",
-      isPinned: true,
-    },
-    {
-      id: 3,
-      title: "이용약관 변경 안내",
-      content: "개인정보 처리방침이 일부 변경되었습니다.",
-      author: "관리자",
-      createdAt: "2025-12-13 10:00",
-      isPinned: false,
-    },
-    {
-      id: 4,
-      title: "이벤트 당첨자 발표",
-      content: "12월 이벤트 당첨자가 발표되었습니다.",
-      author: "관리자",
-      createdAt: "2025-12-12 14:20",
-      isPinned: false,
-    },
-  ]);
+  // Supabase에서 공지사항 데이터 조회
+  const {
+    notices: dbNotices,
+    isLoading,
+    error,
+    createNotice,
+    updateNotice,
+    deleteNotice: deleteNoticeFromDB,
+  } = useAdminNotices();
+
+  // DB 데이터를 UI 형식으로 변환
+  const notices: Notice[] = dbNotices.map((n: any) => ({
+    id: n.id,
+    title: n.title || "",
+    content: n.content || "",
+    author: n.author || "관리자",
+    created_at: n.created_at,
+    is_pinned: n.is_pinned || false,
+  }));
 
   const filteredNotices = notices.filter(
     (notice) =>
-      notice.title
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      notice.content
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()),
+      notice.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      notice.content.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const formatDate = (dateString: string) => {
+    return formatKST(dateString, "datetime") || dateString;
+  };
 
   const handleOpenModal = (notice?: Notice) => {
     if (notice) {
@@ -103,14 +82,14 @@ export function AdminNoticesPage() {
       setFormData({
         title: notice.title,
         content: notice.content,
-        isPinned: notice.isPinned,
+        is_pinned: notice.is_pinned,
       });
     } else {
       setEditingNotice(null);
       setFormData({
         title: "",
         content: "",
-        isPinned: false,
+        is_pinned: false,
       });
     }
     setIsModalOpen(true);
@@ -122,64 +101,42 @@ export function AdminNoticesPage() {
     setFormData({
       title: "",
       content: "",
-      isPinned: false,
+      is_pinned: false,
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (editingNotice) {
       // 수정
-      setNotices(
-        notices.map((notice) =>
-          notice.id === editingNotice.id
-            ? {
-                ...notice,
-                title: formData.title,
-                content: formData.content,
-                isPinned: formData.isPinned,
-              }
-            : notice,
-        ),
-      );
-    } else {
-      // 새로 등록
-      const newNotice: Notice = {
-        id: Math.max(...notices.map((n) => n.id), 0) + 1,
+      await updateNotice(editingNotice.id, {
         title: formData.title,
         content: formData.content,
-        author: "관리자",
-        createdAt: new Date()
-          .toLocaleString("ko-KR", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-          .replace(/\. /g, "-")
-          .replace(".", ""),
-        isPinned: formData.isPinned,
-      };
-      setNotices([newNotice, ...notices]);
+        is_pinned: formData.is_pinned,
+      });
+    } else {
+      // 새로 등록
+      await createNotice({
+        title: formData.title,
+        content: formData.content,
+        author_id: adminAccount?.id ?? null,
+        is_pinned: formData.is_pinned,
+      });
     }
 
     handleCloseModal();
   };
 
-  const handleDelete = (id: number) => {
-    setNotices(notices.filter((notice) => notice.id !== id));
+  const handleDelete = async (id: string) => {
+    await deleteNoticeFromDB(id);
   };
 
-  const togglePin = (id: number) => {
-    setNotices(
-      notices.map((notice) =>
-        notice.id === id
-          ? { ...notice, isPinned: !notice.isPinned }
-          : notice,
-      ),
-    );
+  const togglePin = async (id: string) => {
+    const notice = notices.find((n) => n.id === id);
+    if (notice) {
+      await updateNotice(id, { is_pinned: !notice.is_pinned });
+    }
   };
 
   // 엔터키로 삭제 확인
@@ -205,12 +162,15 @@ export function AdminNoticesPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-white text-3xl mb-2">
-              공지사항 관리
-            </h1>
+            <h1 className="text-white text-3xl mb-2">공지사항 관리</h1>
             <p className="text-gray-400">
-              <span className="text-gray-300">전체 {filteredNotices.length}개</span> <span className="text-gray-500">|</span> <span className="text-green-400">고정{" "}
-              {notices.filter((n) => n.isPinned).length}개</span>
+              <span className="text-gray-300">
+                전체 {filteredNotices.length}개
+              </span>{" "}
+              <span className="text-gray-500">|</span>{" "}
+              <span className="text-green-400">
+                고정 {notices.filter((n) => n.is_pinned).length}개
+              </span>
             </p>
           </div>
           <button
@@ -240,106 +200,114 @@ export function AdminNoticesPage() {
 
         {/* Notices Table */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
-              <colgroup>
-                <col className="w-[45%]" />
-                <col className="w-[15%]" />
-                <col className="w-[10%]" />
-                <col className="w-[18%]" />
-                <col className="w-[12%]" />
-              </colgroup>
-              <thead className="bg-gray-800">
-                <tr>
-                  <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
-                    제목
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
-                    작성자
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
-                    고정
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
-                    작성일
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
-                    작업
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {filteredNotices.map((notice) => (
-                  <tr
-                    key={notice.id}
-                    className="hover:bg-gray-800/50 transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {notice.isPinned && (
-                          <Pin
-                            className="text-indigo-400 flex-shrink-0"
-                            size={16}
-                          />
-                        )}
-                        <p className="text-white truncate">
-                          {notice.title}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-300">
-                      {notice.author}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => togglePin(notice.id)}
-                        className={`p-2 rounded transition-colors ${
-                          notice.isPinned
-                            ? "text-indigo-400 hover:bg-gray-700"
-                            : "text-gray-400 hover:bg-gray-700 hover:text-indigo-400"
-                        }`}
-                        title={
-                          notice.isPinned ? "고정 해제" : "고정"
-                        }
-                      >
-                        {notice.isPinned ? (
-                          <Pin size={16} />
-                        ) : (
-                          <PinOff size={16} />
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-300 text-sm">
-                      {notice.createdAt}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() =>
-                            handleOpenModal(notice)
-                          }
-                          className="p-2 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-white"
-                          title="수정"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setDeleteNotice(notice);
-                            setShowDeleteModal(true);
-                          }}
-                          className="p-2 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-red-500"
-                          title="삭제"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
+          {error && (
+            <div className="p-4 text-red-400 border-b border-gray-800">
+              {error.message}
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="p-8 text-center text-gray-400">불러오는 중...</div>
+          ) : filteredNotices.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">
+              공지사항이 없습니다.
+            </div>
+          ) : (
+            <div className="w-full">
+              <table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-[45%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[12%]" />
+                </colgroup>
+                <thead className="bg-gray-800">
+                  <tr>
+                    <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                      제목
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                      작성자
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                      고정
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                      작성일
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                      작업
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {filteredNotices.map((notice) => (
+                    <tr
+                      key={notice.id}
+                      className="hover:bg-gray-800/50 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {notice.is_pinned && (
+                            <Pin
+                              className="text-indigo-400 flex-shrink-0"
+                              size={16}
+                            />
+                          )}
+                          <p className="text-white truncate">{notice.title}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-300">
+                        {notice.author}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => togglePin(notice.id)}
+                          className={`p-2 rounded transition-colors ${
+                            notice.is_pinned
+                              ? "text-indigo-400 hover:bg-gray-700"
+                              : "text-gray-400 hover:bg-gray-700 hover:text-indigo-400"
+                          }`}
+                          title={notice.is_pinned ? "고정 해제" : "고정"}
+                        >
+                          {notice.is_pinned ? (
+                            <Pin size={16} />
+                          ) : (
+                            <PinOff size={16} />
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-300 text-sm">
+                        {formatDate(notice.created_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleOpenModal(notice)}
+                            className="p-2 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-white"
+                            title="수정"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDeleteNotice(notice);
+                              setShowDeleteModal(true);
+                            }}
+                            className="p-2 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-red-500"
+                            title="삭제"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
@@ -349,9 +317,7 @@ export function AdminNoticesPage() {
           <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between">
               <h2 className="text-white text-xl">
-                {editingNotice
-                  ? "공지사항 수정"
-                  : "새 공지사항 작성"}
+                {editingNotice ? "공지사항 수정" : "새 공지사항 작성"}
               </h2>
               <button
                 onClick={handleCloseModal}
@@ -360,14 +326,9 @@ export function AdminNoticesPage() {
                 <X size={24} />
               </button>
             </div>
-            <form
-              onSubmit={handleSubmit}
-              className="p-6 space-y-4"
-            >
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-gray-400 mb-2">
-                  제목
-                </label>
+                <label className="block text-gray-400 mb-2">제목</label>
                 <input
                   type="text"
                   value={formData.title}
@@ -383,9 +344,7 @@ export function AdminNoticesPage() {
                 />
               </div>
               <div>
-                <label className="block text-gray-400 mb-2">
-                  내용
-                </label>
+                <label className="block text-gray-400 mb-2">내용</label>
                 <textarea
                   value={formData.content}
                   onChange={(e) =>
@@ -402,20 +361,17 @@ export function AdminNoticesPage() {
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="isPinned"
-                  checked={formData.isPinned}
+                  id="is_pinned"
+                  checked={formData.is_pinned}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      isPinned: e.target.checked,
+                      is_pinned: e.target.checked,
                     })
                   }
                   className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500 focus:ring-indigo-500"
                 />
-                <label
-                  htmlFor="isPinned"
-                  className="text-gray-300"
-                >
+                <label htmlFor="is_pinned" className="text-gray-300">
                   상단 고정
                 </label>
               </div>
@@ -444,9 +400,7 @@ export function AdminNoticesPage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between">
-              <h2 className="text-white text-xl">
-                공지사항 삭제 확인
-              </h2>
+              <h2 className="text-white text-xl">공지사항 삭제 확인</h2>
               <button
                 onClick={() => setShowDeleteModal(false)}
                 className="text-gray-400 hover:text-white transition-colors"

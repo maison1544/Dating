@@ -1,32 +1,85 @@
-import { Gamepad2, Trophy, Coins } from "lucide-react";
+import { Coins } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useMemo } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useAlert } from "../contexts/AlertContext";
+import { useBettingRoundBetCount, useGameSettings } from "../hooks/useSupabase";
 
 export function MiniGamePage() {
   const navigate = useNavigate();
-  const games = [
-    {
-      id: 1,
-      name: "사다리 게임",
-      reward: "최대 3000P",
-      players: 456,
-      path: "/mini-game/ladder-game",
-      type: "ladder",
-    },
-    {
-      id: 2,
-      name: "파워볼",
-      reward: "최대 5000P",
-      players: 789,
-      path: "/mini-game/dice-game",
-      type: "powerball",
-    },
-  ];
+  const { user, profile, isLoading: authLoading } = useAuth();
+  const { showAlert } = useAlert();
+  const {
+    betCount: ladderBetCount,
+    isLoading: ladderCountLoading,
+    error: ladderCountError,
+  } = useBettingRoundBetCount("ladder");
+  const {
+    betCount: powerballBetCount,
+    isLoading: powerballCountLoading,
+    error: powerballCountError,
+  } = useBettingRoundBetCount("powerball");
+
+  // 게임 설정 조회 (is_active 확인용)
+  const { settings: ladderSettings } = useGameSettings("ladder", {
+    enableRealtime: true,
+  });
+  const { settings: powerballSettings } = useGameSettings("powerball", {
+    enableRealtime: true,
+  });
+
+  const points = useMemo(() => {
+    if (!user) return 0;
+    return Number(profile?.points ?? 0);
+  }, [profile?.points, user]);
+
+  // is_active가 false인 게임은 목록에서 제외
+  const games = useMemo(() => {
+    const allGames = [
+      {
+        id: 1,
+        name: "사다리 게임",
+        reward: "최대 3000P",
+        players: ladderCountLoading || ladderCountError ? null : ladderBetCount,
+        path: "/ladder-game",
+        type: "ladder" as const,
+        isActive: ladderSettings?.is_active ?? true,
+      },
+      {
+        id: 2,
+        name: "파워볼",
+        reward: "최대 5000P",
+        players:
+          powerballCountLoading || powerballCountError
+            ? null
+            : powerballBetCount,
+        path: "/powerball",
+        type: "powerball" as const,
+        isActive: powerballSettings?.is_active ?? true,
+      },
+    ];
+    // is_active가 false인 게임은 필터링하여 제외
+    return allGames.filter((game) => game.isActive);
+  }, [
+    ladderBetCount,
+    ladderCountLoading,
+    ladderCountError,
+    ladderSettings?.is_active,
+    powerballBetCount,
+    powerballCountLoading,
+    powerballCountError,
+    powerballSettings?.is_active,
+  ]);
 
   const handlePlay = (game: (typeof games)[0]) => {
     if (game.path) {
       navigate(game.path);
     } else {
-      alert("준비 중인 게임입니다. 곧 만나보실 수 있습니다!");
+      showAlert({
+        title: "안내",
+        message: "게임 경로를 찾을 수 없습니다.",
+        type: "info",
+      });
     }
   };
 
@@ -54,17 +107,23 @@ export function MiniGamePage() {
             <div className="flex items-center gap-3">
               <Coins className="text-pink-500" size={32} />
               <div>
-                <p className="text-gray-400 text-sm">
-                  보유 포인트
+                <p className="text-gray-400 text-sm">보유 포인트</p>
+                <p className="text-white text-2xl">
+                  {authLoading ? "-" : `${points.toLocaleString()} P`}
                 </p>
-                <p className="text-white text-2xl">0 P</p>
               </div>
             </div>
             <button
               className="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 transition-colors text-sm"
-              onClick={() => navigate("/point")}
+              onClick={() => {
+                if (!user) {
+                  navigate("/login");
+                  return;
+                }
+                navigate("/point");
+              }}
             >
-              충전하기
+              {user ? "충전하기" : "로그인"}
             </button>
           </div>
         </div>
@@ -79,12 +138,7 @@ export function MiniGamePage() {
               >
                 <div className="w-20 h-20 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform relative">
                   {game.type === "ladder" ? (
-                    <svg
-                      width="48"
-                      height="48"
-                      viewBox="0 0 48 48"
-                      fill="none"
-                    >
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
                       <line
                         x1="12"
                         y1="8"
@@ -160,11 +214,11 @@ export function MiniGamePage() {
                     </div>
                   )}
                 </div>
-                <h3 className="text-white text-lg mb-2">
-                  {game.name}
-                </h3>
+                <h3 className="text-white text-lg mb-2">{game.name}</h3>
                 <p className="text-gray-400 text-sm mb-4">
-                  {game.players}명 플레이 중
+                  {typeof game.players === "number"
+                    ? `${game.players}명 플레이 중`
+                    : "플레이 중"}
                 </p>
                 <button
                   className="w-full bg-pink-500 text-white py-2 rounded hover:bg-pink-600 transition-colors"

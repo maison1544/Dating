@@ -1,20 +1,25 @@
 import { AdminLayout } from "../components/AdminLayout";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Send, Image as ImageIcon, Gift, ChevronLeft } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import {
-  MessageSquare,
-  Send,
-  X,
-  Image as ImageIcon,
-  MessageCircle,
-  List,
-  Filter,
-  Gift,
-  ChevronLeft,
-} from "lucide-react";
+  useAgentChatProfiles,
+  useAgentChatRooms,
+  useGiftItems,
+  useRealtimeChat,
+  useSendMessage,
+  useMarkMessagesAsRead,
+} from "../hooks/useSupabase";
+import { useAlert } from "../contexts/AlertContext";
+import { getPublicUrlForPath } from "../../lib/storage";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../contexts/AuthContext";
+import { QuantityModal } from "../components/QuantityModal";
+import { formatKST } from "../../lib/dateUtils";
 
 interface ChatMessage {
-  id: number;
-  senderId: number;
+  id: string;
+  senderId: string;
   senderName: string;
   message: string;
   timestamp: string;
@@ -24,11 +29,13 @@ interface ChatMessage {
 }
 
 interface ChatConversation {
-  id: number;
+  id: string;
+  userId: string;
+  profileId: string;
   userName: string;
-  userImage: string;
+  userImage: string | null;
   profileName: string;
-  profileImage: string;
+  profileImage: string | null;
   lastMessage: string;
   lastMessageTime: string;
   unreadCount: number;
@@ -37,7 +44,7 @@ interface ChatConversation {
 }
 
 interface ChatModal {
-  id: number;
+  id: string;
   conversation: ChatConversation;
   position: { x: number; y: number };
   size: { width: number; height: number };
@@ -53,619 +60,337 @@ interface ChatModal {
   };
 }
 
-// 선물 목록
-const GIFTS = [
-  { id: 1, name: "장미", points: 80, icon: "🌹" },
-  { id: 2, name: "초콜릿", points: 240, icon: "🍫" },
-  { id: 3, name: "샴페인", points: 400, icon: "🍾" },
-  { id: 4, name: "하트 풍선", points: 160, icon: "💝" },
-  { id: 5, name: "다이아 반지", points: 800, icon: "💍" },
-  { id: 6, name: "럭셔리 향수", points: 2000, icon: "🧴" },
-];
+type RenderChatWindowFn = (
+  conversation: ChatConversation,
+  isBubbleMode: boolean,
+  onToggleMode: () => void,
+  messageInput: string,
+  onMessageChange: (value: string) => void,
+  onSend: () => void,
+  onKeyPress: (e: React.KeyboardEvent) => void,
+  onShowGift: () => void,
+  scrollRef?: React.RefObject<HTMLDivElement>
+) => JSX.Element;
 
-export function AgentChatsPage() {
-  const [selectedChat, setSelectedChat] =
-    useState<ChatConversation | null>(null);
-  const [chatModals, setChatModals] = useState<ChatModal[]>([]);
-  const [messageInputs, setMessageInputs] = useState<
-    Record<number, string>
-  >({});
-  const [profileFilter, setProfileFilter] =
-    useState<string>("all");
-  const [showGiftModal, setShowGiftModal] = useState<
-    number | null
-  >(null);
-  const [activeModalId, setActiveModalId] = useState<
-    number | null
-  >(null);
-  const [imagePreviewModal, setImagePreviewModal] = useState<
-    string | null
-  >(null);
+const getAvatarFallbackText = (name: string) => {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (!trimmed) return "?";
 
-  // 채팅 스크롤을 위한 refs
-  const chatScrollRefs = useRef<
-    Record<number, HTMLDivElement | null>
-  >({});
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
+  }
+  return trimmed.slice(0, 2).toUpperCase();
+};
 
-  // 채팅 메시지 더미 데이터 (AdminUsersPage와 동일)
-  const chatMessagesData: Record<
-    string,
-    Array<{
-      time: string;
-      sender: string;
-      message: string;
-      type?: string;
-      imageUrl?: string;
-    }>
-  > = {
-    유진: [
-      {
-        time: "2025-12-10 09:00",
-        sender: "유진",
-        message: "안녕하세요",
-      },
-      {
-        time: "2025-12-10 09:02",
-        sender: "소희",
-        message: "네 안녕하세요!",
-      },
-      {
-        time: "2025-12-10 09:05",
-        sender: "유진",
-        message: "프로필 보고 연락드렸어요",
-      },
-      {
-        time: "2025-12-10 09:07",
-        sender: "소희",
-        message: "감사합니다 ^^",
-      },
-      {
-        time: "2025-12-10 09:10",
-        sender: "유진",
-        message: "취미가 어떻게 되세요?",
-      },
-      {
-        time: "2025-12-10 09:12",
-        sender: "소희",
-        message: "영화 보는 거 좋아해요",
-      },
-      {
-        time: "2025-12-11 14:30",
-        sender: "유진",
-        message: "어제는 즐거웠어요",
-      },
-      {
-        time: "2025-12-11 14:32",
-        sender: "소희",
-        message: "저도요! 다음에 또 만나요",
-      },
-      {
-        time: "2025-12-11 14:35",
-        sender: "유진",
-        message: "장미 꽃다발을 보냈습니다",
-        type: "gift",
-      },
-      {
-        time: "2025-12-11 14:40",
-        sender: "소희",
-        message: "와 감사합니다!",
-      },
-      {
-        time: "2025-12-11 14:42",
-        sender: "유진",
-        message: "[이미지]",
-        type: "image",
-        imageUrl:
-          "https://images.unsplash.com/photo-1639056610940-d7e9b0af3a99?w=1080",
-      },
-      {
-        time: "2025-12-11 14:45",
-        sender: "소희",
-        message: "와 진짜 이쁘네요!",
-      },
-      {
-        time: "2025-12-12 10:15",
-        sender: "소희",
-        message: "오늘 날씨 좋네요",
-      },
-      {
-        time: "2025-12-12 10:20",
-        sender: "유진",
-        message: "그러게요. 산책하기 딱 좋은 날씨예요",
-      },
-      {
-        time: "2025-12-12 10:25",
-        sender: "소희",
-        message: "초콜릿 박스를 보냈습니다",
-        type: "gift",
-      },
-      {
-        time: "2025-12-12 10:30",
-        sender: "유진",
-        message: "우와 제가 좋아하는 건데",
-      },
-      {
-        time: "2025-12-12 10:35",
-        sender: "유진",
-        message: "정말 감사합니다 ㅎㅎ",
-      },
-      {
-        time: "2025-12-13 18:00",
-        sender: "유진",
-        message: "저녁 드셨어요?",
-      },
-      {
-        time: "2025-12-13 18:05",
-        sender: "소희",
-        message: "아직이요. 뭐 먹을까 고민 중이에요",
-      },
-      {
-        time: "2025-12-13 18:10",
-        sender: "유진",
-        message: "같이 저녁 어때요?",
-      },
-      {
-        time: "2025-12-13 18:15",
-        sender: "소희",
-        message: "좋아요! 어디서 만날까요?",
-      },
-      {
-        time: "2025-12-13 18:20",
-        sender: "유진",
-        message: "강남역 근처 어떠세요?",
-      },
-      {
-        time: "2025-12-13 18:25",
-        sender: "소희",
-        message: "좋아요 7시에 봐요!",
-      },
-      {
-        time: "2025-12-14 21:30",
-        sender: "유진",
-        message: "오늘도 즐거웠습니다",
-      },
-      {
-        time: "2025-12-14 21:35",
-        sender: "소희",
-        message: "저도요! 맛있는 거 많이 먹었어요",
-      },
-      {
-        time: "2025-12-14 21:40",
-        sender: "유진",
-        message: "다음에는 영화 보러 갈까요?",
-      },
-      {
-        time: "2025-12-14 21:45",
-        sender: "소희",
-        message: "좋아요! 보고 싶은 영화가 있어요",
-      },
-      {
-        time: "2025-12-15 11:00",
-        sender: "유진",
-        message: "좋은 아침이에요",
-      },
-      {
-        time: "2025-12-15 11:05",
-        sender: "소희",
-        message: "좋은 아침입니다!",
-      },
-      {
-        time: "2025-12-15 11:10",
-        sender: "유진",
-        message: "프로필 사진 정말 예쁘네요",
-      },
-      {
-        time: "2025-12-15 11:12",
-        sender: "소희",
-        message: "하트 쿠션을 보냈습니다",
-        type: "gift",
-      },
-      {
-        time: "2025-12-15 11:15",
-        sender: "유진",
-        message: "와 정말 감사합니다",
-      },
-      {
-        time: "2025-12-15 11:20",
-        sender: "유진",
-        message: "커피 한잔 어떠세요?",
-      },
-      {
-        time: "2025-12-15 11:25",
-        sender: "소희",
-        message: "좋아요! 언제가 좋으세요?",
-      },
-      {
-        time: "2025-12-15 11:30",
-        sender: "유진",
-        message: "이번 주말은 어떠세요?",
-      },
-      {
-        time: "2025-12-15 11:35",
-        sender: "소희",
-        message: "토요일 오후 2시 괜찮을까요?",
-      },
-      {
-        time: "2025-12-15 11:40",
-        sender: "유진",
-        message: "완벽해요! 그럼 토요일에 봐요",
-      },
-      {
-        time: "2025-12-15 11:45",
-        sender: "소희",
-        message: "네 기대할게요!",
-      },
-      {
-        time: "2025-12-16 13:05",
-        sender: "유진",
-        message: "주말 약속 기대돼요",
-      },
-      {
-        time: "2025-12-16 13:10",
-        sender: "소희",
-        message: "저도요! 어떤 카페 갈까요?",
-      },
-      {
-        time: "2025-12-16 13:15",
-        sender: "유진",
-        message: "분위기 좋은 곳 찾아볼게요",
-      },
-      {
-        time: "2025-12-16 13:20",
-        sender: "소희",
-        message: "좋아요! 연락 주세요",
-      },
-    ],
-    민지: [
-      {
-        time: "2025-12-08 15:00",
-        sender: "민지",
-        message: "녕하세요!",
-      },
-      {
-        time: "2025-12-08 15:05",
-        sender: "소희",
-        message: "안녕하세요 ^^",
-      },
-      {
-        time: "2025-12-08 15:10",
-        sender: "민지",
-        message: "프로필이 인상적이네요",
-      },
-      {
-        time: "2025-12-08 15:15",
-        sender: "소희",
-        message: "감사합니다",
-      },
-      {
-        time: "2025-12-09 10:05",
-        sender: "민지",
-        message: "주말에 뭐 하세요?",
-      },
-      {
-        time: "2025-12-09 10:10",
-        sender: "소희",
-        message: "특별한 계획은 없어요",
-      },
-      {
-        time: "2025-12-09 10:15",
-        sender: "민지",
-        message: "같이 전시회 갈래요?",
-      },
-      {
-        time: "2025-12-09 10:20",
-        sender: "소희",
-        message: "좋아요! 어떤 전시회인가요?",
-      },
-      {
-        time: "2025-12-09 10:25",
-        sender: "민지",
-        message: "현대미술 전시회예요",
-      },
-      {
-        time: "2025-12-10 16:00",
-        sender: "민지",
-        message: "오늘 전시회 정말 좋았어요",
-      },
-      {
-        time: "2025-12-10 16:03",
-        sender: "민지",
-        message: "[이미지]",
-        type: "image",
-        imageUrl:
-          "https://images.unsplash.com/photo-1647792845543-a8032c59cbdf?w=1080",
-      },
-      {
-        time: "2025-12-10 16:05",
-        sender: "소희",
-        message: "저도 즐거웠어요!",
-      },
-      {
-        time: "2025-12-10 16:10",
-        sender: "소희",
-        message: "장미 꽃다발을 보냈습니다",
-        type: "gift",
-      },
-      {
-        time: "2025-12-10 16:15",
-        sender: "민지",
-        message: "와 감사합니다!",
-      },
-      {
-        time: "2025-12-11 20:00",
-        sender: "민지",
-        message: "저녁 드셨나요?",
-      },
-      {
-        time: "2025-12-11 20:05",
-        sender: "소희",
-        message: "네 방금 먹었어요",
-      },
-      {
-        time: "2025-12-11 20:10",
-        sender: "민지",
-        message: "뭐 드셨어요?",
-      },
-      {
-        time: "2025-12-11 20:15",
-        sender: "소희",
-        message: "파스타 먹었어요",
-      },
-      {
-        time: "2025-12-12 11:30",
-        sender: "민지",
-        message: "주말 약속 어때요?",
-      },
-      {
-        time: "2025-12-12 11:35",
-        sender: "소희",
-        message: "좋아요! 어디로 갈까요?",
-      },
-      {
-        time: "2025-12-12 11:40",
-        sender: "민지",
-        message: "한강 공원 산책 어때요?",
-      },
-      {
-        time: "2025-12-12 11:45",
-        sender: "소희",
-        message: "완벽해요!",
-      },
-      {
-        time: "2025-12-13 14:00",
-        sender: "민지",
-        message: "오늘 날씨가 너무 좋네요",
-      },
-      {
-        time: "2025-12-13 14:05",
-        sender: "소희",
-        message: "그러게요. 산책하기 딱 좋아요",
-      },
-      {
-        time: "2025-12-13 14:08",
-        sender: "소희",
-        message: "[이미지]",
-        type: "image",
-        imageUrl:
-          "https://images.unsplash.com/photo-1542372147193-a7aca54189cd?w=1080",
-      },
-      {
-        time: "2025-12-13 14:10",
-        sender: "민지",
-        message: "초콜릿 박스를 보냈습니다",
-        type: "gift",
-      },
-      {
-        time: "2025-12-13 14:15",
-        sender: "소희",
-        message: "감사합니다!",
-      },
-      {
-        time: "2025-12-14 16:30",
-        sender: "민지",
-        message: "선물 정말 감사해요",
-      },
-      {
-        time: "2025-12-14 16:32",
-        sender: "소희",
-        message: "천만에요~",
-      },
-      {
-        time: "2025-12-14 16:33",
-        sender: "소희",
-        message: "하트 쿠션을 보냈습니다",
-        type: "gift",
-      },
-      {
-        time: "2025-12-14 16:35",
-        sender: "민지",
-        message: "오늘 시간 되세요?",
-      },
-      {
-        time: "2025-12-14 16:40",
-        sender: "소희",
-        message: "죄송하지만 오늘은 약속이 있어요",
-      },
-      {
-        time: "2025-12-14 16:45",
-        sender: "민지",
-        message: "아 그렇군요. 다음에 또 연락드릴게요",
-      },
-      {
-        time: "2025-12-14 16:47",
-        sender: "소희",
-        message: "네 언제든지 연락주세요!",
-      },
-      {
-        time: "2025-12-15 09:00",
-        sender: "민지",
-        message: "좋은 아침이에요",
-      },
-      {
-        time: "2025-12-15 09:05",
-        sender: "소희",
-        message: "좋은 아침입니다!",
-      },
-      {
-        time: "2025-12-15 09:10",
-        sender: "민지",
-        message: "오늘 점심 같이 어때요?",
-      },
-      {
-        time: "2025-12-15 09:15",
-        sender: "소희",
-        message: "좋아요! 뭐 먹을까요?",
-      },
-      {
-        time: "2025-12-15 09:20",
-        sender: "민지",
-        message: "일식 어때요?",
-      },
-      {
-        time: "2025-12-15 09:25",
-        sender: "소희",
-        message: "완벽해요! 12시에 만나요",
-      },
-      {
-        time: "2025-12-16 18:00",
-        sender: "민지",
-        message: "오늘도 즐거웠어요",
-      },
-      {
-        time: "2025-12-16 18:05",
-        sender: "소희",
-        message: "저도요! 다음에 또 만나요",
-      },
-      {
-        time: "2025-12-17 10:00",
-        sender: "민지",
-        message: "이번 주말 계획 있나요?",
-      },
-      {
-        time: "2025-12-17 10:05",
-        sender: "소희",
-        message: "아직 없어요. 왜요?",
-      },
-      {
-        time: "2025-12-17 10:10",
-        sender: "민지",
-        message: "같이 영화 보러 갈래요?",
-      },
-      {
-        time: "2025-12-17 10:15",
-        sender: "소희",
-        message: "좋아요! 어떤 영화 볼까요?",
-      },
-      {
-        time: "2025-12-17 10:20",
-        sender: "민지",
-        message: "새로 나온 액션 영화 어때요?",
-      },
-      {
-        time: "2025-12-17 10:25",
-        sender: "소희",
-        message: "완벽해요! 일요일에 봐요",
-      },
-    ],
-  };
+function NameAvatar({ name, src }: { name: string; src: string | null }) {
+  return (
+    <Avatar className="w-10 h-10">
+      {src ? (
+        <AvatarImage src={src} alt={name} className="object-cover" />
+      ) : null}
+      <AvatarFallback
+        delayMs={0}
+        className="bg-gray-700 text-gray-200 text-xs font-semibold"
+      >
+        {getAvatarFallbackText(name)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
 
-  // 채팅 대화 목록
-  const [conversations] = useState<ChatConversation[]>([
-    {
-      id: 1,
-      userName: "유진",
-      userImage:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100",
-      profileName: "소희",
-      profileImage:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100",
-      lastMessage: "좋아요! 연락 주세요",
-      lastMessageTime: "13:20",
-      unreadCount: 2,
-      isOnline: true,
-      messages: (chatMessagesData["유진"] || []).map(
-        (msg, idx) => ({
-          id: idx + 1,
-          senderId: msg.sender === "유진" ? 1 : 2,
-          senderName: msg.sender,
-          message: msg.message,
-          timestamp: msg.time,
-          isMe: msg.sender !== "유진",
-          type:
-            msg.type === "gift"
-              ? "gift"
-              : msg.type === "image"
-                ? "image"
-                : "text",
-          imageUrl: msg.imageUrl,
-        }),
-      ),
-    },
-    {
-      id: 2,
-      userName: "민지",
-      userImage:
-        "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100",
-      profileName: "소희",
-      profileImage:
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100",
-      lastMessage: "완벽해요! 일요일에 봐요",
-      lastMessageTime: "10:25",
-      unreadCount: 0,
-      isOnline: false,
-      messages: (chatMessagesData["민지"] || []).map(
-        (msg, idx) => ({
-          id: idx + 1,
-          senderId: msg.sender === "민지" ? 3 : 4,
-          senderName: msg.sender,
-          message: msg.message,
-          timestamp: msg.time,
-          isMe: msg.sender !== "민지",
-          type:
-            msg.type === "gift"
-              ? "gift"
-              : msg.type === "image"
-                ? "image"
-                : "text",
-          imageUrl: msg.imageUrl,
-        }),
-      ),
-    },
+function RealtimeChatWindow({
+  conversation,
+  isBubbleMode,
+  onToggleMode,
+  messageInput,
+  onMessageChange,
+  onSend,
+  onKeyPress,
+  onShowGift,
+  renderChatWindow,
+}: {
+  conversation: ChatConversation;
+  isBubbleMode: boolean;
+  onToggleMode: () => void;
+  messageInput: string;
+  onMessageChange: (value: string) => void;
+  onSend: () => void;
+  onKeyPress: (e: React.KeyboardEvent) => void;
+  onShowGift: () => void;
+  renderChatWindow: RenderChatWindowFn;
+}) {
+  const { messages: dbMessages } = useRealtimeChat(conversation.id);
+  const { markAsRead } = useMarkMessagesAsRead();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const uiMessages = useMemo<ChatMessage[]>(() => {
+    return (dbMessages || []).map((msg: any) => {
+      const messageType = (msg.message_type || "text") as
+        | "text"
+        | "gift"
+        | "image";
+
+      const isMe =
+        msg.sender_type === "profile" &&
+        msg.sender_id === conversation.profileId;
+
+      const timestamp = msg.created_at
+        ? formatKST(msg.created_at, "datetime")
+        : "";
+
+      const giftLabel = msg.gift_items
+        ? `${msg.gift_items.emoji || "🎁"} ${msg.gift_items.name || ""}`.trim()
+        : (msg.content || msg.message || "").trim();
+      const giftQuantityText = msg.gift_quantity
+        ? ` x${msg.gift_quantity}`
+        : "";
+
+      const message =
+        messageType === "gift"
+          ? `${giftLabel}${giftQuantityText}`.trim()
+          : (msg.content || msg.message || "").trim();
+
+      return {
+        id: msg.id,
+        senderId: msg.sender_id,
+        senderName: isMe ? conversation.profileName : conversation.userName,
+        message,
+        timestamp,
+        isMe,
+        type: messageType,
+      };
+    });
+  }, [
+    dbMessages,
+    conversation.profileId,
+    conversation.profileName,
+    conversation.userName,
   ]);
 
-  // 프로필 목록 추출
-  const profileList = Array.from(
-    new Set(conversations.map((c) => c.profileName)),
+  useEffect(() => {
+    if (!conversation.id || !conversation.profileId) return;
+    void markAsRead(conversation.id, conversation.profileId);
+  }, [conversation.id, conversation.profileId, dbMessages.length]);
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    setTimeout(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    }, 0);
+  }, [conversation.id, uiMessages.length]);
+
+  const conversationWithMessages = useMemo<ChatConversation>(() => {
+    return { ...conversation, messages: uiMessages };
+  }, [conversation, uiMessages]);
+
+  return renderChatWindow(
+    conversationWithMessages,
+    isBubbleMode,
+    onToggleMode,
+    messageInput,
+    onMessageChange,
+    onSend,
+    onKeyPress,
+    onShowGift,
+    scrollRef
   );
+}
+
+// 선물 목록 - Supabase에서 가져옴
+
+export function AgentChatsPage() {
+  const { adminAccount } = useAuth();
+  const { showAlert } = useAlert();
+  const [selectedChat, setSelectedChat] = useState<ChatConversation | null>(
+    null
+  );
+  const [chatModals, setChatModals] = useState<ChatModal[]>([]);
+  const [messageInputs, setMessageInputs] = useState<Record<string, string>>(
+    {}
+  );
+  const [profileFilter, setProfileFilter] = useState<string>("all");
+  const [showGiftModal, setShowGiftModal] = useState<string | null>(null);
+  const [pendingGift, setPendingGift] = useState<{
+    conversationId: string;
+    gift: { id: string; name: string; points: number; icon: string };
+  } | null>(null);
+  const [activeModalId, setActiveModalId] = useState<string | null>(null);
+  const [imagePreviewModal, setImagePreviewModal] = useState<string | null>(
+    null
+  );
+
+  // Supabase hooks for real data
+  const { rooms: dbChatRooms, isLoading: roomsLoading } = useAgentChatRooms(
+    adminAccount?.id
+  );
+  const { profiles: dbProfiles, updateProfileOnline } = useAgentChatProfiles(
+    adminAccount?.id
+  );
+  const { gifts: dbGifts } = useGiftItems();
+  const { sendMessage, isLoading: sendingMessage } = useSendMessage();
+
+  void roomsLoading;
+
+  // Transform gifts from Supabase
+  const giftsList = dbGifts.map((g: any) => ({
+    id: g.id,
+    name: g.name,
+    points: g.buy_price,
+    icon: g.emoji,
+  }));
+
+  // 채팅 스크롤을 위한 refs
+  const chatScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const profilesById = useMemo(() => {
+    const map = new Map<string, any>();
+    (dbProfiles || []).forEach((p: any) => {
+      if (p?.id) map.set(p.id, p);
+    });
+    return map;
+  }, [dbProfiles]);
+
+  // Transform Supabase chat rooms to conversations
+  const conversations: ChatConversation[] = useMemo(
+    () =>
+      (dbChatRooms || []).map((room: any) => ({
+        id: room.id,
+        userId: room.user_id,
+        profileId: room.profile_id,
+        userName: room.users?.nickname || room.users?.name || "Unknown",
+        userImage: getPublicUrlForPath(
+          "profile-images",
+          room.users?.profile_image
+        ),
+        profileName: room.chat_profiles?.name || "프로필",
+        profileImage: getPublicUrlForPath(
+          "chat-profile-images",
+          room.chat_profiles?.image
+        ),
+        lastMessage: room.last_message || "",
+        lastMessageTime: room.last_message_at
+          ? formatKST(room.last_message_at, "datetime")
+          : "",
+        unreadCount: room.unread_count || 0,
+        isOnline: !!room.chat_profiles?.is_online,
+        messages: [],
+      })),
+    [dbChatRooms]
+  );
+
+  const profileStats = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayIso = todayStart.toISOString();
+
+    const roomCountByProfile = new Map<string, number>();
+    const activeRoomCountByProfile = new Map<string, number>();
+    (dbChatRooms || []).forEach((r: any) => {
+      const pid = r.profile_id as string | undefined;
+      if (!pid) return;
+      roomCountByProfile.set(pid, (roomCountByProfile.get(pid) || 0) + 1);
+      if (r.status === "active") {
+        activeRoomCountByProfile.set(
+          pid,
+          (activeRoomCountByProfile.get(pid) || 0) + 1
+        );
+      }
+    });
+
+    return {
+      todayIso,
+      roomCountByProfile,
+      activeRoomCountByProfile,
+    };
+  }, [dbChatRooms]);
+
+  const [todayGiftStats, setTodayGiftStats] = useState<
+    Record<string, { count: number; value: number }>
+  >({});
+
+  useEffect(() => {
+    const fetchTodayGiftStats = async () => {
+      const profileIds = (dbProfiles || []).map((p: any) => p.id);
+      if (profileIds.length === 0) {
+        setTodayGiftStats({});
+        return;
+      }
+
+      const pageSize = 1000;
+      const maxRows = 20000;
+      const all: any[] = [];
+      for (let from = 0; from < maxRows; from += pageSize) {
+        const { data, error } = await supabase
+          .from("gift_transactions")
+          .select("receiver_id, quantity, points_amount, created_at")
+          .eq("receiver_type", "profile")
+          .eq("transaction_type", "send")
+          .in("receiver_id", profileIds)
+          .gte("created_at", profileStats.todayIso)
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          setTodayGiftStats({});
+          showAlert({
+            title: "오류",
+            message: `오늘 선물 통계를 불러오지 못했습니다: ${error.message}`,
+            type: "error",
+          });
+          return;
+        }
+
+        const rows = data || [];
+        all.push(...rows);
+        if (rows.length < pageSize) break;
+      }
+
+      const map: Record<string, { count: number; value: number }> = {};
+      all.forEach((t: any) => {
+        const pid = t.receiver_id as string | undefined;
+        if (!pid) return;
+        const qty = Number(t.quantity ?? 1);
+        const amt = Number(t.points_amount ?? 0);
+        if (!map[pid]) map[pid] = { count: 0, value: 0 };
+        map[pid].count += qty;
+        map[pid].value += amt;
+      });
+      setTodayGiftStats(map);
+    };
+
+    void fetchTodayGiftStats();
+  }, [dbProfiles, profileStats.todayIso]);
+
+  const profileList = useMemo(() => {
+    return (dbProfiles || []).map((p: any) => ({
+      id: p.id as string,
+      name: p.name || "프로필",
+      isOnline: !!p.is_online,
+    }));
+  }, [dbProfiles]);
 
   // 필터링된 대화 목록
   const filteredConversations =
     profileFilter === "all"
       ? conversations
-      : conversations.filter(
-          (c) => c.profileName === profileFilter,
-        );
+      : conversations.filter((c) => c.profileId === profileFilter);
 
-  const handleChatClick = (
-    conv: ChatConversation,
-    isCtrlClick: boolean,
-  ) => {
+  const handleChatClick = (conv: ChatConversation, isCtrlClick: boolean) => {
     if (isCtrlClick) {
       // Ctrl+클릭: 새 모달 추가
       // 마지막 모달의 크기를 사용하거나, 없으면 기본 크기 사용
       const lastModal = chatModals[chatModals.length - 1];
-      const baseSize = lastModal
-        ? lastModal.size
-        : { width: 600, height: 700 };
+      const baseSize = lastModal ? lastModal.size : { width: 600, height: 700 };
 
       const newModal: ChatModal = {
-        id: Date.now(),
+        id: Date.now().toString(),
         conversation: conv,
         position: {
           x:
-            window.innerWidth / 2 -
-            baseSize.width / 2 +
-            chatModals.length * 30,
+            window.innerWidth / 2 - baseSize.width / 2 + chatModals.length * 30,
           y:
             window.innerHeight / 2 -
             baseSize.height / 2 +
@@ -686,28 +411,20 @@ export function AgentChatsPage() {
     }
   };
 
-  const closeModal = (modalId: number) => {
+  const closeModal = (modalId: string) => {
     setChatModals(chatModals.filter((m) => m.id !== modalId));
     if (activeModalId === modalId) {
       setActiveModalId(null);
     }
   };
 
-  const updateModal = (
-    modalId: number,
-    updates: Partial<ChatModal>,
-  ) => {
+  const updateModal = (modalId: string, updates: Partial<ChatModal>) => {
     setChatModals(
-      chatModals.map((m) =>
-        m.id === modalId ? { ...m, ...updates } : m,
-      ),
+      chatModals.map((m) => (m.id === modalId ? { ...m, ...updates } : m))
     );
   };
 
-  const handleMouseDown = (
-    modalId: number,
-    e: React.MouseEvent,
-  ) => {
+  const handleMouseDown = (modalId: string, e: React.MouseEvent) => {
     const modal = chatModals.find((m) => m.id === modalId);
     if (!modal) return;
 
@@ -734,13 +451,11 @@ export function AgentChatsPage() {
       if (modal.isResizing) {
         const newWidth = Math.max(
           400,
-          modal.resizeStart.width +
-            (e.clientX - modal.resizeStart.x),
+          modal.resizeStart.width + (e.clientX - modal.resizeStart.x)
         );
         const newHeight = Math.max(
           500,
-          modal.resizeStart.height +
-            (e.clientY - modal.resizeStart.y),
+          modal.resizeStart.height + (e.clientY - modal.resizeStart.y)
         );
         updateModal(modal.id, {
           size: { width: newWidth, height: newHeight },
@@ -760,10 +475,7 @@ export function AgentChatsPage() {
     });
   };
 
-  const handleResizeStart = (
-    modalId: number,
-    e: React.MouseEvent,
-  ) => {
+  const handleResizeStart = (modalId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const modal = chatModals.find((m) => m.id === modalId);
     if (!modal) return;
@@ -779,31 +491,92 @@ export function AgentChatsPage() {
     });
   };
 
-  const handleSendMessage = (conversationId: number) => {
+  const handleSendMessage = async (conversationId: string) => {
     const input = messageInputs[conversationId] || "";
-    if (!input.trim()) return;
+    if (!input.trim() || sendingMessage) return;
 
-    console.log("메시지 전송:", input);
-    setMessageInputs({
-      ...messageInputs,
+    const conv = findConversation(conversationId);
+    if (!conv?.profileId) return;
+
+    const content = input.trim();
+    setMessageInputs((prev) => ({
+      ...prev,
       [conversationId]: "",
-    });
+    }));
+
+    const result = await sendMessage(
+      conversationId,
+      conv.profileId,
+      "profile",
+      content,
+      "text"
+    );
+
+    if (result.error) {
+      showAlert({
+        title: "오류",
+        message: result.error.message || "메시지 전송에 실패했습니다.",
+        type: "error",
+      });
+    }
   };
 
-  const handleSendGift = (gift: (typeof GIFTS)[0]) => {
-    console.log(`선물 전송: ${gift.name} (${gift.points}P)`);
+  const handlePrepareGift = (
+    conversationId: string,
+    gift: { id: string; name: string; points: number; icon: string }
+  ) => {
+    setPendingGift({ conversationId, gift });
     setShowGiftModal(null);
   };
 
-  const handleKeyPress = (
-    e: React.KeyboardEvent,
-    conversationId: number,
-  ) => {
+  const handleConfirmSendGift = async (quantity: number) => {
+    if (!pendingGift) return;
+    if (sendingMessage) return;
+
+    const { conversationId, gift } = pendingGift;
+    const conv = findConversation(conversationId);
+    if (!conv?.profileId || !conv.userId) return;
+
+    const giftQuantity = quantity;
+    if (!giftQuantity || giftQuantity <= 0) return;
+
+    try {
+      const { error: rpcError } = await supabase.rpc("chat_send_gift_profile", {
+        p_room_id: conversationId,
+        p_gift_id: gift.id,
+        p_quantity: giftQuantity,
+      });
+
+      if (rpcError) throw rpcError;
+
+      setPendingGift(null);
+      setShowGiftModal(null);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "선물 전송에 실패했습니다.";
+      showAlert({
+        title: "오류",
+        message,
+        type: "error",
+      });
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent, conversationId: string) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage(conversationId);
     }
   };
+
+  function findConversation(conversationId: string) {
+    if (selectedChat?.id === conversationId) return selectedChat;
+    const modalConv = chatModals.find(
+      (m) => m.conversation.id === conversationId
+    )?.conversation;
+    if (modalConv) return modalConv;
+    return conversations.find((c) => c.id === conversationId) || null;
+  }
 
   // 전역 마우스 이벤트
   useEffect(() => {
@@ -829,14 +602,10 @@ export function AgentChatsPage() {
 
   // 선택된 채팅이 변경될 때 자동 스크롤
   useEffect(() => {
-    if (
-      selectedChat &&
-      chatScrollRefs.current[selectedChat.id]
-    ) {
+    if (selectedChat && chatScrollRefs.current[selectedChat.id]) {
       // DOM 렌더링 완료 후 스크롤 적용
       setTimeout(() => {
-        const scrollEl =
-          chatScrollRefs.current[selectedChat.id];
+        const scrollEl = chatScrollRefs.current[selectedChat.id];
         if (scrollEl) {
           scrollEl.scrollTop = scrollEl.scrollHeight;
         }
@@ -847,8 +616,7 @@ export function AgentChatsPage() {
   // 모달 채팅이 열릴 때 자동 스크롤
   useEffect(() => {
     chatModals.forEach((modal) => {
-      const scrollEl =
-        chatScrollRefs.current[modal.conversation.id];
+      const scrollEl = chatScrollRefs.current[modal.conversation.id];
       if (scrollEl) {
         setTimeout(() => {
           scrollEl.scrollTop = scrollEl.scrollHeight;
@@ -866,8 +634,10 @@ export function AgentChatsPage() {
     onSend: () => void,
     onKeyPress: (e: React.KeyboardEvent) => void,
     onShowGift: () => void,
-    scrollRef?: React.RefObject<HTMLDivElement>,
+    scrollRef?: React.RefObject<HTMLDivElement>
   ) => {
+    void onToggleMode;
+
     return (
       <div className="flex flex-col flex-1 min-h-0">
         {/* 메시지 목록 - 말풍선 모드 */}
@@ -879,7 +649,9 @@ export function AgentChatsPage() {
             {conversation.messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}
+                className={`flex flex-col ${
+                  msg.isMe ? "items-end" : "items-start"
+                }`}
               >
                 <div className="text-gray-400 text-xs mb-1">
                   {msg.senderName} · {msg.timestamp}
@@ -892,9 +664,7 @@ export function AgentChatsPage() {
                   }`}
                 >
                   {msg.type === "gift" ? (
-                    <span className="text-yellow-400">
-                      🎁 {msg.message}
-                    </span>
+                    <span className="text-yellow-400">🎁 {msg.message}</span>
                   ) : msg.type === "image" ? (
                     <div>
                       <p className="mb-2">{msg.message}</p>
@@ -904,7 +674,7 @@ export function AgentChatsPage() {
                           alt="이미지"
                           className="rounded-lg max-w-full cursor-pointer hover:opacity-90 transition-opacity"
                           onClick={() =>
-                            setImagePreviewModal(msg.imageUrl)
+                            setImagePreviewModal(msg.imageUrl || null)
                           }
                         />
                       )}
@@ -918,10 +688,7 @@ export function AgentChatsPage() {
           </div>
         ) : (
           /* 메시지 목록 - 로그 모드 */
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto p-4 min-h-0"
-          >
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 min-h-0">
             <div className="space-y-1 text-sm">
               {conversation.messages.map((msg) => {
                 const isGift = msg.type === "gift";
@@ -930,27 +697,21 @@ export function AgentChatsPage() {
                 return (
                   <div
                     key={msg.id}
-                    className={
-                      isGift ? "text-pink-400" : "text-gray-300"
-                    }
+                    className={isGift ? "text-pink-400" : "text-gray-300"}
                   >
                     {isImage ? (
                       <span>
                         [{msg.timestamp}]{" "}
                         <span
                           className={
-                            msg.isMe
-                              ? "text-indigo-400"
-                              : "text-emerald-400"
+                            msg.isMe ? "text-indigo-400" : "text-emerald-400"
                           }
                         >
                           {msg.senderName}:
                         </span>{" "}
                         <span
                           onClick={() =>
-                            setImagePreviewModal(
-                              msg.imageUrl || null,
-                            )
+                            setImagePreviewModal(msg.imageUrl || null)
                           }
                           className="text-purple-400 cursor-pointer hover:text-purple-300 transition-colors"
                         >
@@ -962,9 +723,7 @@ export function AgentChatsPage() {
                         [{msg.timestamp}]{" "}
                         <span
                           className={
-                            msg.isMe
-                              ? "text-indigo-400"
-                              : "text-emerald-400"
+                            msg.isMe ? "text-indigo-400" : "text-emerald-400"
                           }
                         >
                           {msg.senderName}:
@@ -1013,36 +772,38 @@ export function AgentChatsPage() {
     );
   };
 
+  const giftConversation = showGiftModal
+    ? findConversation(showGiftModal)
+    : null;
+
   return (
     <AdminLayout>
       <div className="space-y-4">
         <div>
-          <h1 className="text-white text-2xl mb-2">
-            채팅 관리
-          </h1>
+          <h1 className="text-white text-2xl mb-2">채팅 관리</h1>
           <p className="text-gray-400 text-sm">
-            배정받은 프로필로 회원들과 채팅하세요 (채팅목록을
-            Ctrl키 누른 상태로 클릭하면 팝업창으로 볼 수
-            있습니다)
+            배정받은 프로필로 회원들과 채팅하세요 (채팅목록을 Ctrl키 누른 상태로
+            클릭하면 팝업창으로 볼 수 있습니다)
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:h-[500px] min-h-0">
           {/* 채팅 목록 */}
-          <div className={`lg:col-span-1 min-h-0 ${selectedChat && 'hidden lg:block'}`}>
+          <div
+            className={`lg:col-span-1 min-h-0 ${
+              selectedChat && "hidden lg:block"
+            }`}
+          >
             <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden lg:h-full h-[500px] flex flex-col">
               {/* 목록 헤더 */}
               <div className="bg-gray-800 border-b border-gray-700 p-3">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <h2 className="text-white font-medium">
-                      채팅 목록
-                    </h2>
+                    <h2 className="text-white font-medium">채팅 목록</h2>
                     <p className="text-gray-400 text-xs">
                       총 {filteredConversations.length}개 대화
                     </p>
                   </div>
-                  <Filter size={16} className="text-gray-400" />
                 </div>
 
                 {/* 프로필 필터 */}
@@ -1057,17 +818,17 @@ export function AgentChatsPage() {
                   >
                     전체
                   </button>
-                  {profileList.map((profile) => (
+                  {profileList.map((p) => (
                     <button
-                      key={profile}
-                      onClick={() => setProfileFilter(profile)}
+                      key={p.id}
+                      onClick={() => setProfileFilter(p.id)}
                       className={`px-3 py-1 rounded-lg text-xs transition-colors ${
-                        profileFilter === profile
+                        profileFilter === p.id
                           ? "bg-indigo-500 text-white"
                           : "bg-gray-700 text-gray-400 hover:bg-gray-600"
                       }`}
                     >
-                      {profile}
+                      {p.name}
                     </button>
                   ))}
                 </div>
@@ -1075,386 +836,281 @@ export function AgentChatsPage() {
 
               {/* 대화 목록 */}
               <div className="overflow-y-auto flex-1">
-                {filteredConversations.map((conv) => (
-                  <button
-                    key={conv.id}
-                    onClick={(e) =>
-                      handleChatClick(
-                        conv,
-                        e.ctrlKey || e.metaKey,
-                      )
-                    }
-                    className={`w-full p-3 text-left transition-colors border-b border-gray-800 last:border-b-0 ${
-                      selectedChat?.id === conv.id
-                        ? "bg-indigo-500/10 border-l-4 border-l-indigo-500"
-                        : "hover:bg-gray-800/50"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="relative flex-shrink-0">
-                        <img
-                          src={conv.userImage}
-                          alt={conv.userName}
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                        {/* 온라인 상태 표시 */}
-                        <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-gray-900 ${conv.isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></span>
-                        {/* 읽지 않은 메시지 수 */}
-                        {conv.unreadCount > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                            {conv.unreadCount}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="text-white font-medium truncate text-sm">
-                            {conv.userName}
-                          </h3>
-                          <span className="text-gray-500 text-xs flex-shrink-0 ml-2">
-                            {conv.lastMessageTime}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <img
-                            src={conv.profileImage}
-                            alt={conv.profileName}
-                            className="w-4 h-4 rounded-full object-cover"
+                {filteredConversations.length === 0 ? (
+                  <div className="p-6 text-center text-gray-500 text-sm">
+                    대화가 없습니다
+                  </div>
+                ) : (
+                  filteredConversations.map((conv) => {
+                    const isSelected = selectedChat?.id === conv.id;
+
+                    return (
+                      <button
+                        key={conv.id}
+                        onClick={(e) =>
+                          handleChatClick(conv, e.ctrlKey || e.metaKey)
+                        }
+                        className={`w-full text-left p-3 border-b border-gray-800 hover:bg-gray-800/40 transition-colors ${
+                          isSelected ? "bg-gray-800/60" : ""
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <NameAvatar
+                            name={conv.userName}
+                            src={conv.userImage}
                           />
-                          <p className="text-indigo-400 text-xs">
-                            {conv.profileName}
-                          </p>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-white text-sm font-medium truncate">
+                                {conv.userName}
+                              </p>
+                              <p className="text-gray-500 text-xs">
+                                {conv.lastMessageTime}
+                              </p>
+                            </div>
+                            <p className="text-indigo-400 text-xs truncate">
+                              {conv.profileName}
+                            </p>
+                            <p className="text-gray-400 text-xs truncate">
+                              {conv.lastMessage || ""}
+                            </p>
+                          </div>
+                          {conv.unreadCount > 0 && (
+                            <span className="bg-pink-500 text-white text-xs rounded-full px-2 py-0.5">
+                              {conv.unreadCount}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-gray-400 text-xs truncate">
-                          {conv.lastMessage}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
 
-          {/* 우측 고정 채팅 화면 */}
-          <div className="lg:col-span-2 relative min-h-0">
+          {/* 채팅 상세 */}
+          <div className="lg:col-span-2 min-h-0">
             {selectedChat ? (
-              <div className="bg-gray-900 border border-gray-800 rounded-lg h-[calc(100vh-200px)] lg:h-full flex flex-col min-h-0">
+              <div className="bg-gray-900 border border-gray-800 rounded-lg h-[500px] lg:h-full flex flex-col">
                 {/* 채팅 헤더 */}
-                <div className="bg-gray-800 border-b border-gray-700 p-3 flex items-center justify-between flex-shrink-0">
+                <div className="bg-gray-800 border-b border-gray-700 p-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setSelectedChat(null)}
-                      className="lg:hidden text-gray-400 hover:text-white transition-colors p-2"
-                      title="뒤로 가기"
+                      className="lg:hidden text-gray-400 hover:text-white"
                     >
                       <ChevronLeft size={20} />
                     </button>
-                    <img
+                    <NameAvatar
+                      name={selectedChat.userName}
                       src={selectedChat.userImage}
-                      alt={selectedChat.userName}
-                      className="w-10 h-10 rounded-full object-cover"
                     />
                     <div>
                       <h3 className="text-white font-medium text-sm">
                         {selectedChat.userName}
                       </h3>
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={selectedChat.profileImage}
-                          alt={selectedChat.profileName}
-                          className="w-4 h-4 rounded-full object-cover"
-                        />
-                        <p className="text-indigo-400 text-xs">
-                          {selectedChat.profileName}
-                        </p>
-                      </div>
+                      <p className="text-gray-400 text-xs">
+                        {selectedChat.profileName}
+                      </p>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs text-gray-300 hidden sm:flex items-center gap-2">
+                      <span>
+                        활성방{" "}
+                        {(
+                          profileStats.activeRoomCountByProfile.get(
+                            selectedChat.profileId
+                          ) || 0
+                        ).toLocaleString()}
+                      </span>
+                      <span className="text-gray-600">|</span>
+                      <span className="text-yellow-400">
+                        오늘 선물{" "}
+                        {(
+                          todayGiftStats[selectedChat.profileId]?.value || 0
+                        ).toLocaleString()}
+                        P(
+                        {(
+                          todayGiftStats[selectedChat.profileId]?.count || 0
+                        ).toLocaleString()}
+                        개)
+                      </span>
+                    </div>
                     <button
-                      onClick={() => {
-                        const isBubble =
-                          messageInputs[
-                            `bubble_${selectedChat.id}`
-                          ] !== "false";
-                        setMessageInputs({
-                          ...messageInputs,
-                          [`bubble_${selectedChat.id}`]:
-                            isBubble ? "false" : "true",
-                        });
+                      onClick={async () => {
+                        const p = profilesById.get(selectedChat.profileId);
+                        if (!p) return;
+                        await updateProfileOnline(
+                          selectedChat.profileId,
+                          !(p.is_online ?? false)
+                        );
                       }}
-                      className="p-2 rounded-lg bg-gray-700 text-gray-400 hover:bg-gray-600 transition-colors"
-                      title="모드 전환"
+                      className="text-xs px-3 py-1 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors"
                     >
-                      {messageInputs[
-                        `bubble_${selectedChat.id}`
-                      ] !== "false" ? (
-                        <MessageCircle size={16} />
-                      ) : (
-                        <List size={16} />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setSelectedChat(null)}
-                      className="hidden lg:block text-gray-400 hover:text-white transition-colors p-2"
-                    >
-                      <X size={16} />
+                      프로필{" "}
+                      {profilesById.get(selectedChat.profileId)?.is_online
+                        ? "온라인"
+                        : "오프라인"}
                     </button>
                   </div>
                 </div>
 
-                {renderChatWindow(
-                  selectedChat,
-                  messageInputs[`bubble_${selectedChat.id}`] !==
-                    "false",
-                  () => {},
-                  messageInputs[selectedChat.id] || "",
-                  (value) =>
-                    setMessageInputs({
-                      ...messageInputs,
+                <RealtimeChatWindow
+                  conversation={selectedChat}
+                  isBubbleMode={true}
+                  onToggleMode={() => void 0}
+                  messageInput={messageInputs[selectedChat.id] || ""}
+                  onMessageChange={(value) =>
+                    setMessageInputs((prev) => ({
+                      ...prev,
                       [selectedChat.id]: value,
-                    }),
-                  () => handleSendMessage(selectedChat.id),
-                  (e) => handleKeyPress(e, selectedChat.id),
-                  () => setShowGiftModal(selectedChat.id),
-                  {
-                    current:
-                      chatScrollRefs.current[selectedChat.id] ||
-                      null,
-                  } as React.RefObject<HTMLDivElement>,
-                )}
+                    }))
+                  }
+                  onSend={() => void handleSendMessage(selectedChat.id)}
+                  onKeyPress={(e) => handleKeyPress(e, selectedChat.id)}
+                  onShowGift={() => setShowGiftModal(selectedChat.id)}
+                  renderChatWindow={renderChatWindow}
+                />
               </div>
             ) : (
-              <div className="bg-gray-900 border border-gray-800 rounded-lg h-full flex items-center justify-center">
-                <div className="text-center">
-                  <MessageSquare
-                    size={64}
-                    className="text-gray-700 mx-auto mb-4"
-                  />
-                  <p className="text-gray-400 text-sm">
-                    채팅을 선택하여 대화를 시작하세요
-                  </p>
-                </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-lg h-[500px] lg:h-full flex items-center justify-center">
+                <p className="text-gray-500 text-sm">대화를 선택하세요</p>
               </div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* 플로팅 채팅 모달들 */}
-      {chatModals.map((modal) => (
-        <div
-          key={modal.id}
-          className="fixed bg-gray-900 border border-gray-800 rounded-lg shadow-2xl flex flex-col"
-          style={{
-            left: `${modal.position.x}px`,
-            top: `${modal.position.y}px`,
-            width: `${modal.size.width}px`,
-            height: `${modal.size.height}px`,
-            zIndex: activeModalId === modal.id ? 100 : 50,
-          }}
-        >
-          {/* 모달 헤더 */}
+        {/* 팝업 채팅창 */}
+        {chatModals.map((modal) => (
           <div
-            className="bg-gray-800 border-b border-gray-700 p-3 flex items-center justify-between cursor-move"
-            onMouseDown={(e) => handleMouseDown(modal.id, e)}
+            key={modal.id}
+            className={`fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col overflow-hidden ${
+              activeModalId === modal.id ? "ring-2 ring-indigo-500" : ""
+            }`}
+            style={{
+              left: modal.position.x,
+              top: modal.position.y,
+              width: modal.size.width,
+              height: modal.size.height,
+            }}
+            onMouseDown={() => setActiveModalId(modal.id)}
           >
-            <div className="flex items-center gap-3">
-              <img
-                src={modal.conversation.userImage}
-                alt={modal.conversation.userName}
-                className="w-10 h-10 rounded-full object-cover"
-              />
-              <div>
-                <h3 className="text-white font-medium text-sm">
-                  {modal.conversation.userName}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <img
-                    src={modal.conversation.profileImage}
-                    alt={modal.conversation.profileName}
-                    className="w-4 h-4 rounded-full object-cover"
-                  />
-                  <p className="text-indigo-400 text-xs">
-                    {modal.conversation.profileName}
-                  </p>
-                </div>
+            <div
+              className="bg-gray-800 border-b border-gray-700 p-2 flex items-center justify-between cursor-move"
+              onMouseDown={(e) => handleMouseDown(modal.id, e)}
+            >
+              <div className="text-white text-xs font-medium truncate">
+                {modal.conversation.userName} · {modal.conversation.profileName}
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() =>
-                  updateModal(modal.id, {
-                    isBubbleMode: !modal.isBubbleMode,
-                  })
-                }
-                className={`p-2 rounded-lg transition-colors ${
-                  modal.isBubbleMode
-                    ? "bg-indigo-500/20 text-indigo-400"
-                    : "bg-gray-700 text-gray-400 hover:bg-gray-600"
-                }`}
-                title="모드 전환"
-              >
-                {modal.isBubbleMode ? (
-                  <MessageCircle size={16} />
-                ) : (
-                  <List size={16} />
-                )}
-              </button>
               <button
                 onClick={() => closeModal(modal.id)}
-                className="text-gray-400 hover:text-white transition-colors p-2"
+                className="text-gray-400 hover:text-white transition-colors text-xs px-2"
               >
-                <X size={16} />
-              </button>
-            </div>
-          </div>
-
-          {renderChatWindow(
-            modal.conversation,
-            modal.isBubbleMode,
-            () =>
-              updateModal(modal.id, {
-                isBubbleMode: !modal.isBubbleMode,
-              }),
-            messageInputs[modal.conversation.id] || "",
-            (value) =>
-              setMessageInputs({
-                ...messageInputs,
-                [modal.conversation.id]: value,
-              }),
-            () => handleSendMessage(modal.conversation.id),
-            (e) => handleKeyPress(e, modal.conversation.id),
-            () => setShowGiftModal(modal.conversation.id),
-          )}
-
-          {/* 크기 조정 핸들 */}
-          <div
-            className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize bg-indigo-500/30 hover:bg-indigo-500/50 transition-colors flex items-center justify-center rounded-tl-lg"
-            onMouseDown={(e) => handleResizeStart(modal.id, e)}
-            title="드래그하여 크기 조정"
-          >
-            <div className="text-indigo-300 text-xs font-bold">
-              ⇲
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {/* 선물 보내기 모달 */}
-      {showGiftModal !== null &&
-        (() => {
-          const currentConv =
-            selectedChat?.id === showGiftModal
-              ? selectedChat
-              : chatModals.find(
-                  (m) => m.conversation.id === showGiftModal,
-                )?.conversation;
-
-          if (!currentConv) return null;
-
-          return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150]">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 w-full max-w-md">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-white text-lg font-medium">
-                    선물 보내기
-                  </h3>
-                  <button
-                    onClick={() => setShowGiftModal(null)}
-                    className="text-gray-400 hover:text-white transition-colors"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-
-                {/* 프로필 및 회원 정보 */}
-                <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <img
-                      src={currentConv.profileImage}
-                      alt={currentConv.profileName}
-                      className="w-12 h-12 rounded-full object-cover border-2 border-indigo-500"
-                    />
-                    <div className="flex-1">
-                      <p className="text-indigo-400 text-sm font-medium">
-                        프로필: {currentConv.profileName}
-                      </p>
-                      <p className="text-gray-500 text-xs">
-                        내가 사용 중인 프로필
-                      </p>
-                    </div>
-                  </div>
-                  <div className="pt-3 border-t border-gray-700">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={currentConv.userImage}
-                        alt={currentConv.userName}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                      <div className="flex-1">
-                        <p className="text-white text-sm font-medium">
-                          받는 회원: {currentConv.userName}
-                        </p>
-                        <p className="text-gray-500 text-xs">
-                          선물을 받을 회원
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {GIFTS.map((gift) => (
-                    <button
-                      key={gift.id}
-                      onClick={() => handleSendGift(gift)}
-                      className="bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg p-4 transition-colors text-center"
-                    >
-                      <div className="text-4xl mb-2">
-                        {gift.icon}
-                      </div>
-                      <p className="text-white text-sm font-medium mb-1">
-                        {gift.name}
-                      </p>
-                      <p className="text-yellow-400 text-xs">
-                        {gift.points}P
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-      {/* 이미지 미리보기 모달 */}
-      {imagePreviewModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150]">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 w-full max-w-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white text-lg font-medium">
-                이미지 미리보기
-              </h3>
-              <button
-                onClick={() => setImagePreviewModal(null)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <X size={20} />
+                닫기
               </button>
             </div>
 
-            <img
-              src={imagePreviewModal}
-              alt="미리보기"
-              className="w-full h-auto"
+            <RealtimeChatWindow
+              conversation={modal.conversation}
+              isBubbleMode={modal.isBubbleMode}
+              onToggleMode={() =>
+                updateModal(modal.id, { isBubbleMode: !modal.isBubbleMode })
+              }
+              messageInput={messageInputs[modal.conversation.id] || ""}
+              onMessageChange={(value) =>
+                setMessageInputs((prev) => ({
+                  ...prev,
+                  [modal.conversation.id]: value,
+                }))
+              }
+              onSend={() => void handleSendMessage(modal.conversation.id)}
+              onKeyPress={(e) => handleKeyPress(e, modal.conversation.id)}
+              onShowGift={() => setShowGiftModal(modal.conversation.id)}
+              renderChatWindow={renderChatWindow}
+            />
+
+            <div
+              className="absolute right-0 bottom-0 w-4 h-4 cursor-se-resize"
+              onMouseDown={(e) => handleResizeStart(modal.id, e)}
             />
           </div>
-        </div>
-      )}
+        ))}
+
+        {/* 선물 선택 모달 */}
+        {showGiftModal && giftConversation && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={() => setShowGiftModal(null)}
+            />
+            <div className="relative bg-gray-900 rounded-lg max-w-2xl w-full mx-4 border border-gray-800 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-white font-medium">선물 보내기</h3>
+                  <p className="text-gray-400 text-xs">
+                    {giftConversation.userName} · {giftConversation.profileName}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowGiftModal(null)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
+                {giftsList.map((gift) => (
+                  <button
+                    key={gift.id}
+                    onClick={() => handlePrepareGift(giftConversation.id, gift)}
+                    className="bg-gray-800 rounded-lg p-3 hover:bg-gray-700 transition-colors text-left"
+                  >
+                    <div className="text-3xl mb-2">{gift.icon}</div>
+                    <p className="text-white text-sm font-medium mb-1">
+                      {gift.name}
+                    </p>
+                    <p className="text-yellow-400 text-xs">
+                      {gift.points.toLocaleString()}P
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 이미지 미리보기 */}
+        {imagePreviewModal && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={() => setImagePreviewModal(null)}
+            />
+            <div className="relative max-w-3xl w-full mx-4">
+              <img
+                src={imagePreviewModal}
+                alt="미리보기"
+                className="w-full h-auto rounded-lg"
+              />
+            </div>
+          </div>
+        )}
+
+        <QuantityModal
+          isOpen={pendingGift !== null}
+          title="선물 보내기"
+          itemName={pendingGift?.gift.name || ""}
+          itemEmoji={pendingGift?.gift.icon || "🎁"}
+          price={pendingGift?.gift.points || 0}
+          maxQuantity={99}
+          isSending={true}
+          onConfirm={(qty) => void handleConfirmSendGift(qty)}
+          onCancel={() => setPendingGift(null)}
+        />
+      </div>
     </AdminLayout>
   );
 }

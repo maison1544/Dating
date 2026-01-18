@@ -4,172 +4,188 @@ import {
   Gift,
   Image as ImageIcon,
   X,
+  Loader2,
 } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useMemo, useRef, useEffect, useState } from "react";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { QuantityModal } from "../components/QuantityModal";
 import { ProfileDetailModal } from "../components/ProfileDetailModal";
-
-interface Message {
-  id: number;
-  text: string;
-  sender: "me" | "other";
-  timestamp: string;
-  type?: "text" | "gift";
-  giftEmoji?: string;
-  giftName?: string;
-  giftQuantity?: number;
-}
+import { useAuth } from "../contexts/AuthContext";
+import { useAlert } from "../contexts/AlertContext";
+import {
+  useRealtimeChat,
+  useSendMessage,
+  useMarkMessagesAsRead,
+  useUserGifts,
+  useGiftItems,
+} from "../hooks/useSupabase";
+import { supabase } from "../../lib/supabase";
+import { getPublicUrlForPath } from "../../lib/storage";
+import { formatKST } from "../../lib/dateUtils";
 
 interface GiftItem {
-  id: number;
+  id: number | string;
   name: string;
   emoji: string;
   quantity: number;
+  gift_id?: string;
+  buy_price?: number;
 }
 
 export function ChatRoomPage() {
   const navigate = useNavigate();
-  const { chatId } = useParams();
-  const [messageInput, setMessageInput] = useState("");
+  const { chatId } = useParams(); // chatId는 room_id (UUID)
+  const {
+    user,
+    profile,
+    adminAccount,
+    isAgent,
+    isLoading: authLoading,
+  } = useAuth();
+  const { showAlert } = useAlert();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [showProfileModal, setShowProfileModal] =
-    useState(false);
+
+  // UI State
+  const [messageInput, setMessageInput] = useState("");
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
-  const [selectedGift, setSelectedGift] =
-    useState<GiftItem | null>(null);
-  const [showConfirmModal, setShowConfirmModal] =
-    useState(false);
-  const [giftQuantity, setGiftQuantity] = useState(1);
+  const [selectedGift, setSelectedGift] = useState<GiftItem | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [chatPartner, setChatPartner] = useState<any>(null);
+  const [isLoadingRoom, setIsLoadingRoom] = useState(true);
+  const [isSendingGift, setIsSendingGift] = useState(false);
+  const [imgErrorPartner, setImgErrorPartner] = useState(false);
 
-  // 보유 선물 더미 데이터
-  const myGifts: GiftItem[] = [
-    { id: 1, name: "장미", emoji: "🌹", quantity: 3 },
-    { id: 2, name: "초콜릿", emoji: "🍫", quantity: 5 },
-    { id: 3, name: "샴페인", emoji: "🍾", quantity: 4 },
-    { id: 4, name: "하트 풍선", emoji: "💝", quantity: 10 },
-    { id: 5, name: "다이아 반지", emoji: "💍", quantity: 2 },
-    { id: 6, name: "럭셔리 향수", emoji: "🧴", quantity: 1 },
-  ];
+  // Supabase Realtime Hooks
+  const { messages: dbMessages, isLoading: messagesLoading } =
+    useRealtimeChat(chatId);
+  const { sendMessage, isLoading: sendingMessage } = useSendMessage();
+  const { markAsRead } = useMarkMessagesAsRead();
+  const { userGifts, refetch: refetchUserGifts } = useUserGifts(profile?.id);
+  useGiftItems();
 
-  // 채팅방 더미 데이터
-  const chatData: { [key: string]: any } = {
-    "1": {
-      name: "유진",
-      age: 23,
-      location: "강남",
-      height: 168,
-      weight: 50,
-      job: "마케터",
-      rating: 5,
-      imageUrl:
-        "https://images.unsplash.com/photo-1635353775931-1a6464be72cb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxrb3JlYW4lMjB3b21hbiUyMGJlYXV0eXxlbnwxfHx8fDE3NjU2NDI4MjZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      online: true,
-      tags: ["와인바", "분위기맛집", "패션"],
-    },
-    "2": {
-      name: "민지",
-      age: 22,
-      location: "홍대",
-      height: 162,
-      weight: 49,
-      job: "디자이너",
-      rating: 5,
-      imageUrl:
-        "https://images.unsplash.com/photo-1747707499498-7077014c4423?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhc2lhbiUyMGZlbWFsZSUyMG1vZGVsfGVufDF8fHx8MTc2NTY3NTUzNnww&ixlib=rb-4.1.0&q=80&w=1080",
-      online: true,
-      tags: ["바다산책", "맛집탐방", "순수한매력", "귀여운스타일"],
-    },
-    "3": {
-      name: "서현",
-      age: 24,
-      location: "압구정",
-      height: 170,
-      weight: 52,
-      job: "회사원",
-      rating: 5,
-      imageUrl:
-        "https://images.unsplash.com/photo-1693305991125-1b87c60e5578?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxqYXBhbmVzZSUyMHdvbWFuJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzY1NjY4ODczfDA&ixlib=rb-4.1.0&q=80&w=1080",
-      online: false,
-      tags: ["미술관", "전시회", "재즈바", "성숙한매력"],
-    },
-    "4": {
-      name: "소희",
-      age: 21,
-      location: "서울",
-      height: 165,
-      weight: 48,
-      job: "카페운영",
-      rating: 5,
-      imageUrl:
-        "https://images.unsplash.com/photo-1672390933634-6ccb1da5fa40?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx5b3VuZyUyMGFzaWFuJTIwd29tYW4lMjBwb3J0cmFpdHxlbnwxfHx8fDE3NjU2NzU1MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      online: true,
-      tags: ["영화보기", "카페투어", "힐링"],
-    },
-    "5": {
-      name: "지은",
-      age: 25,
-      location: "청담",
-      height: 169,
-      weight: 51,
-      job: "프리랜서",
-      rating: 5,
-      imageUrl:
-        "https://images.unsplash.com/photo-1551148049-70c3165bd42a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhc2lhbiUyMGdpcmwlMjBmYXNoaW9ufGVufDF8fHx8MTc2NTY3NTUzN3ww&ixlib=rb-4.1.0&q=80&w=1080",
-      online: true,
-      tags: ["쇼핑", "인스타감성", "활발함", "새로운경험"],
-    },
+  // 내 선물 목록 (Supabase에서 조회)
+  const myGifts: GiftItem[] = useMemo(
+    () =>
+      (userGifts || [])
+        .map((ug: any) => {
+          const gift = ug.gifts;
+          return {
+            id: ug.id,
+            gift_id: ug.gift_id,
+            name: gift?.name,
+            emoji: gift?.emoji,
+            buy_price: Number(gift?.buy_price ?? 0),
+            quantity: Number(ug.quantity ?? 0),
+          };
+        })
+        .filter((g: any) => !!g.gift_id && !!g.name && g.quantity > 0),
+    [userGifts]
+  );
+
+  const getInitial = (name: string) => {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return "?";
+    return trimmed.slice(0, 1).toUpperCase();
   };
 
-  const currentChat = chatData[chatId || "1"];
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+  }, [authLoading, user, adminAccount, isAgent, navigate]);
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      text: "안녕하세요! 프로필 보고 연락드렸어요 😊",
-      sender: "me",
-      timestamp: "오후 2:30",
-    },
-    {
-      id: 2,
-      text: "안녕하세요~ 반가워요!",
-      sender: "other",
-      timestamp: "오후 2:32",
-    },
-    {
-      id: 3,
-      text: "프로필에 와인바 좋아하신다고 하셨는데, 혹시 추천하실만한 곳 있으세요?",
-      sender: "me",
-      timestamp: "오후 2:35",
-    },
-    {
-      id: 4,
-      text: "네! 청담에 좋은 곳 알아요. 다음에 같이 가실래요? 🍷",
-      sender: "other",
-      timestamp: "오후 2:38",
-    },
-    {
-      id: 5,
-      text: "🌹",
-      sender: "me",
-      timestamp: "오후 2:40",
-      type: "gift",
-      giftEmoji: "🌹",
-      giftName: "장미",
-      giftQuantity: 1,
-    },
-    {
-      id: 6,
-      text: "와~ 감사합니다! 💕",
-      sender: "other",
-      timestamp: "오후 2:41",
-    },
-    {
-      id: 7,
-      text: "오늘 저녁에 시간 괜찮으세요? 😊",
-      sender: "other",
-      timestamp: "오후 3:42",
-    },
-  ]);
+  // 채팅방 정보 및 상대방 프로필 로드
+  useEffect(() => {
+    const loadRoomData = async () => {
+      if (!chatId || !profile?.id) {
+        setChatPartner(null);
+        setIsLoadingRoom(false);
+        return;
+      }
+      setIsLoadingRoom(true);
+
+      setImgErrorPartner(false);
+
+      const { data: room, error } = await supabase
+        .from("chat_rooms")
+        .select(
+          `
+          *,
+          chat_profiles:profile_id (
+            id, name, age, image, is_online, job, height, weight, interests, bio
+          )
+        `
+        )
+        .eq("id", chatId)
+        .eq("user_id", profile.id)
+        .maybeSingle();
+
+      if (error) {
+        setIsLoadingRoom(false);
+        showAlert({
+          title: "오류",
+          message: `채팅방 로드에 실패했습니다: ${error.message}`,
+          type: "error",
+        });
+        return;
+      }
+
+      if (room?.chat_profiles) {
+        setChatPartner({
+          id: room.chat_profiles.id,
+          name: room.chat_profiles.name,
+          age: room.chat_profiles.age,
+          height: room.chat_profiles.height ?? null,
+          weight: room.chat_profiles.weight ?? null,
+          job: room.chat_profiles.job ?? null,
+          image: (room.chat_profiles as any).image ?? null,
+          online: !!room.chat_profiles.is_online,
+          tags: Array.isArray(room.chat_profiles.interests)
+            ? (room.chat_profiles.interests as any[])
+            : [],
+          bio: room.chat_profiles.bio,
+        });
+      }
+      setIsLoadingRoom(false);
+    };
+
+    loadRoomData();
+  }, [chatId, profile?.id, showAlert]);
+
+  // 메시지 읽음 처리
+  useEffect(() => {
+    if (chatId && profile?.id) {
+      markAsRead(chatId, profile.id);
+    }
+  }, [chatId, profile?.id, dbMessages.length]);
+
+  // 메시지를 UI 형식으로 변환
+  const messages = dbMessages.map((msg: any) => {
+    const isMe =
+      msg.sender_type === "user" &&
+      !!profile?.id &&
+      String(msg.sender_id) === String(profile.id);
+
+    const rawGiftLabel = String(msg.content || msg.message || "").trim();
+    const giftParts = rawGiftLabel.split(/\s+/).filter(Boolean);
+    const fallbackGiftEmoji = giftParts.length >= 2 ? giftParts[0] : "🎁";
+    const fallbackGiftName =
+      giftParts.length >= 2 ? giftParts.slice(1).join(" ") : rawGiftLabel;
+
+    return {
+      id: msg.id,
+      text: msg.content,
+      sender: isMe ? "me" : "other",
+      timestamp: msg.created_at ? formatKST(msg.created_at, "datetime") : "",
+      type: msg.message_type || "text",
+      giftEmoji: msg.gift_items?.emoji ?? fallbackGiftEmoji,
+      giftName: msg.gift_items?.name ?? fallbackGiftName,
+      giftQuantity: msg.gift_quantity,
+    };
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
@@ -181,20 +197,15 @@ export function ChatRoomPage() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (messageInput.trim()) {
-      const newMessage: Message = {
-        id: messages.length + 1,
-        text: messageInput,
-        sender: "me",
-        timestamp: new Date().toLocaleTimeString("ko-KR", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-      setMessages([...messages, newMessage]);
-      setMessageInput("");
-    }
+  // 메시지 전송 핸들러 (Supabase)
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !chatId || !profile?.id || sendingMessage)
+      return;
+
+    const content = messageInput.trim();
+    setMessageInput("");
+
+    await sendMessage(chatId, profile.id, "user", content, "text");
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -210,44 +221,96 @@ export function ChatRoomPage() {
 
   const handleSelectGift = (gift: GiftItem) => {
     setSelectedGift(gift);
-    setGiftQuantity(1);
+    setShowGiftModal(false);
     setShowConfirmModal(true);
   };
 
-  const handleConfirmGift = () => {
-    if (selectedGift) {
-      const newMessage: Message = {
-        id: messages.length + 1,
-        text: selectedGift.emoji,
-        sender: "me",
-        timestamp: new Date().toLocaleTimeString("ko-KR", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        type: "gift",
-        giftEmoji: selectedGift.emoji,
-        giftName: selectedGift.name,
-        giftQuantity: giftQuantity,
-      };
-      setMessages([...messages, newMessage]);
+  // 선물 전송 핸들러 (Supabase)
+  const handleConfirmGift = async (quantity: number) => {
+    if (!selectedGift || !chatId || !profile?.id || !chatPartner) return;
+    if (isSendingGift) return;
+
+    const giftId = selectedGift.gift_id;
+    if (!giftId) {
+      showAlert({
+        title: "오류",
+        message: "선물 정보를 찾을 수 없습니다.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (quantity <= 0) {
+      showAlert({
+        title: "입력 오류",
+        message: "수량을 확인해주세요.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (quantity > selectedGift.quantity) {
+      showAlert({
+        title: "잔량 부족",
+        message: "보유한 선물 수량이 부족합니다.",
+        type: "warning",
+      });
+      return;
+    }
+
+    setIsSendingGift(true);
+
+    try {
+      const { error: rpcError } = await supabase.rpc("chat_send_gift_user", {
+        p_room_id: chatId,
+        p_gift_id: giftId,
+        p_quantity: quantity,
+      });
+
+      if (rpcError) throw rpcError;
+
+      await refetchUserGifts();
+
       setSelectedGift(null);
       setShowConfirmModal(false);
       setShowGiftModal(false);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "선물 전송에 실패했습니다.";
+      showAlert({ title: "오류", message, type: "error" });
+      await refetchUserGifts();
+    } finally {
+      setIsSendingGift(false);
     }
   };
 
   const handleCancelGift = () => {
     setSelectedGift(null);
     setShowConfirmModal(false);
+    setShowGiftModal(true);
   };
 
-  if (!currentChat) {
+  if (authLoading || isLoadingRoom || (user && !adminAccount && !profile)) {
     return (
       <div className="min-h-screen bg-black pt-24 pb-16 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-400">
-            채팅방을 찾을 수 없습니다
-          </p>
+          <Loader2 className="w-8 h-8 text-gray-400 animate-spin mx-auto" />
+          <p className="text-gray-400 mt-4">채팅방을 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || adminAccount || !profile?.id) {
+    if (!user) return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
+  }
+
+  if (!chatPartner) {
+    return (
+      <div className="min-h-screen bg-black pt-24 pb-16 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-400">채팅방을 찾을 수 없습니다</p>
           <button
             onClick={() => navigate("/realtime-matching")}
             className="mt-4 bg-pink-500 text-white px-6 py-2 rounded hover:bg-pink-600 transition-colors"
@@ -258,6 +321,11 @@ export function ChatRoomPage() {
       </div>
     );
   }
+
+  const partnerImageUrl = getPublicUrlForPath(
+    "chat-profile-images",
+    chatPartner.image
+  );
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col">
@@ -275,21 +343,28 @@ export function ChatRoomPage() {
             className="flex items-center gap-3 hover:opacity-80 transition-opacity"
           >
             <div className="relative">
-              <img
-                src={currentChat.imageUrl}
-                alt={currentChat.name}
-                className="w-10 h-10 rounded-full object-cover"
-              />
-              {currentChat.online && (
+              {partnerImageUrl && !imgErrorPartner ? (
+                <img
+                  src={partnerImageUrl}
+                  alt={chatPartner.name}
+                  className="w-10 h-10 rounded-full object-cover"
+                  onError={() => setImgErrorPartner(true)}
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-white font-bold">
+                  {getInitial(chatPartner.name)}
+                </div>
+              )}
+              {chatPartner.online && (
                 <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-900"></div>
               )}
             </div>
             <div className="leading-none">
               <div className="text-white flex items-center gap-2">
-                {currentChat.name}
+                {chatPartner.name}
               </div>
               <p className="text-gray-400 text-xs text-left p-[0px] m-[0px]">
-                {currentChat.online ? "온라인" : "오프라인"}
+                {chatPartner.online ? "온라인" : "오프라인"}
               </p>
             </div>
           </button>
@@ -299,55 +374,77 @@ export function ChatRoomPage() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         <div className="max-w-4xl mx-auto">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.sender === "me" ? "justify-end" : "justify-start"} mb-4`}
-            >
+          {messagesLoading && messages.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+            </div>
+          ) : (
+            messages.map((message) => (
               <div
-                className={`flex items-end gap-2 max-w-[70%] ${message.sender === "me" ? "flex-row-reverse" : "flex-row"}`}
+                key={message.id}
+                className={`flex ${
+                  message.sender === "me" ? "justify-end" : "justify-start"
+                } mb-4`}
               >
-                {message.sender === "other" && (
-                  <img
-                    src={currentChat.imageUrl}
-                    alt={currentChat.name}
-                    className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                  />
-                )}
                 <div
-                  className={`flex flex-col ${message.sender === "me" ? "items-end" : "items-start"}`}
+                  className={`flex items-end gap-2 max-w-[70%] ${
+                    message.sender === "me" ? "flex-row-reverse" : "flex-row"
+                  }`}
                 >
-                  {message.type === "gift" ? (
-                    <div
-                      className={`bg-gradient-to-br from-pink-500 to-purple-500 rounded-2xl px-6 py-4 ${message.sender === "me" ? "rounded-br-sm" : "rounded-bl-sm"}`}
-                    >
-                      <div className="text-6xl text-center">
-                        {message.giftEmoji}
+                  {message.sender === "other" &&
+                    (partnerImageUrl && !imgErrorPartner ? (
+                      <img
+                        src={partnerImageUrl}
+                        alt={chatPartner.name}
+                        className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                        onError={() => setImgErrorPartner(true)}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-white font-bold flex-shrink-0 text-xs">
+                        {getInitial(chatPartner.name)}
                       </div>
-                      <p className="text-white text-xs text-center mt-2">
-                        {currentChat.name}님에게 {message.giftName} {message.giftQuantity}개를 보냈습니다!
-                      </p>
-                    </div>
-                  ) : (
-                    <div
-                      className={`rounded-2xl px-4 py-2 ${
-                        message.sender === "me"
-                          ? "bg-pink-500 text-white rounded-br-sm"
-                          : "bg-gray-800 text-white rounded-bl-sm"
-                      }`}
-                    >
-                      <p className="break-words">
-                        {message.text}
-                      </p>
-                    </div>
-                  )}
-                  <span className="text-gray-500 text-xs mt-1">
-                    {message.timestamp}
-                  </span>
+                    ))}
+                  <div
+                    className={`flex flex-col ${
+                      message.sender === "me" ? "items-end" : "items-start"
+                    }`}
+                  >
+                    {message.type === "gift" ? (
+                      <div
+                        className={`bg-gradient-to-br from-pink-500 to-purple-500 rounded-2xl px-6 py-4 ${
+                          message.sender === "me"
+                            ? "rounded-br-sm"
+                            : "rounded-bl-sm"
+                        }`}
+                      >
+                        <div className="text-6xl text-center">
+                          {message.giftEmoji}
+                        </div>
+                        <p className="text-white text-xs text-center mt-2">
+                          {message.sender === "me"
+                            ? `${chatPartner.name}님에게 ${message.giftName} ${message.giftQuantity}개를 보냈습니다!`
+                            : `${chatPartner.name}님이 ${message.giftName} ${message.giftQuantity}개를 보냈습니다!`}
+                        </p>
+                      </div>
+                    ) : (
+                      <div
+                        className={`rounded-2xl px-4 py-2 ${
+                          message.sender === "me"
+                            ? "bg-pink-500 text-white rounded-br-sm"
+                            : "bg-gray-800 text-white rounded-bl-sm"
+                        }`}
+                      >
+                        <p className="break-words">{message.text}</p>
+                      </div>
+                    )}
+                    <span className="text-gray-500 text-xs mt-1">
+                      {message.timestamp}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -393,7 +490,7 @@ export function ChatRoomPage() {
       <ProfileDetailModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
-        profile={currentChat}
+        profile={chatPartner}
         hideStartChat={true}
       />
 
@@ -402,9 +499,7 @@ export function ChatRoomPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-900 rounded-lg w-full max-w-md mx-4 border border-gray-800 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-6 border-b border-gray-800 flex-shrink-0">
-              <h2 className="text-white text-xl">
-                선물 보내기 💝
-              </h2>
+              <h2 className="text-white text-xl">선물 보내기 💝</h2>
               <button
                 onClick={() => setShowGiftModal(false)}
                 className="text-gray-400 hover:text-white transition-colors"
@@ -416,126 +511,47 @@ export function ChatRoomPage() {
               <p className="text-gray-400 text-sm mb-4 text-center">
                 보낼 선물을 선택해주세요
               </p>
-              <div className="grid grid-cols-3 gap-4">
-                {myGifts.map((gift) => (
-                  <button
-                    key={gift.id}
-                    onClick={() => handleSelectGift(gift)}
-                    className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-all hover:scale-105 border border-gray-700 hover:border-pink-500 flex flex-col items-center justify-center"
-                  >
-                    <div className="text-5xl mb-2">
-                      {gift.emoji}
-                    </div>
-                    <p className="text-white text-sm mb-1">
-                      {gift.name}
-                    </p>
-                    <p className="text-gray-400 text-xs">
-                      {gift.quantity}개
-                    </p>
-                  </button>
-                ))}
-              </div>
+              {myGifts.length === 0 ? (
+                <div className="bg-gray-800 rounded-lg p-6 text-center">
+                  <p className="text-gray-400 text-sm">
+                    보유한 선물이 없습니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-4">
+                  {myGifts.map((gift) => (
+                    <button
+                      key={gift.id}
+                      onClick={() => handleSelectGift(gift)}
+                      className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-all hover:scale-105 border border-gray-700 hover:border-pink-500 flex flex-col items-center justify-center"
+                    >
+                      <div className="text-5xl mb-2">{gift.emoji}</div>
+                      <p className="text-white text-sm mb-1">{gift.name}</p>
+                      <p className="text-gray-400 text-xs">{gift.quantity}개</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
       {/* Confirm Gift Modal */}
-      {showConfirmModal && selectedGift && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg w-full max-w-sm mx-4 border border-gray-800">
-            <div className="flex items-center justify-between p-6 border-b border-gray-800">
-              <h2 className="text-white text-xl">
-                선물 보내기 확인
-              </h2>
-              <button
-                onClick={handleCancelGift}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            <div className="p-6">
-              <div className="bg-gray-800 rounded-lg p-6 mb-6 text-center">
-                <div className="text-7xl mb-4">
-                  {selectedGift.emoji}
-                </div>
-                <p className="text-white text-lg mb-2">
-                  {selectedGift.name}
-                </p>
-                <p className="text-gray-400 text-sm mb-4">
-                  보유: {selectedGift.quantity}개
-                </p>
-
-                {/* Quantity Selector */}
-                <div className="flex items-center justify-center gap-4 mt-4">
-                  <button
-                    onClick={() =>
-                      setGiftQuantity(
-                        Math.max(1, giftQuantity - 1),
-                      )
-                    }
-                    disabled={giftQuantity <= 1}
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
-                      giftQuantity <= 1
-                        ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                        : "bg-gray-700 text-white hover:bg-gray-600"
-                    }`}
-                  >
-                    -
-                  </button>
-                  <div className="bg-gray-900 px-6 py-2 rounded-lg min-w-[80px] text-center">
-                    <span className="text-white text-xl">
-                      {giftQuantity}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() =>
-                      setGiftQuantity(
-                        Math.min(
-                          selectedGift.quantity,
-                          giftQuantity + 1,
-                        ),
-                      )
-                    }
-                    disabled={
-                      giftQuantity >= selectedGift.quantity
-                    }
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
-                      giftQuantity >= selectedGift.quantity
-                        ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                        : "bg-gray-700 text-white hover:bg-gray-600"
-                    }`}
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-              <p className="text-gray-400 text-sm mb-6 text-center">
-                <span className="text-pink-500">
-                  {currentChat.name}
-                </span>
-                님에게 {selectedGift.name} {giftQuantity}개를
-                보내시겠어요?
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCancelGift}
-                  className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={handleConfirmGift}
-                  className="flex-1 bg-pink-500 text-white py-3 rounded-lg hover:bg-pink-600 transition-colors"
-                >
-                  보내기
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <QuantityModal
+        isOpen={showConfirmModal && !!selectedGift}
+        title="선물 보내기"
+        itemName={selectedGift?.name ?? ""}
+        itemEmoji={selectedGift?.emoji ?? ""}
+        price={Number(selectedGift?.buy_price ?? 0)}
+        maxQuantity={Number(selectedGift?.quantity ?? 0)}
+        isSending={true}
+        ownedQuantity={Number(selectedGift?.quantity ?? 0)}
+        onCancel={handleCancelGift}
+        onConfirm={(quantity) => {
+          void handleConfirmGift(quantity);
+        }}
+      />
     </div>
   );
 }

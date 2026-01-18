@@ -1,11 +1,11 @@
-import { Link, useLocation } from 'react-router-dom';
-import Logo from '../../imports/Logo';
+import { Link, useLocation } from "react-router-dom";
+import Logo from "../../imports/Logo";
 
 export function Footer() {
-  const location = useLocation();
-  
+  const routerLocation = useLocation();
+
   // 채팅방 페이지에서는 푸터를 숨김
-  if (location.pathname.startsWith('/chat/')) {
+  if (routerLocation.pathname.startsWith("/chat/")) {
     return null;
   }
 
@@ -39,8 +39,8 @@ export function Footer() {
         {/* Copyright */}
         <div className="border-t border-gray-900 pt-6 mt-6 text-center text-gray-500 text-sm">
           <p>© 2025 솔루션스튜디오. All rights reserved.</p>
-          <Link 
-            to="/admin/login" 
+          <Link
+            to="/admin/login"
             className="text-gray-500 hover:text-pink-500 text-xs mt-2 inline-block transition-colors"
           >
             Admin

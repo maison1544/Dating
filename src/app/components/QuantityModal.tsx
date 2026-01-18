@@ -1,5 +1,5 @@
-import { X, Plus, Minus } from 'lucide-react';
-import { useState } from 'react';
+import { X, Plus, Minus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 interface QuantityModalProps {
   isOpen: boolean;
@@ -11,52 +11,76 @@ interface QuantityModalProps {
   currentPoints?: number;
   isBuying?: boolean;
   isSelling?: boolean;
+  isSending?: boolean;
+  ownedQuantity?: number;
   onConfirm: (quantity: number) => void;
   onCancel: () => void;
 }
 
-export function QuantityModal({ 
-  isOpen, 
-  title, 
-  itemName, 
-  itemEmoji, 
-  price, 
+export function QuantityModal({
+  isOpen,
+  title,
+  itemName,
+  itemEmoji,
+  price,
   maxQuantity = 99,
   currentPoints = 0,
   isBuying = false,
   isSelling = false,
-  onConfirm, 
-  onCancel 
+  isSending = false,
+  ownedQuantity,
+  onConfirm,
+  onCancel,
 }: QuantityModalProps) {
   const [quantity, setQuantity] = useState(1);
 
-  if (!isOpen) return null;
+  const maxAffordable = useMemo(
+    () => (isBuying ? Math.floor(currentPoints / price) : maxQuantity),
+    [currentPoints, isBuying, maxQuantity, price]
+  );
+
+  const actualMaxQuantity = useMemo(
+    () => (isBuying ? Math.min(maxAffordable, maxQuantity) : maxQuantity),
+    [isBuying, maxAffordable, maxQuantity]
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setQuantity((prev) => {
+      const nextMax = Math.max(1, actualMaxQuantity);
+      const base = Number.isFinite(prev) ? prev : 1;
+      return Math.min(Math.max(1, base), nextMax);
+    });
+  }, [isOpen, actualMaxQuantity]);
 
   const handleDecrease = () => {
     if (quantity > 1) setQuantity(quantity - 1);
   };
 
   const totalPrice = price * quantity;
-  const maxAffordable = isBuying ? Math.floor(currentPoints / price) : maxQuantity;
-  const actualMaxQuantity = isBuying ? Math.min(maxAffordable, maxQuantity) : maxQuantity;
 
   const handleIncrease = () => {
     if (quantity < actualMaxQuantity) setQuantity(quantity + 1);
   };
 
+  const canConfirm = quantity >= 1 && quantity <= actualMaxQuantity;
+
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onCancel}
       />
-      
+
       {/* Modal */}
       <div className="relative bg-gray-900 rounded-lg max-w-md w-full mx-4 border border-gray-800 p-6">
         {/* Close Button */}
         <button
           onClick={onCancel}
+          aria-label="닫기"
           className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
         >
           <X size={20} />
@@ -64,7 +88,7 @@ export function QuantityModal({
 
         {/* Content */}
         <h3 className="text-white text-xl mb-4">{title}</h3>
-        
+
         {/* Item Info */}
         <div className="bg-gray-800 rounded-lg p-4 mb-6 text-center">
           <div className="text-5xl mb-2">{itemEmoji}</div>
@@ -73,15 +97,36 @@ export function QuantityModal({
         </div>
 
         {/* Current Points - Show when buying or selling */}
-        {(isBuying || isSelling) && (
+        {(isBuying || isSelling) && !isSending && (
           <div className="bg-gray-800 rounded-lg p-3 mb-4">
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-400">보유 포인트</span>
-              <span className="text-white font-bold">{currentPoints.toLocaleString()} P</span>
+              <span className="text-white font-bold">
+                {currentPoints.toLocaleString()} P
+              </span>
             </div>
             <div className="flex justify-between items-center text-sm mt-2">
-              <span className="text-gray-400">{isBuying ? '구매 가능 수량' : '판매 가능 수량'}</span>
-              <span className="text-green-500 font-bold">{isBuying ? maxAffordable : maxQuantity}개</span>
+              <span className="text-gray-400">
+                {isBuying ? "구매 가능 수량" : "판매 가능 수량"}
+              </span>
+              <span className="text-green-500 font-bold">
+                {isBuying ? maxAffordable : maxQuantity}개
+              </span>
+            </div>
+          </div>
+        )}
+
+        {isSending && (
+          <div className="bg-gray-800 rounded-lg p-3 mb-4">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-400">보유 수량</span>
+              <span className="text-white font-bold">
+                {(typeof ownedQuantity === "number"
+                  ? ownedQuantity
+                  : maxQuantity
+                ).toLocaleString()}
+                개
+              </span>
             </div>
           </div>
         )}
@@ -93,21 +138,32 @@ export function QuantityModal({
             <button
               onClick={handleDecrease}
               disabled={quantity <= 1}
+              aria-label="수량 감소"
               className="bg-gray-800 p-3 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Minus size={20} className="text-white" />
             </button>
-            
+
             <div className="bg-gray-800 px-8 py-3 rounded-lg min-w-[80px] text-center">
               <span className="text-white text-xl font-bold">{quantity}</span>
             </div>
-            
+
             <button
               onClick={handleIncrease}
               disabled={quantity >= actualMaxQuantity}
+              aria-label="수량 증가"
               className="bg-gray-800 p-3 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus size={20} className="text-white" />
+            </button>
+
+            <button
+              onClick={() => setQuantity(Math.max(1, actualMaxQuantity))}
+              disabled={actualMaxQuantity <= 1 || quantity >= actualMaxQuantity}
+              aria-label="수량 최대"
+              className="bg-gray-800 px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="text-white text-sm font-bold">MAX</span>
             </button>
           </div>
         </div>
@@ -115,7 +171,9 @@ export function QuantityModal({
         {/* Total Price */}
         <div className="bg-pink-500/10 border border-pink-500/20 rounded-lg p-4 mb-6 text-center">
           <p className="text-gray-400 text-sm mb-1">총 금액</p>
-          <p className="text-pink-500 text-2xl font-bold">{totalPrice.toLocaleString()} P</p>
+          <p className="text-pink-500 text-2xl font-bold">
+            {totalPrice.toLocaleString()} P
+          </p>
         </div>
 
         {/* Buttons */}
@@ -128,7 +186,12 @@ export function QuantityModal({
           </button>
           <button
             onClick={() => onConfirm(quantity)}
-            className="flex-1 bg-pink-500 text-white py-3 rounded-lg hover:bg-pink-600 transition-colors"
+            disabled={!canConfirm}
+            className={`flex-1 py-3 rounded-lg transition-colors ${
+              canConfirm
+                ? "bg-pink-500 text-white hover:bg-pink-600"
+                : "bg-gray-700 text-gray-500 cursor-not-allowed"
+            }`}
           >
             확인
           </button>

@@ -1,32 +1,60 @@
-import { Menu, X, LogOut } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import Logo from '../../imports/Logo';
+import { Menu, X, LogOut } from "lucide-react";
+import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import Logo from "../../imports/Logo";
+import { useAuth } from "../contexts/AuthContext";
+import { useAlert } from "../contexts/AlertContext";
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const location = useLocation();
+  const routerLocation = useLocation();
   const navigate = useNavigate();
-  // 로그인 상태 (localStorage에서 확인)
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { user, signOut } = useAuth();
+  const { showAlert } = useAlert();
 
-  useEffect(() => {
-    // 컴포넌트 마운트 시 로그인 상태 확인
-    const loggedIn = localStorage.getItem("isLoggedIn") === "true";
-    setIsLoggedIn(loggedIn);
-  }, [location.pathname]);
+  // AuthContext로 로그인 상태 확인
+  const isLoggedIn = !!user;
 
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
-    localStorage.removeItem("userEmail");
-    setIsLoggedIn(false);
-    navigate("/");
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate("/");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "로그아웃에 실패했습니다.";
+      showAlert({
+        title: "오류",
+        message,
+        type: "error",
+      });
+    }
   };
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => {
+    if (path === "/") return routerLocation.pathname === "/";
+
+    const aliasGroups: Record<string, string[]> = {
+      "/ranking": ["/ranking", "/accommodation"],
+      "/minigame": [
+        "/minigame",
+        "/mini-game",
+        "/ladder-game",
+        "/powerball",
+        "/mini-game/ladder-game",
+        "/mini-game/powerball",
+      ],
+    };
+
+    const candidates = aliasGroups[path] ?? [path];
+    return candidates.some(
+      (candidate) =>
+        routerLocation.pathname === candidate ||
+        routerLocation.pathname.startsWith(candidate + "/"),
+    );
+  };
 
   // 채팅방 페이지에서는 헤더를 숨김
-  if (location.pathname.startsWith('/chat/')) {
+  if (routerLocation.pathname.startsWith("/chat/")) {
     return null;
   }
 
@@ -35,7 +63,10 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 relative">
           {/* Logo */}
-          <Link to="/" className="flex items-center h-12 md:static absolute left-1/2 -translate-x-1/2 md:translate-x-0">
+          <Link
+            to="/"
+            className="flex items-center h-12 md:static absolute left-1/2 -translate-x-1/2 md:translate-x-0"
+          >
             <div className="h-full w-[200px]">
               <Logo />
             </div>
@@ -45,44 +76,72 @@ export function Header() {
           <nav className="hidden md:flex items-center gap-6">
             <Link
               to="/"
-              className={`transition-colors ${isActive('/') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+              className={`transition-colors ${
+                isActive("/")
+                  ? "text-pink-400"
+                  : "text-white hover:text-pink-400"
+              }`}
             >
               홈
             </Link>
             <Link
               to="/realtime-matching"
-              className={`transition-colors ${isActive('/realtime-matching') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+              className={`transition-colors ${
+                isActive("/realtime-matching")
+                  ? "text-pink-400"
+                  : "text-white hover:text-pink-400"
+              }`}
             >
               실시간채팅
             </Link>
             <Link
               to="/notice"
-              className={`transition-colors ${isActive('/notice') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+              className={`transition-colors ${
+                isActive("/notice")
+                  ? "text-pink-400"
+                  : "text-white hover:text-pink-400"
+              }`}
             >
               공지사항
             </Link>
             <Link
-              to="/mini-game"
-              className={`transition-colors ${isActive('/mini-game') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+              to="/minigame"
+              className={`transition-colors ${
+                isActive("/minigame")
+                  ? "text-pink-400"
+                  : "text-white hover:text-pink-400"
+              }`}
             >
               커플미션
             </Link>
             <Link
-              to="/accommodation"
-              className={`transition-colors ${isActive('/accommodation') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+              to="/ranking"
+              className={`transition-colors ${
+                isActive("/ranking")
+                  ? "text-pink-400"
+                  : "text-white hover:text-pink-400"
+              }`}
             >
               랭킹
             </Link>
             <Link
               to="/point"
-              className={`transition-colors ${isActive('/point') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+              className={`transition-colors ${
+                isActive("/point")
+                  ? "text-pink-400"
+                  : "text-white hover:text-pink-400"
+              }`}
             >
               포인트
             </Link>
             {isLoggedIn && (
               <Link
                 to="/mypage"
-                className={`transition-colors ${isActive('/mypage') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+                className={`transition-colors ${
+                  isActive("/mypage")
+                    ? "text-pink-400"
+                    : "text-white hover:text-pink-400"
+                }`}
               >
                 마이페이지
               </Link>
@@ -92,19 +151,30 @@ export function Header() {
           {/* Right side - Login/Logout */}
           <div className="hidden md:flex items-center gap-4">
             {isLoggedIn ? (
-              <button 
-                onClick={handleLogout}
-                className="text-white hover:text-pink-400 transition-colors flex items-center gap-2"
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleLogout();
+                }}
+                className="text-white hover:text-pink-400 transition-colors flex items-center gap-2 cursor-pointer"
               >
                 <LogOut size={18} />
                 로그아웃
               </button>
             ) : (
               <>
-                <Link to="/login" className="text-white hover:text-pink-400 transition-colors">
+                <Link
+                  to="/login"
+                  className="text-white hover:text-pink-400 transition-colors"
+                >
                   로그인
                 </Link>
-                <Link to="/signup" className="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 transition-colors">
+                <Link
+                  to="/signup"
+                  className="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 transition-colors"
+                >
                   회원가입
                 </Link>
               </>
@@ -126,42 +196,66 @@ export function Header() {
             <div className="flex flex-col gap-4">
               <Link
                 to="/"
-                className={`transition-colors ${isActive('/') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+                className={`transition-colors ${
+                  isActive("/")
+                    ? "text-pink-400"
+                    : "text-white hover:text-pink-400"
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 홈
               </Link>
               <Link
                 to="/realtime-matching"
-                className={`transition-colors ${isActive('/realtime-matching') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+                className={`transition-colors ${
+                  isActive("/realtime-matching")
+                    ? "text-pink-400"
+                    : "text-white hover:text-pink-400"
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 실시간채팅
               </Link>
               <Link
                 to="/notice"
-                className={`transition-colors ${isActive('/notice') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+                className={`transition-colors ${
+                  isActive("/notice")
+                    ? "text-pink-400"
+                    : "text-white hover:text-pink-400"
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 공지사항
               </Link>
               <Link
-                to="/mini-game"
-                className={`transition-colors ${isActive('/mini-game') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+                to="/minigame"
+                className={`transition-colors ${
+                  isActive("/minigame")
+                    ? "text-pink-400"
+                    : "text-white hover:text-pink-400"
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 커플미션
               </Link>
               <Link
-                to="/accommodation"
-                className={`transition-colors ${isActive('/accommodation') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+                to="/ranking"
+                className={`transition-colors ${
+                  isActive("/ranking")
+                    ? "text-pink-400"
+                    : "text-white hover:text-pink-400"
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 랭킹
               </Link>
               <Link
                 to="/point"
-                className={`transition-colors ${isActive('/point') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+                className={`transition-colors ${
+                  isActive("/point")
+                    ? "text-pink-400"
+                    : "text-white hover:text-pink-400"
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 포인트
@@ -169,7 +263,11 @@ export function Header() {
               {isLoggedIn && (
                 <Link
                   to="/mypage"
-                  className={`transition-colors ${isActive('/mypage') ? 'text-pink-400' : 'text-white hover:text-pink-400'}`}
+                  className={`transition-colors ${
+                    isActive("/mypage")
+                      ? "text-pink-400"
+                      : "text-white hover:text-pink-400"
+                  }`}
                   onClick={() => setIsMenuOpen(false)}
                 >
                   마이페이지
@@ -177,11 +275,14 @@ export function Header() {
               )}
               {isLoggedIn ? (
                 <button
-                  onClick={() => {
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     handleLogout();
                     setIsMenuOpen(false);
                   }}
-                  className="text-white hover:text-pink-400 transition-colors flex items-center gap-2 text-left"
+                  className="text-white hover:text-pink-400 transition-colors flex items-center gap-2 text-left cursor-pointer"
                 >
                   <LogOut size={18} />
                   로그아웃

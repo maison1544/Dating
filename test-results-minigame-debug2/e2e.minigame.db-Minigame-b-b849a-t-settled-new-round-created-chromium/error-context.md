@@ -1,0 +1,166 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "SOLUTION STUDIO PREMIUM SOLUTION" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - generic [ref=e11]: SOLUTION
+            - generic [ref=e12]: STUDIO
+          - generic [ref=e13]: PREMIUM SOLUTION
+      - navigation [ref=e14]:
+        - link "홈" [ref=e15] [cursor=pointer]:
+          - /url: /
+        - link "실시간채팅" [ref=e16] [cursor=pointer]:
+          - /url: /realtime-matching
+        - link "공지사항" [ref=e17] [cursor=pointer]:
+          - /url: /notice
+        - link "커플미션" [ref=e18] [cursor=pointer]:
+          - /url: /minigame
+        - link "랭킹" [ref=e19] [cursor=pointer]:
+          - /url: /ranking
+        - link "포인트" [ref=e20] [cursor=pointer]:
+          - /url: /point
+        - link "마이페이지" [ref=e21] [cursor=pointer]:
+          - /url: /mypage
+      - button "로그아웃" [ref=e23] [cursor=pointer]:
+        - img [ref=e24]
+        - text: 로그아웃
+  - main [ref=e27]:
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]: ✨ 달콤한 만남
+        - heading "설레는 채팅으로 시작해요 💕" [level=2] [ref=e32]
+        - paragraph [ref=e33]:
+          - text: 마음에 드는 분을 찾으셨나요? 💝
+          - text: 지금 바로 대화를 시작하고 특별한 인연을 만들어보세요!
+      - generic [ref=e34]:
+        - generic [ref=e39] [cursor=pointer]:
+          - generic [ref=e40]:
+            - heading "E2E 프로필 25세" [level=3] [ref=e41]:
+              - text: E2E 프로필
+              - generic [ref=e42]: 25세
+            - generic [ref=e45]: 접속중
+          - button "프로필보기" [ref=e47]
+        - generic [ref=e52] [cursor=pointer]:
+          - generic [ref=e53]:
+            - heading "Jimin 25세" [level=3] [ref=e54]:
+              - text: Jimin
+              - generic [ref=e55]: 25세
+            - generic [ref=e58]: 접속중
+          - paragraph [ref=e60]: Designer
+          - button "프로필보기" [ref=e61]
+        - generic [ref=e66] [cursor=pointer]:
+          - generic [ref=e67]:
+            - heading "Seoyeon 23세" [level=3] [ref=e68]:
+              - text: Seoyeon
+              - generic [ref=e69]: 23세
+            - generic [ref=e72]: 접속중
+          - paragraph [ref=e74]: Writer
+          - button "프로필보기" [ref=e75]
+        - generic [ref=e80] [cursor=pointer]:
+          - generic [ref=e81]:
+            - heading "Subin 26세" [level=3] [ref=e82]:
+              - text: Subin
+              - generic [ref=e83]: 26세
+            - generic [ref=e86]: 접속중
+          - paragraph [ref=e88]: Chef
+          - button "프로필보기" [ref=e89]
+        - generic [ref=e91] [cursor=pointer]:
+          - img "민지" [ref=e93]
+          - generic [ref=e94]:
+            - generic [ref=e95]:
+              - heading "민지 23세" [level=3] [ref=e96]:
+                - text: 민지
+                - generic [ref=e97]: 23세
+              - generic [ref=e100]: 접속중
+            - generic [ref=e102]:
+              - generic [ref=e103]: "#서핑"
+              - generic [ref=e104]: "#바다"
+              - generic [ref=e105]: "#운동"
+            - button "프로필보기" [ref=e106]
+        - generic [ref=e108] [cursor=pointer]:
+          - img "하늘" [ref=e110]
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - heading "하늘 24세" [level=3] [ref=e113]:
+                - text: 하늘
+                - generic [ref=e114]: 24세
+              - generic [ref=e117]: 접속중
+            - generic [ref=e119]:
+              - generic [ref=e120]: "#사진"
+              - generic [ref=e121]: "#여행"
+              - generic [ref=e122]: "#카페"
+            - button "프로필보기" [ref=e123]
+        - generic [ref=e125] [cursor=pointer]:
+          - img "수진" [ref=e127]
+          - generic [ref=e128]:
+            - generic [ref=e129]:
+              - heading "수진 25세" [level=3] [ref=e130]:
+                - text: 수진
+                - generic [ref=e131]: 25세
+              - generic [ref=e134]: 접속중
+            - generic [ref=e135]:
+              - paragraph [ref=e136]: 153cm • 54kg • 카페운영
+              - generic [ref=e137]:
+                - generic [ref=e138]: "#맛집"
+                - generic [ref=e139]: "#여행"
+                - generic [ref=e140]: "#영화"
+            - button "프로필보기" [ref=e141]
+        - generic [ref=e146] [cursor=pointer]:
+          - heading "Minjun 28세" [level=3] [ref=e148]:
+            - text: Minjun
+            - generic [ref=e149]: 28세
+          - paragraph [ref=e151]: Trainer
+          - button "프로필보기" [ref=e152]
+        - generic [ref=e157] [cursor=pointer]:
+          - heading "Hayun 24세" [level=3] [ref=e159]:
+            - text: Hayun
+            - generic [ref=e160]: 24세
+          - paragraph [ref=e162]: Musician
+          - button "프로필보기" [ref=e163]
+        - generic [ref=e165] [cursor=pointer]:
+          - img "지현" [ref=e167]
+          - generic [ref=e168]:
+            - heading "지현 27세" [level=3] [ref=e170]:
+              - text: 지현
+              - generic [ref=e171]: 27세
+            - generic [ref=e173]:
+              - generic [ref=e174]: "#음악"
+              - generic [ref=e175]: "#카페"
+              - generic [ref=e176]: "#독서"
+            - button "프로필보기" [ref=e177]
+        - generic [ref=e179] [cursor=pointer]:
+          - img "서연" [ref=e181]
+          - generic [ref=e182]:
+            - heading "서연 28세" [level=3] [ref=e184]:
+              - text: 서연
+              - generic [ref=e185]: 28세
+            - generic [ref=e187]:
+              - generic [ref=e188]: "#와인"
+              - generic [ref=e189]: "#요리"
+              - generic [ref=e190]: "#미술"
+            - button "프로필보기" [ref=e191]
+  - contentinfo [ref=e192]:
+    - generic [ref=e193]:
+      - generic [ref=e198]:
+        - generic [ref=e199]:
+          - generic [ref=e200]: SOLUTION
+          - generic [ref=e201]: STUDIO
+        - generic [ref=e202]: PREMIUM SOLUTION
+      - generic [ref=e204]:
+        - paragraph [ref=e205]: "법인명(상호) : 솔루션 스튜디오"
+        - paragraph [ref=e206]: "대표자(성명) : 솔루션 스튜디오"
+        - paragraph [ref=e207]: "전화 : 010-9999-9999"
+        - paragraph [ref=e208]: "주소 : 서울특별시 은평구 35678"
+        - paragraph [ref=e209]: "사업자 등록번호 안내 : 999-99-99999"
+        - paragraph [ref=e210]: "통신판매업 신고 : 제2025-서울은평-9999호"
+        - paragraph [ref=e211]: "개인정보보호책임 : 솔루션 스튜디오 (solution@gmail.com)"
+      - generic [ref=e212]:
+        - paragraph [ref=e213]: © 2025 솔루션스튜디오. All rights reserved.
+        - link "Admin" [ref=e214] [cursor=pointer]:
+          - /url: /admin/login
+```

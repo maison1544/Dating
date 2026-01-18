@@ -1,31 +1,209 @@
-import { CreditCard, Download, Gift } from 'lucide-react';
-import { useState } from 'react';
+import { CreditCard, Download, Gift, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../contexts/AuthContext";
+import {
+  useDepositRequests,
+  useGiftTransactions,
+  useWithdrawalRequests,
+} from "../hooks/useSupabase";
+import { formatKST } from "../../lib/dateUtils";
 
 export function PaymentHistoryPage() {
-  const [activeTab, setActiveTab] = useState<'charge' | 'withdraw' | 'gift'>('charge');
+  const navigate = useNavigate();
+  const { user, profile, adminAccount, isLoading: authLoading } = useAuth();
+  const { requests: depositRequests, isLoading: depositsLoading } =
+    useDepositRequests(profile?.id);
+  const { requests: withdrawalRequests, isLoading: withdrawalsLoading } =
+    useWithdrawalRequests(profile?.id);
+  const { giftTransactions, isLoading: giftsLoading } = useGiftTransactions(
+    profile?.id
+  );
 
-  const chargeHistory = [
-    { id: 1, date: '2025-12-14 14:32:15', amount: 5000, status: '완료' },
-    { id: 2, date: '2025-12-13 09:21:43', amount: 10000, status: '완료' },
-    { id: 3, date: '2025-12-12 18:45:22', amount: 1000, status: '처리중' },
-    { id: 4, date: '2025-12-11 16:15:30', amount: 3000, status: '완료' },
-    { id: 5, date: '2025-12-10 11:22:18', amount: 20000, status: '완료' },
-  ];
+  useEffect(() => {
+    if (authLoading) return;
 
-  const withdrawHistory = [
-    { id: 1, date: '2025-12-14 16:20:35', amount: 50000, status: '처리중' },
-    { id: 2, date: '2025-12-10 11:15:48', amount: 30000, status: '완료' },
-    { id: 3, date: '2025-12-08 09:30:22', amount: 20000, status: '완료' },
-    { id: 4, date: '2025-12-05 14:45:10', amount: 15000, status: '완료' },
-  ];
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+  }, [authLoading, user, navigate]);
 
-  const giftHistory = [
-    { id: 1, date: '2025-12-14 18:30:22', type: '선물', target: '소희님에게', item: '장미', amount: 100 },
-    { id: 2, date: '2025-12-14 15:22:18', type: '구매', target: '기프트샵', item: '초콜릿', amount: -300 },
-    { id: 3, date: '2025-12-13 20:15:33', type: '판매', target: '기프트샵', item: '하트 풍선', amount: 160 },
-    { id: 4, date: '2025-12-13 14:50:10', type: '선물', target: '유진님에게', item: '샴페인', amount: 500 },
-    { id: 5, date: '2025-12-12 11:25:44', type: '구매', target: '기프트샵', item: '장미', amount: -100 },
-  ];
+  const [activeTab, setActiveTab] = useState<"charge" | "withdraw" | "gift">(
+    "charge"
+  );
+
+  const chargeHistory = depositRequests;
+  const withdrawHistory = withdrawalRequests;
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "-";
+    return formatKST(dateString, "datetime") || "-";
+  };
+
+  const getDepositStatusText = (status: string | null | undefined) => {
+    switch (status) {
+      case "approved":
+        return "완료";
+      case "pending":
+        return "처리중";
+      case "rejected":
+        return "실패";
+      default:
+        return status || "-";
+    }
+  };
+
+  const getWithdrawalStatusText = (status: string | null | undefined) => {
+    switch (status) {
+      case "approved":
+        return "완료";
+      case "pending":
+        return "처리중";
+      case "rejected":
+        return "거부";
+      default:
+        return status || "-";
+    }
+  };
+
+  const [partyNameMap, setPartyNameMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const loadPartyNames = async () => {
+      if (!profile?.id || giftTransactions.length === 0) {
+        setPartyNameMap({});
+        return;
+      }
+
+      const userId = profile.id;
+      const profileIds = new Set<string>();
+      const userIds = new Set<string>();
+
+      for (const tx of giftTransactions as any[]) {
+        const txType = tx.transaction_type as string | null;
+        if (txType === "buy" || txType === "sell") {
+          continue;
+        }
+
+        const isSender = tx.sender_type === "user" && tx.sender_id === userId;
+        const isReceiver =
+          tx.receiver_type === "user" && tx.receiver_id === userId;
+
+        if (isSender) {
+          if (tx.receiver_type === "profile") profileIds.add(tx.receiver_id);
+          if (tx.receiver_type === "user") userIds.add(tx.receiver_id);
+        } else if (isReceiver) {
+          if (tx.sender_type === "profile") profileIds.add(tx.sender_id);
+          if (tx.sender_type === "user") userIds.add(tx.sender_id);
+        }
+      }
+
+      if (profileIds.size === 0 && userIds.size === 0) {
+        setPartyNameMap({});
+        return;
+      }
+
+      const nextMap: Record<string, string> = {};
+
+      if (profileIds.size > 0) {
+        const { data, error } = await supabase
+          .from("chat_profiles")
+          .select("id, name")
+          .in("id", Array.from(profileIds));
+
+        if (!error) {
+          (data || []).forEach((row) => {
+            nextMap[`profile:${row.id}`] = row.name || "프로필";
+          });
+        }
+      }
+
+      if (userIds.size > 0) {
+        const { data, error } = await supabase
+          .from("user_profiles")
+          .select("id, name, nickname")
+          .in("id", Array.from(userIds));
+
+        if (!error) {
+          (data || []).forEach((row) => {
+            nextMap[`user:${row.id}`] = row.nickname || row.name || "회원";
+          });
+        }
+      }
+
+      setPartyNameMap(nextMap);
+    };
+
+    void loadPartyNames();
+  }, [profile?.id, giftTransactions]);
+
+  const giftHistory = useMemo(() => {
+    if (!profile?.id) return [];
+
+    const userId = profile.id;
+
+    return (giftTransactions as any[]).map((tx) => {
+      const txType = (tx.transaction_type || "") as string;
+      const pointsAmount = Number(tx.points_amount || 0);
+      const giftName = tx.gifts?.name || "기프트";
+
+      if (txType === "buy") {
+        return {
+          id: tx.id,
+          created_at: tx.created_at,
+          type: "구매",
+          target: "기프트샵",
+          item: giftName,
+          amount: -pointsAmount,
+        };
+      }
+
+      if (txType === "sell") {
+        return {
+          id: tx.id,
+          created_at: tx.created_at,
+          type: "판매",
+          target: "기프트샵",
+          item: giftName,
+          amount: pointsAmount,
+        };
+      }
+
+      const isSender = tx.sender_type === "user" && tx.sender_id === userId;
+      const isReceiver =
+        tx.receiver_type === "user" && tx.receiver_id === userId;
+
+      const otherType = isSender ? tx.receiver_type : tx.sender_type;
+      const otherId = isSender ? tx.receiver_id : tx.sender_id;
+      const otherKey = `${otherType}:${otherId}`;
+
+      return {
+        id: tx.id,
+        created_at: tx.created_at,
+        type: "선물",
+        target: partyNameMap[otherKey] || "상대방",
+        item: giftName,
+        amount: isReceiver ? pointsAmount : -pointsAmount,
+      };
+    });
+  }, [giftTransactions, partyNameMap, profile?.id]);
+
+  const isLoading = depositsLoading || withdrawalsLoading || giftsLoading;
+
+  if (authLoading || isLoading || (user && !adminAccount && !profile)) {
+    return (
+      <div className="min-h-screen bg-black pt-24 pb-16 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-pink-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user || adminAccount || !profile) {
+    if (!user) return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-black pt-24 pb-16">
@@ -39,33 +217,33 @@ export function PaymentHistoryPage() {
         {/* Tabs */}
         <div className="flex gap-2 mb-8 border-b border-gray-800">
           <button
-            onClick={() => setActiveTab('charge')}
+            onClick={() => setActiveTab("charge")}
             className={`px-6 py-3 flex items-center gap-2 transition-colors ${
-              activeTab === 'charge'
-                ? 'text-pink-500 border-b-2 border-pink-500'
-                : 'text-gray-400 hover:text-white'
+              activeTab === "charge"
+                ? "text-pink-500 border-b-2 border-pink-500"
+                : "text-gray-400 hover:text-white"
             }`}
           >
             <CreditCard size={20} />
             <span>충전 내역</span>
           </button>
           <button
-            onClick={() => setActiveTab('withdraw')}
+            onClick={() => setActiveTab("withdraw")}
             className={`px-6 py-3 flex items-center gap-2 transition-colors ${
-              activeTab === 'withdraw'
-                ? 'text-pink-500 border-b-2 border-pink-500'
-                : 'text-gray-400 hover:text-white'
+              activeTab === "withdraw"
+                ? "text-pink-500 border-b-2 border-pink-500"
+                : "text-gray-400 hover:text-white"
             }`}
           >
             <Download size={20} />
             <span>출금 내역</span>
           </button>
           <button
-            onClick={() => setActiveTab('gift')}
+            onClick={() => setActiveTab("gift")}
             className={`px-6 py-3 flex items-center gap-2 transition-colors ${
-              activeTab === 'gift'
-                ? 'text-pink-500 border-b-2 border-pink-500'
-                : 'text-gray-400 hover:text-white'
+              activeTab === "gift"
+                ? "text-pink-500 border-b-2 border-pink-500"
+                : "text-gray-400 hover:text-white"
             }`}
           >
             <Gift size={20} />
@@ -75,102 +253,181 @@ export function PaymentHistoryPage() {
 
         {/* Content */}
         <div className="max-w-3xl mx-auto">
-          {activeTab === 'charge' ? (
+          {activeTab === "charge" ? (
             <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-800">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">날짜</th>
-                      <th className="px-3 py-2 text-right text-xs text-gray-400 uppercase">충전액</th>
-                      <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase w-20">상태</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800">
-                    {chargeHistory.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-3 py-2 text-xs text-gray-400">{item.date}</td>
-                        <td className="px-3 py-2 text-sm text-green-500 text-right">+{item.amount.toLocaleString()} P</td>
-                        <td className="px-3 py-2 text-sm text-center">
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            item.status === '완료' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </td>
+              {chargeHistory.length === 0 ? (
+                <div className="py-12 text-center text-gray-400">
+                  충전 내역이 없습니다.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-800">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">
+                          날짜
+                        </th>
+                        <th className="px-3 py-2 text-right text-xs text-gray-400 uppercase">
+                          충전액
+                        </th>
+                        <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase w-20">
+                          상태
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {chargeHistory.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-3 py-2 text-xs text-gray-400">
+                            {formatDate(item.created_at)}
+                          </td>
+                          <td className="px-3 py-2 text-sm text-green-500 text-right">
+                            +{item.amount.toLocaleString()}원
+                          </td>
+                          <td className="px-3 py-2 text-sm text-center">
+                            <span
+                              className={`px-2 py-1 rounded text-xs ${
+                                (item as any).status === "approved"
+                                  ? "bg-green-500/20 text-green-500"
+                                  : (item as any).status === "rejected"
+                                  ? "bg-red-500/20 text-red-500"
+                                  : "bg-yellow-500/20 text-yellow-500"
+                              }`}
+                            >
+                              {getDepositStatusText((item as any).status)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          ) : activeTab === 'withdraw' ? (
+          ) : activeTab === "withdraw" ? (
             <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-800">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">날짜</th>
-                      <th className="px-3 py-2 text-right text-xs text-gray-400 uppercase">금액</th>
-                      <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase w-20">상태</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800">
-                    {withdrawHistory.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-3 py-2 text-xs text-gray-400">{item.date}</td>
-                        <td className="px-3 py-2 text-sm text-white text-right">{item.amount.toLocaleString()}원</td>
-                        <td className="px-3 py-2 text-sm text-center">
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            item.status === '완료' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </td>
+              {withdrawHistory.length === 0 ? (
+                <div className="py-12 text-center text-gray-400">
+                  출금 내역이 없습니다.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-800">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">
+                          날짜
+                        </th>
+                        <th className="px-3 py-2 text-right text-xs text-gray-400 uppercase">
+                          금액
+                        </th>
+                        <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase w-20">
+                          상태
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {withdrawHistory.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-3 py-2 text-xs text-gray-400">
+                            {formatDate(item.created_at)}
+                          </td>
+                          <td className="px-3 py-2 text-sm text-red-500 text-right">
+                            -{item.amount.toLocaleString()}원
+                          </td>
+                          <td className="px-3 py-2 text-sm text-center">
+                            <span
+                              className={`px-2 py-1 rounded text-xs ${
+                                (item as any).status === "approved"
+                                  ? "bg-green-500/20 text-green-500"
+                                  : (item as any).status === "rejected"
+                                  ? "bg-red-500/20 text-red-500"
+                                  : "bg-yellow-500/20 text-yellow-500"
+                              }`}
+                            >
+                              {getWithdrawalStatusText((item as any).status)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-800">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">날짜</th>
-                      <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">구분</th>
-                      <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">상세</th>
-                      <th className="px-3 py-2 text-right text-xs text-gray-400 uppercase w-24">금액</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800">
-                    {giftHistory.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date}</td>
-                        <td className="px-3 py-2 text-sm">
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            item.type === '선물' ? 'bg-pink-500/20 text-pink-500' : 
-                            item.type === '구매' ? 'bg-blue-500/20 text-blue-500' : 
-                            'bg-green-500/20 text-green-500'
-                          }`}>
-                            {item.type}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-sm text-gray-300">
-                          {item.item} <span className="text-gray-500">({item.target})</span>
-                        </td>
-                        <td className="px-3 py-2 text-sm text-right">
-                          <span className={item.amount > 0 ? 'text-green-500' : 'text-red-500'}>
-                            {item.amount > 0 ? '+' : ''}{item.amount} P
-                          </span>
-                        </td>
+              {giftHistory.length === 0 ? (
+                <div className="py-12 text-center text-gray-400">
+                  기프트 내역이 없습니다.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-800">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">
+                          날짜
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">
+                          유형
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">
+                          대상
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs text-gray-400 uppercase">
+                          선물
+                        </th>
+                        <th className="px-3 py-2 text-right text-xs text-gray-400 uppercase w-24">
+                          포인트
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {giftHistory.map((item: any) => (
+                        <tr key={item.id}>
+                          <td className="px-3 py-2 text-xs text-gray-400">
+                            {formatDate(item.created_at)}
+                          </td>
+                          <td className="px-3 py-2 text-sm">
+                            <span
+                              className={`px-2 py-1 rounded text-xs ${
+                                item.type === "선물"
+                                  ? "bg-pink-500/20 text-pink-500"
+                                  : item.type === "구매"
+                                  ? "bg-blue-500/20 text-blue-500"
+                                  : "bg-green-500/20 text-green-500"
+                              }`}
+                            >
+                              {item.type}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-300">
+                            {item.target}
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-300">
+                            {item.item}
+                          </td>
+                          <td className="px-3 py-2 text-sm text-right">
+                            <span
+                              className={
+                                item.amount > 0
+                                  ? "text-green-500"
+                                  : item.amount < 0
+                                  ? "text-red-500"
+                                  : "text-gray-400"
+                              }
+                            >
+                              {item.amount > 0 ? "+" : ""}
+                              {item.amount.toLocaleString()} P
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -1,9 +1,14 @@
 import { AdminLayout } from "../components/AdminLayout";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import {
+  useAdminPaymentRequests,
+  useAdminPointPackages,
+} from "../hooks/useSupabase";
+import { useAuth } from "../contexts/AuthContext";
+import { useAlert } from "../contexts/AlertContext";
 import {
   Search,
   Filter,
-  Download,
   TrendingUp,
   TrendingDown,
   DollarSign,
@@ -16,9 +21,12 @@ import {
   Clock,
   AlertCircle,
 } from "lucide-react";
+import { ConfirmModal } from "../components/ConfirmModal";
+import { DateRangePicker } from "../components/DateRangePicker";
+import { formatKST } from "../../lib/dateUtils";
 
 interface WithdrawalRequest {
-  id: number;
+  id: string;
   user: string;
   nickname: string;
   email: string;
@@ -27,22 +35,26 @@ interface WithdrawalRequest {
   accountNumber: string;
   accountHolder: string;
   requestDate: string;
+  createdAt: string;
   status: "대기" | "승인" | "거절";
+  rejectReason?: string;
 }
 
 interface DepositRequest {
-  id: number;
+  id: string;
   user: string;
   nickname: string;
   email: string;
   amount: number;
   depositName: string;
   requestDate: string;
+  createdAt: string;
   status: "대기" | "승인" | "거절";
+  rejectReason?: string;
 }
 
 interface ChargeCard {
-  id: number;
+  id: string;
   amount: number;
   bonus: number;
   totalAmount: number;
@@ -51,252 +63,261 @@ interface ChargeCard {
 }
 
 export function AdminPointsPage() {
+  const { adminAccount } = useAuth();
+  const { showAlert } = useAlert();
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<
     "all" | "deposit" | "withdrawal"
   >("all");
-  const [activeTab, setActiveTab] = useState<
-    "requests" | "cards"
-  >("requests");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "pending" | "approved" | "rejected"
+  >("pending");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [activeTab, setActiveTab] = useState<"requests" | "cards">("requests");
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
-  const [editingCard, setEditingCard] =
-    useState<ChargeCard | null>(null);
+  const [editingCard, setEditingCard] = useState<ChargeCard | null>(null);
   const [cardFormData, setCardFormData] = useState({
     amount: 10000,
     bonus: 0,
     isActive: true,
   });
-  
+
+  const [deleteCardConfirm, setDeleteCardConfirm] = useState<null | {
+    id: string;
+    message: string;
+    onConfirm: () => Promise<void>;
+  }>(null);
+
+  const [selectedDepositIds, setSelectedDepositIds] = useState<string[]>([]);
+  const [selectedWithdrawalIds, setSelectedWithdrawalIds] = useState<string[]>(
+    [],
+  );
+  const [rejectReasonInput, setRejectReasonInput] = useState("");
+
   // 승인/거절 확인 팝업 상태
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     type: "deposit" | "withdrawal";
     action: "approve" | "reject";
-    request: DepositRequest | WithdrawalRequest;
+    ids: string[];
   } | null>(null);
 
-  const [withdrawalRequests, setWithdrawalRequests] = useState<
-    WithdrawalRequest[]
-  >([
-    {
-      id: 1,
-      user: "이서연",
-      nickname: "서연",
-      email: "seoyeon@example.com",
-      amount: 50000,
-      bankName: "국민은행",
-      accountNumber: "123-456-789012",
-      accountHolder: "이서연",
-      requestDate: "2025-12-15 11:15",
-      status: "대기",
-    },
-    {
-      id: 2,
-      user: "정하늘",
-      nickname: "하늘",
-      email: "haneul@example.com",
-      amount: 20000,
-      bankName: "신한은행",
-      accountNumber: "110-123-456789",
-      accountHolder: "정하늘",
-      requestDate: "2025-12-15 09:50",
-      status: "대기",
-    },
-    {
-      id: 3,
-      user: "윤서현",
-      nickname: "서현",
-      email: "seohyun@example.com",
-      amount: 30000,
-      bankName: "우리은행",
-      accountNumber: "1002-123-456789",
-      accountHolder: "윤서현",
-      requestDate: "2025-12-15 08:20",
-      status: "대기",
-    },
-    {
-      id: 4,
-      user: "박지훈",
-      nickname: "지훈",
-      email: "jihun@example.com",
-      amount: 100000,
-      bankName: "카카오뱅크",
-      accountNumber: "3333-01-1234567",
-      accountHolder: "박지훈",
-      requestDate: "2025-12-14 18:30",
-      status: "대기",
-    },
-  ]);
+  // Debouncing ref for preventing rapid clicks
+  const isProcessingRef = useRef(false);
 
-  const [depositRequests, setDepositRequests] = useState<
-    DepositRequest[]
-  >([
-    {
-      id: 1,
-      user: "김민수",
-      nickname: "민수",
-      email: "minsu@example.com",
-      amount: 10000,
-      depositName: "김민수",
-      requestDate: "2025-12-15 14:20",
-      status: "대기",
-    },
-    {
-      id: 2,
-      user: "최유진",
-      nickname: "유진",
-      email: "yujin@example.com",
-      amount: 50000,
-      depositName: "최유진",
-      requestDate: "2025-12-15 13:45",
-      status: "대기",
-    },
-    {
-      id: 3,
-      user: "강민지",
-      nickname: "민지",
-      email: "minji@example.com",
-      amount: 30000,
-      depositName: "강민지",
-      requestDate: "2025-12-15 12:10",
-      status: "대기",
-    },
-  ]);
+  // Supabase hooks
+  const {
+    deposits: dbDeposits,
+    withdrawals: dbWithdrawals,
+    approveDeposit,
+    rejectDeposit,
+    approveWithdrawal,
+    rejectWithdrawal,
+  } = useAdminPaymentRequests(adminAccount?.id);
+  const {
+    packages: dbPackages,
+    createPackage,
+    updatePackage,
+    deletePackage,
+  } = useAdminPointPackages(adminAccount?.id);
 
-  const [chargeCards, setChargeCards] = useState<ChargeCard[]>([
-    {
-      id: 5,
-      amount: 5000,
-      bonus: 0,
-      totalAmount: 5000,
-      isActive: true,
-      salesCount: 178,
-    },
-    {
-      id: 1,
-      amount: 10000,
-      bonus: 1000,
-      totalAmount: 11000,
-      isActive: true,
-      salesCount: 234,
-    },
-    {
-      id: 2,
-      amount: 30000,
-      bonus: 5000,
-      totalAmount: 35000,
-      isActive: true,
-      salesCount: 156,
-    },
-    {
-      id: 3,
-      amount: 50000,
-      bonus: 10000,
-      totalAmount: 60000,
-      isActive: true,
-      salesCount: 89,
-    },
-    {
-      id: 4,
-      amount: 100000,
-      bonus: 25000,
-      totalAmount: 125000,
-      isActive: true,
-      salesCount: 45,
-    },
-  ]);
+  // Transform Supabase data to UI format
+  const withdrawalRequests: WithdrawalRequest[] = dbWithdrawals.map(
+    (w: any) => ({
+      id: w.id,
+      user: w.users?.name || "Unknown",
+      nickname: w.users?.nickname || "",
+      email: w.users?.email || "",
+      amount: w.amount,
+      bankName: w.bank || "",
+      accountNumber: w.account_number || "",
+      accountHolder: w.account_holder || "",
+      requestDate: formatKST(w.created_at, "datetime"),
+      createdAt: w.created_at,
+      status:
+        w.status === "pending"
+          ? "대기"
+          : w.status === "approved"
+            ? "승인"
+            : "거절",
+      rejectReason: w.reject_reason || undefined,
+    }),
+  );
+
+  const depositRequests: DepositRequest[] = dbDeposits.map((d: any) => ({
+    id: d.id,
+    user: d.users?.name || "Unknown",
+    nickname: d.users?.nickname || "",
+    email: d.users?.email || "",
+    amount: d.amount,
+    depositName: d.depositor_name || d.users?.name || "",
+    requestDate: formatKST(d.created_at, "datetime"),
+    createdAt: d.created_at,
+    status:
+      d.status === "pending"
+        ? "대기"
+        : d.status === "approved"
+          ? "승인"
+          : "거절",
+    rejectReason: d.reject_reason || undefined,
+  }));
+
+  const salesCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    (dbDeposits || []).forEach((d: any) => {
+      if (d.status !== "approved") return;
+      const key = `${Number(d.amount || 0)}:${Number(d.bonus_amount || 0)}`;
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return map;
+  }, [dbDeposits]);
+
+  const chargeCards: ChargeCard[] = dbPackages.map((p: any) => ({
+    id: p.id,
+    amount: p.amount,
+    bonus: p.bonus_amount ?? 0,
+    totalAmount: p.total_amount ?? p.amount + (p.bonus_amount ?? 0),
+    isActive: p.is_active ?? false,
+    salesCount:
+      salesCountMap.get(
+        `${Number(p.amount || 0)}:${Number(p.bonus_amount || 0)}`,
+      ) || 0,
+  }));
 
   // 필터링된 입출금 신청
   const filteredRequests = () => {
+    const q = searchTerm.trim().toLowerCase();
+
+    const matchesQuery = (req: {
+      user: string;
+      nickname: string;
+      email: string;
+      id: string;
+    }) => {
+      if (!q) return true;
+      return (
+        req.user.toLowerCase().includes(q) ||
+        req.nickname.toLowerCase().includes(q) ||
+        req.email.toLowerCase().includes(q) ||
+        req.id.toLowerCase().includes(q)
+      );
+    };
+
+    const matchesStatus = (status: "대기" | "승인" | "거절") => {
+      if (statusFilter === "all") return true;
+      if (statusFilter === "pending") return status === "대기";
+      if (statusFilter === "approved") return status === "승인";
+      return status === "거절";
+    };
+
+    const matchesDate = (createdAt: string) => {
+      const t = new Date(createdAt).getTime();
+      if (Number.isNaN(t)) return true;
+      if (startDate) {
+        const s = new Date(`${startDate}T00:00:00`).getTime();
+        if (!Number.isNaN(s) && t < s) return false;
+      }
+      if (endDate) {
+        const e = new Date(`${endDate}T23:59:59`).getTime();
+        if (!Number.isNaN(e) && t > e) return false;
+      }
+      return true;
+    };
+
     const deposits = depositRequests.filter(
       (req) =>
-        req.status === "대기" &&
-        (req.user
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-          req.email
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())),
+        matchesStatus(req.status) &&
+        matchesDate(req.createdAt) &&
+        matchesQuery(req),
     );
 
     const withdrawals = withdrawalRequests.filter(
       (req) =>
-        req.status === "대기" &&
-        (req.user
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-          req.email
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())),
+        matchesStatus(req.status) &&
+        matchesDate(req.createdAt) &&
+        matchesQuery(req),
     );
 
-    if (typeFilter === "deposit")
-      return { deposits, withdrawals: [] };
-    if (typeFilter === "withdrawal")
-      return { deposits: [], withdrawals };
+    if (typeFilter === "deposit") return { deposits, withdrawals: [] };
+    if (typeFilter === "withdrawal") return { deposits: [], withdrawals };
     return { deposits, withdrawals };
   };
 
-  const handleApproveDeposit = (id: number) => {
-    const request = depositRequests.find((r) => r.id === id);
-    if (request) {
-      setConfirmAction({ type: "deposit", action: "approve", request });
-      setShowConfirmModal(true);
-    }
+  const handleApproveDeposit = (id: string) => {
+    setRejectReasonInput("");
+    setConfirmAction({ type: "deposit", action: "approve", ids: [id] });
+    setShowConfirmModal(true);
   };
 
-  const handleRejectDeposit = (id: number) => {
-    const request = depositRequests.find((r) => r.id === id);
-    if (request) {
-      setConfirmAction({ type: "deposit", action: "reject", request });
-      setShowConfirmModal(true);
-    }
+  const handleRejectDeposit = (id: string) => {
+    setRejectReasonInput("");
+    setConfirmAction({ type: "deposit", action: "reject", ids: [id] });
+    setShowConfirmModal(true);
   };
 
-  const handleApproveWithdrawal = (id: number) => {
-    const request = withdrawalRequests.find((r) => r.id === id);
-    if (request) {
-      setConfirmAction({ type: "withdrawal", action: "approve", request });
-      setShowConfirmModal(true);
-    }
+  const handleApproveWithdrawal = (id: string) => {
+    setRejectReasonInput("");
+    setConfirmAction({ type: "withdrawal", action: "approve", ids: [id] });
+    setShowConfirmModal(true);
   };
 
-  const handleRejectWithdrawal = (id: number) => {
-    const request = withdrawalRequests.find((r) => r.id === id);
-    if (request) {
-      setConfirmAction({ type: "withdrawal", action: "reject", request });
-      setShowConfirmModal(true);
-    }
+  const handleRejectWithdrawal = (id: string) => {
+    setRejectReasonInput("");
+    setConfirmAction({ type: "withdrawal", action: "reject", ids: [id] });
+    setShowConfirmModal(true);
   };
 
-  // 실제 승인/거절 처리
-  const handleConfirm = () => {
+  // 실제 승인/거절 처리 (with debouncing)
+  const handleConfirm = async () => {
     if (!confirmAction) return;
+    if (isProcessingRef.current) return;
 
-    const { type, action, request } = confirmAction;
+    const { type, action, ids } = confirmAction;
 
-    if (type === "deposit") {
-      setDepositRequests(
-        depositRequests.map((req) =>
-          req.id === request.id
-            ? { ...req, status: action === "approve" ? "승인" : "거절" }
-            : req
-        )
-      );
-      alert(`입금 신청이 ${action === "approve" ? "승인" : "거절"}되었습니다.`);
-    } else {
-      setWithdrawalRequests(
-        withdrawalRequests.map((req) =>
-          req.id === request.id
-            ? { ...req, status: action === "approve" ? "승인" : "거절" }
-            : req
-        )
-      );
-      alert(`출금 신청이 ${action === "approve" ? "승인" : "거절"}되었습니다.`);
+    // reject_reason is optional - no validation required
+
+    isProcessingRef.current = true;
+    try {
+      for (const id of ids) {
+        let result: any;
+        if (type === "deposit") {
+          result =
+            action === "approve"
+              ? await approveDeposit(id)
+              : await rejectDeposit(id, rejectReasonInput.trim());
+        } else {
+          result =
+            action === "approve"
+              ? await approveWithdrawal(id)
+              : await rejectWithdrawal(id, rejectReasonInput.trim());
+        }
+
+        if (result?.error) {
+          showAlert({
+            title: "오류",
+            message: "처리에 실패했습니다.",
+            type: "error",
+          });
+          return;
+        }
+      }
+
+      showAlert({
+        title: "처리 완료",
+        message: `${type === "deposit" ? "입금" : "출금"} 신청이 ${
+          action === "approve" ? "승인" : "거절"
+        }되었습니다.`,
+        type: "success",
+      });
+      setShowConfirmModal(false);
+      setConfirmAction(null);
+      setRejectReasonInput("");
+      setSelectedDepositIds([]);
+      setSelectedWithdrawalIds([]);
+    } finally {
+      isProcessingRef.current = false;
     }
-
-    setShowConfirmModal(false);
-    setConfirmAction(null);
   };
 
   // 엔터키로 승인/거절 확인
@@ -304,6 +325,8 @@ export function AdminPointsPage() {
     if (!showConfirmModal || !confirmAction) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (tag === "TEXTAREA" || tag === "INPUT") return;
       if (e.key === "Enter") {
         e.preventDefault();
         handleConfirm();
@@ -312,7 +335,7 @@ export function AdminPointsPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showConfirmModal, confirmAction]);
+  }, [showConfirmModal, confirmAction, rejectReasonInput]);
 
   const handleOpenCardModal = (card?: ChargeCard) => {
     if (card) {
@@ -338,49 +361,130 @@ export function AdminPointsPage() {
     setEditingCard(null);
   };
 
-  const handleCardSubmit = (e: React.FormEvent) => {
+  const handleCardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProcessingRef.current) return;
 
-    if (editingCard) {
-      setChargeCards(
-        chargeCards.map((card) =>
-          card.id === editingCard.id
-            ? {
-                ...card,
-                amount: cardFormData.amount,
-                bonus: cardFormData.bonus,
-                totalAmount:
-                  cardFormData.amount + cardFormData.bonus,
-                isActive: cardFormData.isActive,
-              }
-            : card,
-        ),
-      );
-    } else {
-      const newCard: ChargeCard = {
-        id: Math.max(...chargeCards.map((c) => c.id), 0) + 1,
-        amount: cardFormData.amount,
-        bonus: cardFormData.bonus,
-        totalAmount: cardFormData.amount + cardFormData.bonus,
-        isActive: cardFormData.isActive,
-        salesCount: 0,
-      };
-      setChargeCards(
-        [...chargeCards, newCard].sort(
-          (a, b) => a.amount - b.amount,
-        ),
-      );
+    isProcessingRef.current = true;
+    try {
+      if (editingCard) {
+        await updatePackage(editingCard.id, {
+          name: `${cardFormData.amount.toLocaleString()}원 패키지`,
+          amount: cardFormData.amount,
+          bonus_amount: cardFormData.bonus,
+          is_active: cardFormData.isActive,
+        });
+      } else {
+        await createPackage({
+          name: `${cardFormData.amount.toLocaleString()}원 패키지`,
+          amount: cardFormData.amount,
+          bonus_amount: cardFormData.bonus,
+          is_active: cardFormData.isActive,
+        });
+      }
+      handleCloseCardModal();
+    } finally {
+      isProcessingRef.current = false;
     }
-
-    handleCloseCardModal();
   };
 
-  const handleDeleteCard = (id: number) => {
-    if (confirm("정말 삭제하시겠습니까?")) {
-      setChargeCards(
-        chargeCards.filter((card) => card.id !== id),
-      );
+  const handleDeleteCard = async (id: string) => {
+    if (isProcessingRef.current) return;
+    const card = chargeCards.find((c) => c.id === id);
+    if (!card) return;
+
+    if (card.salesCount > 0) {
+      setDeleteCardConfirm({
+        id,
+        message:
+          "구매 내역이 있는 충전권은 삭제할 수 없습니다. 비활성화 하시겠습니까?",
+        onConfirm: async () => {
+          if (isProcessingRef.current) return;
+          isProcessingRef.current = true;
+          try {
+            await updatePackage(id, { is_active: false });
+          } finally {
+            isProcessingRef.current = false;
+          }
+        },
+      });
+      return;
     }
+
+    setDeleteCardConfirm({
+      id,
+      message: "정말 삭제하시겠습니까?",
+      onConfirm: async () => {
+        if (isProcessingRef.current) return;
+        isProcessingRef.current = true;
+        try {
+          await deletePackage(id);
+        } finally {
+          isProcessingRef.current = false;
+        }
+      },
+    });
+  };
+
+  const handleBulkApprove = (type: "deposit" | "withdrawal") => {
+    const ids = type === "deposit" ? selectedDepositIds : selectedWithdrawalIds;
+    if (ids.length === 0) {
+      showAlert({
+        title: "안내",
+        message: "선택된 항목이 없습니다.",
+        type: "info",
+      });
+      return;
+    }
+    setRejectReasonInput("");
+    setConfirmAction({ type, action: "approve", ids });
+    setShowConfirmModal(true);
+  };
+
+  const handleBulkReject = (type: "deposit" | "withdrawal") => {
+    const ids = type === "deposit" ? selectedDepositIds : selectedWithdrawalIds;
+    if (ids.length === 0) {
+      showAlert({
+        title: "안내",
+        message: "선택된 항목이 없습니다.",
+        type: "info",
+      });
+      return;
+    }
+    setRejectReasonInput("");
+    setConfirmAction({ type, action: "reject", ids });
+    setShowConfirmModal(true);
+  };
+
+  const downloadCsv = (rows: Record<string, unknown>[], filename: string) => {
+    const headers = Array.from(
+      rows.reduce((set, row) => {
+        Object.keys(row).forEach((k) => set.add(k));
+        return set;
+      }, new Set<string>()),
+    );
+
+    const escape = (v: unknown) => {
+      const s = String(v ?? "");
+      const escaped = s.replace(/"/g, '""');
+      return `"${escaped}"`;
+    };
+
+    const lines = [headers.join(",")].concat(
+      rows.map((r) => headers.map((h) => escape(r[h])).join(",")),
+    );
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const { deposits, withdrawals } = filteredRequests();
@@ -405,9 +509,7 @@ export function AdminPointsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-white text-3xl">
-                입출금 관리
-              </h1>
+              <h1 className="text-white text-3xl">입출금 관리</h1>
               <span className="text-gray-400 text-sm">
                 신규 입출금 신청 관리 및 충전권 설정
               </span>
@@ -472,9 +574,7 @@ export function AdminPointsPage() {
                     type="text"
                     placeholder="회원 이름, 닉네임, 이메일로 검색"
                     value={searchTerm}
-                    onChange={(e) =>
-                      setSearchTerm(e.target.value)
-                    }
+                    onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -483,39 +583,111 @@ export function AdminPointsPage() {
                   <Filter className="text-gray-400" size={20} />
                   <select
                     value={typeFilter}
-                    onChange={(e) =>
-                      setTypeFilter(e.target.value as any)
-                    }
+                    onChange={(e) => setTypeFilter(e.target.value as any)}
                     className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
                   >
                     <option value="all">전체</option>
                     <option value="deposit">입금 신청만</option>
-                    <option value="withdrawal">
-                      출금 신청만
-                    </option>
+                    <option value="withdrawal">출금 신청만</option>
                   </select>
                 </div>
+
+                <div className="flex items-center gap-2">
+                  <Filter className="text-gray-400" size={20} />
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="all">전체 상태</option>
+                    <option value="pending">대기</option>
+                    <option value="approved">승인</option>
+                    <option value="rejected">거절</option>
+                  </select>
+                </div>
+
+                <DateRangePicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onStartDateChange={setStartDate}
+                  onEndDateChange={setEndDate}
+                />
               </div>
             </div>
 
             {/* Deposit Requests */}
-            {(typeFilter === "all" ||
-              typeFilter === "deposit") &&
+            {(typeFilter === "all" || typeFilter === "deposit") &&
               deposits.length > 0 && (
                 <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
                   <div className="bg-gray-800 px-6 py-3 border-b border-gray-700">
-                    <h3 className="text-white flex items-center gap-2">
-                      <TrendingUp
-                        className="text-green-500"
-                        size={20}
-                      />
-                      입금 신청 ({deposits.length})
-                    </h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <h3 className="text-white flex items-center gap-2">
+                        <TrendingUp className="text-green-500" size={20} />
+                        입금 신청 ({deposits.length})
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() =>
+                            downloadCsv(
+                              deposits.map((r) => ({
+                                id: r.id,
+                                name: r.user,
+                                nickname: r.nickname,
+                                email: r.email,
+                                amount: r.amount,
+                                depositorName: r.depositName,
+                                status: r.status,
+                                rejectReason: r.rejectReason || "",
+                                createdAt: r.createdAt,
+                              })),
+                              `deposit_requests_${new Date()
+                                .toISOString()
+                                .slice(0, 10)}.csv`,
+                            )
+                          }
+                          className="px-3 py-2 rounded bg-gray-900 hover:bg-gray-700 text-gray-200 text-xs transition-colors"
+                        >
+                          CSV 다운로드
+                        </button>
+                        <button
+                          onClick={() => handleBulkApprove("deposit")}
+                          className="px-3 py-2 rounded bg-green-600/80 hover:bg-green-600 text-white text-xs transition-colors"
+                        >
+                          일괄 승인
+                        </button>
+                        <button
+                          onClick={() => handleBulkReject("deposit")}
+                          className="px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-xs transition-colors"
+                        >
+                          일괄 거절
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[800px]">
+                  <div className="w-full">
+                    <table className="w-full table-fixed">
                       <thead className="bg-gray-800">
                         <tr>
+                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                            <input
+                              type="checkbox"
+                              checked={
+                                deposits.length > 0 &&
+                                deposits.every((r) =>
+                                  selectedDepositIds.includes(r.id),
+                                )
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedDepositIds(
+                                    deposits.map((r) => r.id),
+                                  );
+                                } else {
+                                  setSelectedDepositIds([]);
+                                }
+                              }}
+                            />
+                          </th>
                           <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
                             회원 정보
                           </th>
@@ -529,8 +701,14 @@ export function AdminPointsPage() {
                             신청 일시
                           </th>
                           <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            작업
+                            상태
                           </th>
+                          {statusFilter === "all" ||
+                          statusFilter === "pending" ? (
+                            <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                              작업
+                            </th>
+                          ) : null}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-800">
@@ -539,6 +717,27 @@ export function AdminPointsPage() {
                             key={request.id}
                             className="hover:bg-gray-800/50 transition-colors"
                           >
+                            <td className="px-2 py-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedDepositIds.includes(
+                                  request.id,
+                                )}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedDepositIds((prev) =>
+                                      prev.includes(request.id)
+                                        ? prev
+                                        : [...prev, request.id],
+                                    );
+                                  } else {
+                                    setSelectedDepositIds((prev) =>
+                                      prev.filter((id) => id !== request.id),
+                                    );
+                                  }
+                                }}
+                              />
+                            </td>
                             <td className="px-2 py-3 text-center">
                               <div>
                                 <p className="text-white text-sm">
@@ -563,32 +762,57 @@ export function AdminPointsPage() {
                                 {request.requestDate}
                               </div>
                             </td>
-                            <td className="px-2 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() =>
-                                    handleApproveDeposit(
-                                      request.id,
-                                    )
-                                  }
-                                  className="px-2 py-1 bg-green-600/80 hover:bg-green-600 text-white rounded transition-colors flex items-center gap-1 text-xs"
+                            <td className="px-2 py-3 text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span
+                                  className={`px-2 py-1 rounded text-xs font-semibold ${
+                                    request.status === "대기"
+                                      ? "bg-yellow-500/20 text-yellow-300"
+                                      : request.status === "승인"
+                                        ? "bg-green-500/20 text-green-300"
+                                        : "bg-red-500/20 text-red-300"
+                                  }`}
                                 >
-                                  <CheckCircle size={12} />
-                                  승인
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleRejectDeposit(
-                                      request.id,
-                                    )
-                                  }
-                                  className="px-2 py-1 bg-red-600/80 hover:bg-red-600 text-white rounded transition-colors flex items-center gap-1 text-xs"
-                                >
-                                  <XCircle size={12} />
-                                  거절
-                                </button>
+                                  {request.status}
+                                </span>
+                                {request.status === "거절" &&
+                                  request.rejectReason && (
+                                    <span
+                                      className="text-[10px] text-red-400 max-w-[120px] truncate"
+                                      title={request.rejectReason}
+                                    >
+                                      사유: {request.rejectReason}
+                                    </span>
+                                  )}
                               </div>
                             </td>
+                            {request.status === "대기" ? (
+                              <td className="px-2 py-3">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() =>
+                                      handleApproveDeposit(request.id)
+                                    }
+                                    className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-green-600/80 hover:bg-green-600 text-white"
+                                  >
+                                    <CheckCircle size={12} />
+                                    승인
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      handleRejectDeposit(request.id)
+                                    }
+                                    className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
+                                  >
+                                    <XCircle size={12} />
+                                    거절
+                                  </button>
+                                </div>
+                              </td>
+                            ) : statusFilter === "all" ||
+                              statusFilter === "pending" ? (
+                              <td className="px-2 py-3"></td>
+                            ) : null}
                           </tr>
                         ))}
                       </tbody>
@@ -598,23 +822,80 @@ export function AdminPointsPage() {
               )}
 
             {/* Withdrawal Requests */}
-            {(typeFilter === "all" ||
-              typeFilter === "withdrawal") &&
+            {(typeFilter === "all" || typeFilter === "withdrawal") &&
               withdrawals.length > 0 && (
                 <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
                   <div className="bg-gray-800 px-6 py-3 border-b border-gray-700">
-                    <h3 className="text-white flex items-center gap-2">
-                      <TrendingDown
-                        className="text-red-500"
-                        size={20}
-                      />
-                      출금 신청 ({withdrawals.length})
-                    </h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <h3 className="text-white flex items-center gap-2">
+                        <TrendingDown className="text-red-500" size={20} />
+                        출금 신청 ({withdrawals.length})
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() =>
+                            downloadCsv(
+                              withdrawals.map((r) => ({
+                                id: r.id,
+                                name: r.user,
+                                nickname: r.nickname,
+                                email: r.email,
+                                amount: r.amount,
+                                bank: r.bankName,
+                                accountNumber: r.accountNumber,
+                                accountHolder: r.accountHolder,
+                                status: r.status,
+                                rejectReason: r.rejectReason || "",
+                                createdAt: r.createdAt,
+                              })),
+                              `withdrawal_requests_${new Date()
+                                .toISOString()
+                                .slice(0, 10)}.csv`,
+                            )
+                          }
+                          className="px-3 py-2 rounded bg-gray-900 hover:bg-gray-700 text-gray-200 text-xs transition-colors"
+                        >
+                          CSV 다운로드
+                        </button>
+                        <button
+                          onClick={() => handleBulkApprove("withdrawal")}
+                          className="px-3 py-2 rounded bg-green-600/80 hover:bg-green-600 text-white text-xs transition-colors"
+                        >
+                          일괄 승인
+                        </button>
+                        <button
+                          onClick={() => handleBulkReject("withdrawal")}
+                          className="px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-xs transition-colors"
+                        >
+                          일괄 거절
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[800px]">
+                  <div className="w-full">
+                    <table className="w-full table-fixed">
                       <thead className="bg-gray-800">
                         <tr>
+                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                            <input
+                              type="checkbox"
+                              checked={
+                                withdrawals.length > 0 &&
+                                withdrawals.every((r) =>
+                                  selectedWithdrawalIds.includes(r.id),
+                                )
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedWithdrawalIds(
+                                    withdrawals.map((r) => r.id),
+                                  );
+                                } else {
+                                  setSelectedWithdrawalIds([]);
+                                }
+                              }}
+                            />
+                          </th>
                           <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
                             회원 정보
                           </th>
@@ -628,8 +909,14 @@ export function AdminPointsPage() {
                             신청 일시
                           </th>
                           <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            작업
+                            상태
                           </th>
+                          {statusFilter === "all" ||
+                          statusFilter === "pending" ? (
+                            <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                              작업
+                            </th>
+                          ) : null}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-800">
@@ -638,6 +925,27 @@ export function AdminPointsPage() {
                             key={request.id}
                             className="hover:bg-gray-800/50 transition-colors"
                           >
+                            <td className="px-2 py-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedWithdrawalIds.includes(
+                                  request.id,
+                                )}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedWithdrawalIds((prev) =>
+                                      prev.includes(request.id)
+                                        ? prev
+                                        : [...prev, request.id],
+                                    );
+                                  } else {
+                                    setSelectedWithdrawalIds((prev) =>
+                                      prev.filter((id) => id !== request.id),
+                                    );
+                                  }
+                                }}
+                              />
+                            </td>
                             <td className="px-2 py-3 text-center">
                               <div>
                                 <p className="text-white text-sm">
@@ -670,32 +978,57 @@ export function AdminPointsPage() {
                                 {request.requestDate}
                               </div>
                             </td>
-                            <td className="px-2 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() =>
-                                    handleApproveWithdrawal(
-                                      request.id,
-                                    )
-                                  }
-                                  className="px-2 py-1 bg-green-600/80 hover:bg-green-600 text-white rounded transition-colors flex items-center gap-1 text-xs"
+                            <td className="px-2 py-3 text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span
+                                  className={`px-2 py-1 rounded text-xs font-semibold ${
+                                    request.status === "대기"
+                                      ? "bg-yellow-500/20 text-yellow-300"
+                                      : request.status === "승인"
+                                        ? "bg-green-500/20 text-green-300"
+                                        : "bg-red-500/20 text-red-300"
+                                  }`}
                                 >
-                                  <CheckCircle size={12} />
-                                  승인
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleRejectWithdrawal(
-                                      request.id,
-                                    )
-                                  }
-                                  className="px-2 py-1 bg-red-600/80 hover:bg-red-600 text-white rounded transition-colors flex items-center gap-1 text-xs"
-                                >
-                                  <XCircle size={12} />
-                                  거절
-                                </button>
+                                  {request.status}
+                                </span>
+                                {request.status === "거절" &&
+                                  request.rejectReason && (
+                                    <span
+                                      className="text-[10px] text-red-400 max-w-[120px] truncate"
+                                      title={request.rejectReason}
+                                    >
+                                      사유: {request.rejectReason}
+                                    </span>
+                                  )}
                               </div>
                             </td>
+                            {request.status === "대기" ? (
+                              <td className="px-2 py-3">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() =>
+                                      handleApproveWithdrawal(request.id)
+                                    }
+                                    className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-green-600/80 hover:bg-green-600 text-white"
+                                  >
+                                    <CheckCircle size={12} />
+                                    승인
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      handleRejectWithdrawal(request.id)
+                                    }
+                                    className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
+                                  >
+                                    <XCircle size={12} />
+                                    거절
+                                  </button>
+                                </div>
+                              </td>
+                            ) : statusFilter === "all" ||
+                              statusFilter === "pending" ? (
+                              <td className="px-2 py-3"></td>
+                            ) : null}
                           </tr>
                         ))}
                       </tbody>
@@ -705,21 +1038,17 @@ export function AdminPointsPage() {
               )}
 
             {/* Empty State */}
-            {deposits.length === 0 &&
-              withdrawals.length === 0 && (
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-12 text-center">
-                  <AlertCircle
-                    className="mx-auto text-gray-600 mb-4"
-                    size={48}
-                  />
-                  <p className="text-gray-400 text-lg">
-                    대기 중인 입출금 신청이 없습니다
-                  </p>
-                  <p className="text-gray-600 text-sm mt-2">
-                    새로운 신청이 들어오면 여기에 표시됩니다
-                  </p>
-                </div>
-              )}
+            {deposits.length === 0 && withdrawals.length === 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-12 text-center">
+                <AlertCircle className="mx-auto text-gray-600 mb-4" size={48} />
+                <p className="text-gray-400 text-lg">
+                  대기 중인 입출금 신청이 없습니다
+                </p>
+                <p className="text-gray-600 text-sm mt-2">
+                  새로운 신청이 들어오면 여기에 표시됩니다
+                </p>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -762,18 +1091,14 @@ export function AdminPointsPage() {
                         {card.isActive ? "활성" : "비활성"}
                       </span>
                       <button
-                        onClick={() =>
-                          handleOpenCardModal(card)
-                        }
+                        onClick={() => handleOpenCardModal(card)}
                         className="p-1.5 hover:bg-gray-800 text-gray-400 hover:text-white rounded transition-colors"
                         title="수정"
                       >
                         <Edit size={14} />
                       </button>
                       <button
-                        onClick={() =>
-                          handleDeleteCard(card.id)
-                        }
+                        onClick={() => handleDeleteCard(card.id)}
                         className="p-1.5 hover:bg-red-500/20 text-gray-400 hover:text-red-500 rounded transition-colors"
                         title="삭제"
                       >
@@ -783,27 +1108,21 @@ export function AdminPointsPage() {
                   </div>
                   <div className="space-y-2">
                     <div>
-                      <p className="text-gray-400 text-sm">
-                        기본 금액
-                      </p>
+                      <p className="text-gray-400 text-sm">기본 금액</p>
                       <p className="text-white text-2xl">
                         {card.amount.toLocaleString()}원
                       </p>
                     </div>
                     {card.bonus > 0 && (
                       <div>
-                        <p className="text-gray-400 text-sm">
-                          보너스
-                        </p>
+                        <p className="text-gray-400 text-sm">보너스</p>
                         <p className="text-green-500 text-xl">
                           +{card.bonus.toLocaleString()}원
                         </p>
                       </div>
                     )}
                     <div className="pt-2 border-t border-gray-800">
-                      <p className="text-gray-400 text-sm">
-                        총 지급 포인트
-                      </p>
+                      <p className="text-gray-400 text-sm">총 지급 포인트</p>
                       <p className="text-indigo-400 text-2xl">
                         {card.totalAmount.toLocaleString()}P
                       </p>
@@ -815,26 +1134,18 @@ export function AdminPointsPage() {
 
             {/* Info Box */}
             <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500 rounded-lg p-6">
-              <h3 className="text-white text-lg mb-3">
-                💡 충전권 설정 가이드
-              </h3>
+              <h3 className="text-white text-lg mb-3">💡 충전권 설정 가이드</h3>
               <div className="space-y-2 text-gray-300 text-sm">
                 <p>
-                  • <strong>기본 금액</strong>: 사용자가 실제로
-                  결제하는 금액
+                  • <strong>기본 금액</strong>: 사용자가 실제로 결제하는 금액
                 </p>
                 <p>
-                  • <strong>보너스</strong>: 충전 시 추가로
-                  지급되는 포인트
+                  • <strong>보너스</strong>: 충전 시 추가로 지급되는 포인트
                 </p>
                 <p>
-                  • <strong>총 지급 포인트</strong>: 기본 금액 +
-                  보너스
+                  • <strong>총 지급 포인트</strong>: 기본 금액 + 보너스
                 </p>
-                <p>
-                  • 비활성 상태의 충전권은 사용자에게 표시되지
-                  않습니다
-                </p>
+                <p>• 비활성 상태의 충전권은 사용자에게 표시되지 않습니다</p>
               </div>
             </div>
           </>
@@ -856,10 +1167,7 @@ export function AdminPointsPage() {
                 <X size={24} />
               </button>
             </div>
-            <form
-              onSubmit={handleCardSubmit}
-              className="p-6 space-y-4"
-            >
+            <form onSubmit={handleCardSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-gray-400 mb-2">
                   기본 금액 (원)
@@ -900,14 +1208,9 @@ export function AdminPointsPage() {
                 />
               </div>
               <div className="bg-gray-800 rounded-lg p-4">
-                <p className="text-gray-400 text-sm mb-1">
-                  총 지급 포인트
-                </p>
+                <p className="text-gray-400 text-sm mb-1">총 지급 포인트</p>
                 <p className="text-indigo-400 text-2xl">
-                  {(
-                    cardFormData.amount + cardFormData.bonus
-                  ).toLocaleString()}
-                  P
+                  {(cardFormData.amount + cardFormData.bonus).toLocaleString()}P
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -923,10 +1226,7 @@ export function AdminPointsPage() {
                   }
                   className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500 focus:ring-indigo-500"
                 />
-                <label
-                  htmlFor="isActive"
-                  className="text-gray-300"
-                >
+                <label htmlFor="isActive" className="text-gray-300">
                   활성 상태
                 </label>
               </div>
@@ -956,12 +1256,14 @@ export function AdminPointsPage() {
           <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-md">
             <div className="sticky top-0 bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between">
               <h2 className="text-white text-xl">
-                {confirmAction.action === "approve"
-                  ? "승인 확인"
-                  : "거절 확인"}
+                {confirmAction.action === "approve" ? "승인 확인" : "거절 확인"}
               </h2>
               <button
-                onClick={() => setShowConfirmModal(false)}
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setConfirmAction(null);
+                  setRejectReasonInput("");
+                }}
                 className="text-gray-400 hover:text-white transition-colors"
               >
                 <X size={24} />
@@ -969,46 +1271,47 @@ export function AdminPointsPage() {
             </div>
             <div className="p-6 space-y-4">
               <p className="text-gray-400 text-sm mb-2">
-                {confirmAction.type === "deposit"
-                  ? "입금 신청"
-                  : "출금 신청"}
-                을(를) {confirmAction.action === "approve" ? "승인" : "거절"}하시겠습니까?
+                {confirmAction.type === "deposit" ? "입금 신청" : "출금 신청"}
+                을(를) {confirmAction.action === "approve" ? "승인" : "거절"}
+                하시겠습니까?
               </p>
+
               <div className="bg-gray-800 rounded-lg p-4">
-                <p className="text-gray-400 text-sm mb-1">
-                  {confirmAction.type === "deposit"
-                    ? "입금자명"
-                    : "출금자명"}
-                </p>
+                <p className="text-gray-400 text-sm mb-1">처리 건수</p>
                 <p className="text-white text-2xl">
-                  {confirmAction.request.depositName ||
-                    confirmAction.request.user}
+                  {confirmAction.ids.length}건
                 </p>
               </div>
-              <div className="bg-gray-800 rounded-lg p-4">
-                <p className="text-gray-400 text-sm mb-1">
-                  {confirmAction.type === "deposit"
-                    ? "입금 금액"
-                    : "출금 금액"}
-                </p>
-                <p className="text-indigo-400 text-2xl">
-                  {confirmAction.request.amount.toLocaleString()}
-                  원
-                </p>
-              </div>
+
+              {confirmAction.action === "reject" && (
+                <div>
+                  <label className="block text-gray-400 text-sm mb-2">
+                    거절 사유
+                  </label>
+                  <textarea
+                    value={rejectReasonInput}
+                    onChange={(e) => setRejectReasonInput(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    rows={4}
+                    placeholder="거절 사유를 입력하세요"
+                  />
+                </div>
+              )}
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={handleConfirm}
                   className="flex-1 bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors shadow-lg shadow-indigo-500/20"
                 >
-                  {confirmAction.action === "approve"
-                    ? "승인"
-                    : "거절"}
+                  {confirmAction.action === "approve" ? "승인" : "거절"}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowConfirmModal(false)}
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setConfirmAction(null);
+                    setRejectReasonInput("");
+                  }}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
                 >
                   취소
@@ -1018,6 +1321,19 @@ export function AdminPointsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteCardConfirm}
+        title="충전권 삭제"
+        message={deleteCardConfirm?.message || ""}
+        onConfirm={() => {
+          const payload = deleteCardConfirm;
+          setDeleteCardConfirm(null);
+          if (!payload) return;
+          void payload.onConfirm();
+        }}
+        onCancel={() => setDeleteCardConfirm(null)}
+      />
     </AdminLayout>
   );
 }

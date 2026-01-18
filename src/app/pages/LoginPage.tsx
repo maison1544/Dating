@@ -1,27 +1,56 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useState } from "react";
 import Logo from "../../imports/Logo";
+import { useAuth } from "../contexts/AuthContext";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { signIn } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const showTestAccountInfo = (() => {
+    try {
+      const url = new URL(import.meta.env.VITE_SUPABASE_URL);
+      return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    } catch {
+      return false;
+    }
+  })();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    
-    // 테스트 계정: test@secretday.com / test1234
-    if (email === "test@secretday.com" && password === "test1234") {
-      localStorage.setItem("isLoggedIn", "true");
-      localStorage.setItem("userEmail", email);
-      navigate("/");
-      window.location.reload(); // 헤더 상태 업데이트를 위해 새로고침
-    } else {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError("올바른 이메일 형식을 입력해주세요.");
+      return;
+    }
+    if (!trimmedPassword) {
+      setError("비밀번호를 입력해주세요.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const { error } = await signIn(trimmedEmail, trimmedPassword);
+      if (error) {
+        setError(error.message);
+      } else {
+        navigate("/");
+      }
+    } catch (err) {
+      setError("로그인 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -35,26 +64,24 @@ export function LoginPage() {
               <Logo />
             </div>
           </Link>
-          <p className="text-gray-400">
-            특별한 만남을 시작하세요
-          </p>
+          <p className="text-gray-400">특별한 만남을 시작하세요</p>
         </div>
 
         {/* Login Form */}
         <div className="bg-gray-900 rounded-lg border border-gray-800 p-8">
-          <h2 className="text-white text-2xl mb-6 text-center">
-            로그인
-          </h2>
+          <h2 className="text-white text-2xl mb-6 text-center">로그인</h2>
 
           {/* Test Account Info */}
-          <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
-            <p className="text-indigo-400 text-xs text-center mb-1">
-              테스트 계정
-            </p>
-            <p className="text-white text-xs text-center">
-              test@secretday.com / test1234
-            </p>
-          </div>
+          {showTestAccountInfo && (
+            <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
+              <p className="text-indigo-400 text-xs text-center mb-1">
+                테스트 계정
+              </p>
+              <p className="text-white text-xs text-center">
+                test@secretday.com / test1234
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -65,9 +92,7 @@ export function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
             <div>
-              <label className="text-gray-400 text-sm mb-2 block">
-                이메일
-              </label>
+              <label className="text-gray-400 text-sm mb-2 block">이메일</label>
               <div className="relative">
                 <Mail
                   size={20}
@@ -107,11 +132,7 @@ export function LoginPage() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
                 >
-                  {showPassword ? (
-                    <EyeOff size={20} />
-                  ) : (
-                    <Eye size={20} />
-                  )}
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
@@ -119,9 +140,11 @@ export function LoginPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full bg-pink-500 text-white py-3 rounded-lg hover:bg-pink-600 transition-colors"
+              disabled={isLoading}
+              className="w-full bg-pink-500 text-white py-3 rounded-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              로그인
+              {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+              {isLoading ? "로그인 중..." : "로그인"}
             </button>
 
             {/* Signup Button */}

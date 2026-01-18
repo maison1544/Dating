@@ -1,15 +1,10 @@
-import {
-  Link,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
   Coins,
   Bell,
   MessageSquare,
-  AlertTriangle,
   Gift,
   LogOut,
   Menu,
@@ -21,43 +16,76 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Logo from "../../imports/Logo";
+import { useAuth } from "../contexts/AuthContext";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
 export function AdminLayout({ children }: AdminLayoutProps) {
-  const location = useLocation();
+  const routerLocation = useLocation();
   const navigate = useNavigate();
+  const { user, adminAccount, isAgent, signOut, isLoading } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
-    () => {
-      const saved = localStorage.getItem(
-        "adminSidebarCollapsed",
-      );
-      return saved === "true";
-    },
-  );
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem("adminSidebarCollapsed");
+    return saved === "true";
+  });
 
-  // Check if logged in as agent
-  const isAgent = localStorage.getItem("isAgent") === "true";
+  const isDevBypass =
+    import.meta.env.DEV &&
+    new URLSearchParams(routerLocation.search).get("dev") === "1";
+
+  useEffect(() => {
+    if (isDevBypass) return;
+    if (isLoading) return;
+    if (!user) {
+      navigate(
+        routerLocation.pathname.startsWith("/agent")
+          ? "/agent/login"
+          : "/admin/login"
+      );
+      return;
+    }
+    if (!adminAccount) {
+      navigate("/");
+      return;
+    }
+
+    const isAdminPath = routerLocation.pathname.startsWith("/admin");
+    const isAgentPath = routerLocation.pathname.startsWith("/agent");
+    if (isAgent && isAdminPath) {
+      navigate("/agent");
+      return;
+    }
+    if (!isAgent && isAgentPath) {
+      navigate("/admin");
+    }
+  }, [
+    isDevBypass,
+    isLoading,
+    user,
+    adminAccount,
+    isAgent,
+    navigate,
+    routerLocation.pathname,
+  ]);
 
   useEffect(() => {
     localStorage.setItem(
       "adminSidebarCollapsed",
-      isSidebarCollapsed.toString(),
+      isSidebarCollapsed.toString()
     );
   }, [isSidebarCollapsed]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAdmin");
-    localStorage.removeItem("isAgent");
-    navigate("/admin/login");
+  const handleLogout = async () => {
+    await signOut();
+    navigate(isAgent ? "/agent/login" : "/admin/login");
   };
 
   const menuItems = [
     {
-      path: "/admin/dashboard",
+      path: "/admin",
       icon: LayoutDashboard,
       label: "통계",
     },
@@ -88,7 +116,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   const agentMenuItems = [
     {
-      path: "/agent/dashboard",
+      path: "/agent",
       icon: LayoutDashboard,
       label: "에이전트 대시보드",
     },
@@ -121,16 +149,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="lg:hidden text-gray-200 hover:text-indigo-400 transition-colors"
             >
-              {isSidebarOpen ? (
-                <X size={24} />
-              ) : (
-                <Menu size={24} />
-              )}
+              {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <Link
-              to={isAgent ? "/agent/dashboard" : "/admin/dashboard"}
-              className="h-12 w-[180px]"
-            >
+            <Link to={isAgent ? "/agent" : "/admin"} className="h-12 w-[180px]">
               <Logo />
             </Link>
           </div>
@@ -161,15 +182,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <nav className="p-4 space-y-2 relative">
             {/* Desktop Toggle Button */}
             <button
-              onClick={() =>
-                setIsSidebarCollapsed(!isSidebarCollapsed)
-              }
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               className="hidden lg:flex absolute -right-3 top-4 bg-gray-800/80 border border-gray-600/30 text-gray-400 hover:text-indigo-400 hover:bg-gray-700/80 hover:border-indigo-400/50 rounded-full p-1.5 transition-all duration-200 z-50 shadow-lg hover:shadow-indigo-500/10"
-              title={
-                isSidebarCollapsed
-                  ? "사이드바 펼치기"
-                  : "사이드바 숨기기"
-              }
+              title={isSidebarCollapsed ? "사이드바 펼치기" : "사이드바 숨기기"}
             >
               {isSidebarCollapsed ? (
                 <ChevronRight size={18} />
@@ -180,7 +195,13 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
             {currentMenuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              const isRootDashboard =
+                item.path === "/admin" || item.path === "/agent";
+              const isActive = isRootDashboard
+                ? routerLocation.pathname === item.path ||
+                  routerLocation.pathname === `${item.path}/dashboard`
+                : routerLocation.pathname === item.path ||
+                  routerLocation.pathname.startsWith(item.path + "/");
               return (
                 <Link
                   key={item.path}
@@ -193,12 +214,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   }`}
                   title={isSidebarCollapsed ? item.label : ""}
                 >
-                  <Icon
-                    size={22}
-                    className={isActive ? "" : ""}
-                  />
+                  <Icon size={22} className={isActive ? "" : ""} />
                   <span
-                    className={`${isSidebarCollapsed ? "lg:hidden" : ""} whitespace-nowrap`}
+                    className={`${
+                      isSidebarCollapsed ? "lg:hidden" : ""
+                    } whitespace-nowrap`}
                   >
                     {item.label}
                   </span>
@@ -231,9 +251,13 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* Main Content */}
         <main
-          className={`flex-1 overflow-auto transition-all duration-300`}
+          className={`flex-1 overflow-y-auto overflow-x-hidden transition-all duration-300`}
         >
-          <div className={`mx-auto p-4 lg:p-6 ${isAgent ? 'max-w-7xl' : 'max-w-4xl'}`}>
+          <div
+            className={`mx-auto p-4 lg:p-6 ${
+              isAgent ? "max-w-7xl" : "max-w-4xl"
+            }`}
+          >
             {children}
           </div>
         </main>

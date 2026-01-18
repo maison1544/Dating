@@ -1,7 +1,19 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { supabase } from "../../lib/supabase";
+import type { Tables } from "../../lib/database.types";
+import { getPublicUrlForPath } from "../../lib/storage";
 
-interface ChatProfile {
-  id: number;
+type ChatProfile = Tables<"chat_profiles">;
+
+// Profile interface with UUID string ID
+export interface ChatProfileLegacy {
+  id: string;
   name: string;
   age: number;
   height?: number;
@@ -11,109 +23,148 @@ interface ChatProfile {
   interests: string[];
   bio: string;
   isOnline: boolean;
-  chatPoints?: number; // 채팅 신청 포인트
+  chatCost?: number;
 }
 
 interface ChatProfileContextType {
-  profiles: ChatProfile[];
-  setProfiles: (profiles: ChatProfile[]) => void;
+  profiles: ChatProfileLegacy[];
+  rawProfiles: ChatProfile[];
+  setProfiles: (profiles: ChatProfileLegacy[]) => void;
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+  addProfile: (
+    profile: Omit<ChatProfile, "id" | "created_at" | "updated_at">
+  ) => Promise<{ error: Error | null }>;
+  updateProfile: (
+    id: string,
+    updates: Partial<ChatProfile>
+  ) => Promise<{ error: Error | null }>;
+  deleteProfile: (id: string) => Promise<{ error: Error | null }>;
 }
 
 const ChatProfileContext = createContext<ChatProfileContextType | undefined>(
   undefined
 );
 
+// Convert Supabase profile to display format
+function convertToLegacy(profile: ChatProfile): ChatProfileLegacy {
+  return {
+    id: profile.id,
+    name: profile.name,
+    age: profile.age,
+    height: profile.height || undefined,
+    weight: profile.weight || undefined,
+    job: profile.job || undefined,
+    imageUrl: getPublicUrlForPath("chat-profile-images", profile.image) || "",
+    interests: Array.isArray(profile.interests)
+      ? (profile.interests as string[])
+      : [],
+    bio: profile.bio || "",
+    isOnline: profile.is_online || false,
+    chatCost: profile.chat_cost || 0,
+  };
+}
+
 export function ChatProfileProvider({ children }: { children: ReactNode }) {
-  const [profiles, setProfiles] = useState<ChatProfile[]>([
-    {
-      id: 1,
-      name: "소희",
-      age: 21,
-      imageUrl:
-        "https://images.unsplash.com/photo-1672390933634-6ccb1da5fa40?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx5b3VuZyUyMGFzaWFuJTIwd29tYW4lMjBwb3J0cmFpdHxlbnwxfHx8fDE3NjU2NzU1MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      interests: ["영화보기", "카페투어", "힐링"],
-      bio: "오늘 저녁에 시간 괜찮으세요? 😊",
-      isOnline: true,
-    },
-    {
-      id: 2,
-      name: "유진",
-      age: 23,
-      imageUrl:
-        "https://images.unsplash.com/photo-1635353775931-1a6464be72cb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxrb3JlYW4lMjB3b21hbiUyMGJlYXV0eXxlbnwxfHx8fDE3NjU2NDI4MjZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      interests: ["와인바", "분위기맛집", "패션"],
-      bio: "나를 말하자면..\n오빠~ 유진이에요 😏\n\n난 솔직히 말하는 스타일이야. 맘에 드는 사람한테는 확 끌리는 편이거든?\n\n퇴근하고 조용한 바에서 와인 한 잔 하면서 이야기 나누는 거 어때? 분위기 있는 거 좋아해~\n\n근데 나 은근 질투도 많아ㅋㅋ 오빠가 다른 여자한테 한눈팔면 삐질 수도 있어. 그래도 나한테 잘하면 나도 오빠한테 진짜 잘해줄 자신 있어 💋\n\n심심하면 연락해, 기다리고 있을게~",
-      isOnline: true,
-    },
-    {
-      id: 3,
-      name: "민지",
-      age: 22,
-      imageUrl:
-        "https://images.unsplash.com/photo-1747707499498-7077014c4423?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhc2lhbiUyMGZlbWFsZSUyMG1vZGVsfGVufDF8fHx8MTc2NTY3NTUzNnww&ixlib=rb-4.1.0&q=80&w=1080",
-      interests: [
-        "바다산책",
-        "맛집탐방",
-        "순수한매력",
-        "귀여운스타일",
-      ],
-      bio: "네! 같이 가요~",
-      isOnline: true,
-    },
-    {
-      id: 4,
-      name: "서연",
-      age: 24,
-      imageUrl:
-        "https://images.unsplash.com/photo-1635353866477-f77a828b431a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxrb3JlYW4lMjB3b21hbiUyMGZhc2hpb258ZW58MXx8fHwxNzY1OTU3MzM5fDA&ixlib=rb-4.1.0&q=80&w=1080",
-      interests: ["럭셔리라이프", "럭셔리라이프", "럭셔리라이프"],
-      bio: "어? 우리 어디서 본 것 같은데...? 🤔",
-      isOnline: true,
-    },
-    {
-      id: 5,
-      name: "지우",
-      age: 20,
-      imageUrl:
-        "https://images.unsplash.com/photo-1595502124338-950a136b7676?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhc2lhbiUyMHdvbWFuJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzY1Njc1NTM2fDA&ixlib=rb-4.1.0&q=80&w=1080",
-      interests: ["드라이브", "해변산책", "음악감상"],
-      bio: "드라이브 좋아하세요? 🚗✨",
-      isOnline: false,
-    },
-    {
-      id: 6,
-      name: "하린",
-      age: 25,
-      imageUrl:
-        "https://images.unsplash.com/photo-1619602322533-3ce3ca1f6c8f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxrb3JlYW4lMjBnaXJsJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzY1Njc1NTM2fDA&ixlib=rb-4.1.0&q=80&w=1080",
-      interests: ["베이킹", "카페", "인테리어"],
-      bio: "주말에 같이 브런치 어때요? ☕",
-      isOnline: false,
-    },
-    {
-      id: 7,
-      name: "예린",
-      age: 26,
-      imageUrl:
-        "https://images.unsplash.com/photo-1599834562135-48abd86c4f07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhc2lhbiUyMGJlYXV0eXxlbnwxfHx8fDE3NjU5NTczMzl8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      interests: ["와인", "요리", "여행"],
-      bio: "와인 좋아하시는 분 찾아요 🍷",
-      isOnline: true,
-    },
-    {
-      id: 8,
-      name: "다은",
-      age: 23,
-      imageUrl:
-        "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhc2lhbiUyMGZhc2hpb258ZW58MXx8fHwxNzY1OTU3MzM5fDA&ixlib=rb-4.1.0&q=80&w=1080",
-      interests: ["쇼핑", "맛집", "핫플"],
-      bio: "핫플 가는 거 좋아해요! 🔥",
-      isOnline: true,
-    },
-  ]);
+  const [rawProfiles, setRawProfiles] = useState<ChatProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchProfiles = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from("chat_profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setError(error);
+    } else {
+      setRawProfiles(data || []);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchProfiles();
+
+    // Subscribe to realtime updates
+    const channel = supabase
+      .channel("chat-profiles-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_profiles",
+        },
+        () => {
+          fetchProfiles();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const profiles = rawProfiles.map(convertToLegacy);
+
+  const setProfiles = (_newProfiles: ChatProfileLegacy[]) => {
+    // This is for backward compatibility - not actually updating DB
+  };
+
+  const addProfile = async (
+    profile: Omit<ChatProfile, "id" | "created_at" | "updated_at">
+  ) => {
+    const { error } = await supabase.from("chat_profiles").insert(profile);
+
+    if (!error) {
+      await fetchProfiles();
+    }
+    return { error };
+  };
+
+  const updateProfile = async (id: string, updates: Partial<ChatProfile>) => {
+    const { error } = await supabase
+      .from("chat_profiles")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (!error) {
+      await fetchProfiles();
+    }
+    return { error };
+  };
+
+  const deleteProfile = async (id: string) => {
+    const { error } = await supabase
+      .from("chat_profiles")
+      .delete()
+      .eq("id", id);
+
+    if (!error) {
+      await fetchProfiles();
+    }
+    return { error };
+  };
 
   return (
-    <ChatProfileContext.Provider value={{ profiles, setProfiles }}>
+    <ChatProfileContext.Provider
+      value={{
+        profiles,
+        rawProfiles,
+        setProfiles,
+        isLoading,
+        error,
+        refetch: fetchProfiles,
+        addProfile,
+        updateProfile,
+        deleteProfile,
+      }}
+    >
       {children}
     </ChatProfileContext.Provider>
   );
@@ -122,7 +173,9 @@ export function ChatProfileProvider({ children }: { children: ReactNode }) {
 export function useChatProfiles() {
   const context = useContext(ChatProfileContext);
   if (context === undefined) {
-    throw new Error("useChatProfiles must be used within a ChatProfileProvider");
+    throw new Error(
+      "useChatProfiles must be used within a ChatProfileProvider"
+    );
   }
   return context;
 }

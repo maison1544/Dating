@@ -4,9 +4,18 @@ type BackgroundShadowBackgroundImageProps = {
   additionalClassNames?: string;
 };
 
-function BackgroundShadowBackgroundImage({ children, additionalClassNames = "" }: React.PropsWithChildren<BackgroundShadowBackgroundImageProps>) {
+function BackgroundShadowBackgroundImage({
+  children,
+  additionalClassNames = "",
+}: React.PropsWithChildren<BackgroundShadowBackgroundImageProps>) {
   return (
-    <div style={{ backgroundImage: "linear-gradient(145deg, rgb(255, 255, 255) 0%, rgb(240, 240, 240) 50%, rgb(232, 232, 232) 100%)" }} className={clsx("rounded-[9px]", additionalClassNames)}>
+    <div
+      style={{
+        backgroundImage:
+          "linear-gradient(145deg, rgb(255, 255, 255) 0%, rgb(240, 240, 240) 50%, rgb(232, 232, 232) 100%)",
+      }}
+      className={clsx("rounded-[9px]", additionalClassNames)}
+    >
       {children}
     </div>
   );
@@ -15,7 +24,9 @@ function BackgroundShadowBackgroundImage({ children, additionalClassNames = "" }
 function BackgroundImage12({ children }: React.PropsWithChildren<{}>) {
   return (
     <div className="size-full">
-      <div className="content-stretch flex flex-col items-start pb-[12.8px] pt-[12px] px-[12px] relative w-full">{children}</div>
+      <div className="content-stretch flex flex-col items-start pb-[12.8px] pt-[12px] px-[12px] relative w-full">
+        {children}
+      </div>
     </div>
   );
 }
@@ -23,7 +34,9 @@ function BackgroundImage12({ children }: React.PropsWithChildren<{}>) {
 function ContainerBackgroundImage1({ children }: React.PropsWithChildren<{}>) {
   return (
     <div className="relative shrink-0 w-full">
-      <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex items-center justify-between relative w-full">{children}</div>
+      <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex items-center justify-between relative w-full">
+        {children}
+      </div>
     </div>
   );
 }
@@ -31,7 +44,9 @@ type ContainerBackgroundImageProps = {
   text: string;
 };
 
-function ContainerBackgroundImage({ children, text }: React.PropsWithChildren<ContainerBackgroundImageProps>) {
+function ContainerBackgroundImage({
+  text,
+}: React.PropsWithChildren<ContainerBackgroundImageProps>) {
   return (
     <div className="basis-0 grow min-h-px min-w-px relative shrink-0 w-full">
       <div className="overflow-auto size-full">
@@ -50,7 +65,12 @@ function ContainerBackgroundImage({ children, text }: React.PropsWithChildren<Co
 function SvgBackgroundImage({ children }: React.PropsWithChildren<{}>) {
   return (
     <div className="relative shrink-0 size-[16px]">
-      <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 16 16">
+      <svg
+        className="block size-full"
+        fill="none"
+        preserveAspectRatio="none"
+        viewBox="0 0 16 16"
+      >
         <g id="SVG">{children}</g>
       </svg>
     </div>
@@ -73,7 +93,9 @@ type ContainerBackgroundImageAndText1Props = {
   text: string;
 };
 
-function ContainerBackgroundImageAndText1({ text }: ContainerBackgroundImageAndText1Props) {
+function ContainerBackgroundImageAndText1({
+  text,
+}: ContainerBackgroundImageAndText1Props) {
   return (
     <div className="content-stretch flex flex-col items-start relative shrink-0">
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-[350] justify-center leading-[0] relative shrink-0 text-[#64748b] text-[12px] text-nowrap">
@@ -87,15 +109,26 @@ type ButtonBackgroundImageAndText1Props = {
   additionalClassNames?: string;
 };
 
-function ButtonBackgroundImageAndText1({ text, additionalClassNames = "" }: ButtonBackgroundImageAndText1Props) {
+function ButtonBackgroundImageAndText1({
+  text,
+  additionalClassNames = "",
+}: ButtonBackgroundImageAndText1Props) {
   return (
-    <div className={clsx("bg-gradient-to-b min-h-[36px] opacity-50 relative rounded-[12px] shrink-0", additionalClassNames)}>
+    <div
+      className={clsx(
+        "bg-gradient-to-b min-h-[36px] opacity-50 relative rounded-[12px] shrink-0",
+        additionalClassNames
+      )}
+    >
       <div className="content-stretch flex items-center justify-center min-h-[inherit] overflow-clip pl-[148.71px] pr-[148.73px] py-[20.8px] relative rounded-[inherit]">
         <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[18px] text-center text-nowrap text-white">
           <p className="leading-[28px]">{text}</p>
         </div>
       </div>
-      <div aria-hidden="true" className="absolute border border-[#ee8bac] border-solid inset-0 pointer-events-none rounded-[12px] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]" />
+      <div
+        aria-hidden="true"
+        className="absolute border border-[#ee8bac] border-solid inset-0 pointer-events-none rounded-[12px] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
+      />
     </div>
   );
 }
@@ -103,10 +136,15 @@ type ButtonBackgroundImageAndTextProps = {
   text: string;
 };
 
-function ButtonBackgroundImageAndText({ text }: ButtonBackgroundImageAndTextProps) {
+function ButtonBackgroundImageAndText({
+  text,
+}: ButtonBackgroundImageAndTextProps) {
   return (
     <div className="bg-[rgba(30,41,59,0.4)] content-stretch flex items-center justify-center min-h-[32px] pb-[8.4px] pt-[7.6px] px-[12.8px] relative rounded-[6px] shrink-0">
-      <div aria-hidden="true" className="absolute border border-[rgba(255,255,255,0.1)] border-solid inset-0 pointer-events-none rounded-[6px]" />
+      <div
+        aria-hidden="true"
+        className="absolute border border-[rgba(255,255,255,0.1)] border-solid inset-0 pointer-events-none rounded-[6px]"
+      />
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-[#f5f0f1] text-[12px] text-center text-nowrap">
         <p className="leading-[16px]">{text}</p>
       </div>
@@ -117,7 +155,9 @@ type ContainerBackgroundImageAndTextProps = {
   text: string;
 };
 
-function ContainerBackgroundImageAndText({ text }: ContainerBackgroundImageAndTextProps) {
+function ContainerBackgroundImageAndText({
+  text,
+}: ContainerBackgroundImageAndTextProps) {
   return (
     <div className="content-stretch flex flex-col items-start relative self-stretch shrink-0">
       <div className="flex flex-col font-['Inter',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[#64748b] text-[12px] text-nowrap">
@@ -130,9 +170,16 @@ type BackgroundImage11Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage11({ additionalClassNames = "" }: BackgroundImage11Props) {
+function BackgroundImage11({
+  additionalClassNames = "",
+}: BackgroundImage11Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] rounded-[9999px] w-[1.5px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] rounded-[9999px] w-[1.5px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -141,9 +188,16 @@ type BackgroundImage10Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage10({ additionalClassNames = "" }: BackgroundImage10Props) {
+function BackgroundImage10({
+  additionalClassNames = "",
+}: BackgroundImage10Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] rounded-[9999px] top-[1.87px] w-[14.02px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] rounded-[9999px] top-[1.87px] w-[14.02px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -152,9 +206,16 @@ type BackgroundImage9Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage9({ additionalClassNames = "" }: BackgroundImage9Props) {
+function BackgroundImage9({
+  additionalClassNames = "",
+}: BackgroundImage9Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] h-[13.06px] rounded-[9999px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] h-[13.06px] rounded-[9999px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -163,9 +224,16 @@ type BackgroundImage8Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage8({ additionalClassNames = "" }: BackgroundImage8Props) {
+function BackgroundImage8({
+  additionalClassNames = "",
+}: BackgroundImage8Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] left-[1.22px] rounded-[9999px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] left-[1.22px] rounded-[9999px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -174,9 +242,16 @@ type BackgroundImage7Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage7({ additionalClassNames = "" }: BackgroundImage7Props) {
+function BackgroundImage7({
+  additionalClassNames = "",
+}: BackgroundImage7Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] h-[14.03px] rounded-[9999px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] h-[14.03px] rounded-[9999px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -185,9 +260,16 @@ type BackgroundImage6Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage6({ additionalClassNames = "" }: BackgroundImage6Props) {
+function BackgroundImage6({
+  additionalClassNames = "",
+}: BackgroundImage6Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] rounded-[9999px] w-[1.71px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] rounded-[9999px] w-[1.71px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -196,9 +278,16 @@ type BackgroundImage5Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage5({ additionalClassNames = "" }: BackgroundImage5Props) {
+function BackgroundImage5({
+  additionalClassNames = "",
+}: BackgroundImage5Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] h-[13.44px] rounded-[9999px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] h-[13.44px] rounded-[9999px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -207,9 +296,16 @@ type BackgroundImage4Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage4({ additionalClassNames = "" }: BackgroundImage4Props) {
+function BackgroundImage4({
+  additionalClassNames = "",
+}: BackgroundImage4Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] rounded-[9999px] w-[13.06px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] rounded-[9999px] w-[13.06px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -218,9 +314,16 @@ type BackgroundImage3Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage3({ additionalClassNames = "" }: BackgroundImage3Props) {
+function BackgroundImage3({
+  additionalClassNames = "",
+}: BackgroundImage3Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] rounded-[9999px] w-[14.03px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] rounded-[9999px] w-[14.03px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -229,9 +332,16 @@ type BackgroundImage2Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage2({ additionalClassNames = "" }: BackgroundImage2Props) {
+function BackgroundImage2({
+  additionalClassNames = "",
+}: BackgroundImage2Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] rounded-[9999px] size-[14.63px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] rounded-[9999px] size-[14.63px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -240,9 +350,16 @@ type BackgroundImage1Props = {
   additionalClassNames?: string;
 };
 
-function BackgroundImage1({ additionalClassNames = "" }: BackgroundImage1Props) {
+function BackgroundImage1({
+  additionalClassNames = "",
+}: BackgroundImage1Props) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] rounded-[9999px] w-[12.22px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] rounded-[9999px] w-[12.22px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -253,7 +370,12 @@ type BackgroundImageProps = {
 
 function BackgroundImage({ additionalClassNames = "" }: BackgroundImageProps) {
   return (
-    <div className={clsx("absolute bg-[#1f2937] rounded-[9999px] size-[11.38px]", additionalClassNames)}>
+    <div
+      className={clsx(
+        "absolute bg-[#1f2937] rounded-[9999px] size-[11.38px]",
+        additionalClassNames
+      )}
+    >
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -262,14 +384,61 @@ function BackgroundImage({ additionalClassNames = "" }: BackgroundImageProps) {
 function Svg() {
   return (
     <div className="relative shrink-0 size-[28px]" data-name="SVG">
-      <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 28 28">
+      <svg
+        className="block size-full"
+        fill="none"
+        preserveAspectRatio="none"
+        viewBox="0 0 28 28"
+      >
         <g id="SVG">
-          <path d={svgPaths.p4a2ac80} id="Vector" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.33333" />
-          <path d={svgPaths.p30e15d00} id="Vector_2" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.33333" />
-          <path d="M7 21H7.01167" id="Vector_3" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.33333" />
-          <path d="M11.6667 16.3333H11.6783" id="Vector_4" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.33333" />
-          <path d="M17.5 7H17.5117" id="Vector_5" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.33333" />
-          <path d="M21 10.5H21.0117" id="Vector_6" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.33333" />
+          <path
+            d={svgPaths.p4a2ac80}
+            id="Vector"
+            stroke="var(--stroke-0, #F472B6)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.33333"
+          />
+          <path
+            d={svgPaths.p30e15d00}
+            id="Vector_2"
+            stroke="var(--stroke-0, #F472B6)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.33333"
+          />
+          <path
+            d="M7 21H7.01167"
+            id="Vector_3"
+            stroke="var(--stroke-0, #F472B6)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.33333"
+          />
+          <path
+            d="M11.6667 16.3333H11.6783"
+            id="Vector_4"
+            stroke="var(--stroke-0, #F472B6)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.33333"
+          />
+          <path
+            d="M17.5 7H17.5117"
+            id="Vector_5"
+            stroke="var(--stroke-0, #F472B6)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.33333"
+          />
+          <path
+            d="M21 10.5H21.0117"
+            id="Vector_6"
+            stroke="var(--stroke-0, #F472B6)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.33333"
+          />
         </g>
       </svg>
     </div>
@@ -278,7 +447,10 @@ function Svg() {
 
 function Heading() {
   return (
-    <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Heading 2">
+    <div
+      className="content-stretch flex flex-col items-start relative shrink-0"
+      data-name="Heading 2"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#f472b6] text-[30px] text-nowrap">
         <p className="leading-[36px]">주사위게임 3분</p>
       </div>
@@ -288,7 +460,10 @@ function Heading() {
 
 function Container() {
   return (
-    <div className="content-stretch flex gap-[12px] items-center justify-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex gap-[12px] items-center justify-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <Svg />
       <Heading />
       <Svg />
@@ -298,11 +473,16 @@ function Container() {
 
 function Container1() {
   return (
-    <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-[350] justify-center leading-[0] relative shrink-0 text-[#fbcfe8] text-[12px] text-center w-full">
         <p className="leading-[16px]">
           <span>{`시크릿데이 주사위게임 기준으로 `}</span>
-          <span className="font-['Noto_Sans_KR',sans-serif] font-bold text-[#67e8f9]">3분 단위로 추첨</span>
+          <span className="font-['Noto_Sans_KR',sans-serif] font-bold text-[#67e8f9]">
+            3분 단위로 추첨
+          </span>
         </p>
       </div>
     </div>
@@ -311,7 +491,10 @@ function Container1() {
 
 function Background() {
   return (
-    <div className="bg-gradient-to-r from-[rgba(219,39,119,0.4)] relative rounded-tl-[16px] rounded-tr-[16px] shrink-0 to-[rgba(219,39,119,0.4)] via-50% via-[rgba(236,72,153,0.6)] w-full" data-name="Background">
+    <div
+      className="bg-gradient-to-r from-[rgba(219,39,119,0.4)] relative rounded-tl-[16px] rounded-tr-[16px] shrink-0 to-[rgba(219,39,119,0.4)] via-50% via-[rgba(236,72,153,0.6)] w-full"
+      data-name="Background"
+    >
       <div className="size-full">
         <div className="content-stretch flex flex-col items-start p-[4px] relative w-full">
           <Container1 />
@@ -323,8 +506,14 @@ function Background() {
 
 function OverlayBorder() {
   return (
-    <div className="bg-[rgba(30,41,59,0.8)] content-stretch flex items-start justify-center pb-[8.4px] pt-[9.2px] px-[16.8px] relative rounded-[9999px] shrink-0" data-name="Overlay+Border">
-      <div aria-hidden="true" className="absolute border border-[rgba(71,85,105,0.5)] border-solid inset-0 pointer-events-none rounded-[9999px]" />
+    <div
+      className="bg-[rgba(30,41,59,0.8)] content-stretch flex items-start justify-center pb-[8.4px] pt-[9.2px] px-[16.8px] relative rounded-[9999px] shrink-0"
+      data-name="Overlay+Border"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute border border-[rgba(71,85,105,0.5)] border-solid inset-0 pointer-events-none rounded-[9999px]"
+      />
       <div className="flex flex-col font-['GulimChe',sans-serif] justify-center leading-[0] not-italic relative shrink-0 text-[#cbd5e1] text-[14px] text-center text-nowrap">
         <p className="leading-[20px]">2025.12.13 10:31:40</p>
       </div>
@@ -334,7 +523,10 @@ function OverlayBorder() {
 
 function Container2() {
   return (
-    <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <OverlayBorder />
     </div>
   );
@@ -342,7 +534,14 @@ function Container2() {
 
 function Gradient() {
   return (
-    <div className="absolute inset-[1.6px] opacity-20 rounded-[12px]" data-name="Gradient" style={{ backgroundImage: "url('data:image/svg+xml;utf8,<svg viewBox=\\\'0 0 636.8 260\\\' xmlns=\\\'http://www.w3.org/2000/svg\\\' preserveAspectRatio=\\\'none\\\'><rect x=\\\'0\\\' y=\\\'0\\\' height=\\\'100%\\\' width=\\\'100%\\\' fill=\\\'url(%23grad)\\\' opacity=\\\'1\\\'/><defs><radialGradient id=\\\'grad\\\' gradientUnits=\\\'userSpaceOnUse\\\' cx=\\\'0\\\' cy=\\\'0\\\' r=\\\'10\\\' gradientTransform=\\\'matrix(78.8 0 0 32.173 -23562 -9620)\\\'><stop stop-color=\\\'rgba(100,150,200,0.3)\\\' offset=\\\'0.025254\\\'/><stop stop-color=\\\'rgba(100,150,200,0)\\\' offset=\\\'0.025254\\\'/></radialGradient></defs></svg>')" }}>
+    <div
+      className="absolute inset-[1.6px] opacity-20 rounded-[12px]"
+      data-name="Gradient"
+      style={{
+        backgroundImage:
+          "url('data:image/svg+xml;utf8,<svg viewBox=\\'0 0 636.8 260\\' xmlns=\\'http://www.w3.org/2000/svg\\' preserveAspectRatio=\\'none\\'><rect x=\\'0\\' y=\\'0\\' height=\\'100%\\' width=\\'100%\\' fill=\\'url(%23grad)\\' opacity=\\'1\\'/><defs><radialGradient id=\\'grad\\' gradientUnits=\\'userSpaceOnUse\\' cx=\\'0\\' cy=\\'0\\' r=\\'10\\' gradientTransform=\\'matrix(78.8 0 0 32.173 -23562 -9620)\\'><stop stop-color=\\'rgba(100,150,200,0.3)\\' offset=\\'0.025254\\'/><stop stop-color=\\'rgba(100,150,200,0)\\' offset=\\'0.025254\\'/></radialGradient></defs></svg>')",
+      }}
+    >
       <div className="bg-clip-padding border-0 border-[transparent] border-solid size-full" />
     </div>
   );
@@ -365,10 +564,16 @@ function BackgroundShadow() {
 function BackgroundShadow1() {
   return (
     <BackgroundShadowBackgroundImage additionalClassNames="absolute inset-[5.55%_5.56%_76.49%_5.55%]">
-      <div className="absolute bg-[#1f2937] h-[1.5px] right-[9.8px] rounded-[9999px] top-[-1.22px] w-[11.77px]" data-name="Horizontal Divider">
+      <div
+        className="absolute bg-[#1f2937] h-[1.5px] right-[9.8px] rounded-[9999px] top-[-1.22px] w-[11.77px]"
+        data-name="Horizontal Divider"
+      >
         <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
       </div>
-      <div className="absolute bg-[#1f2937] bottom-[18.55px] h-[2.25px] left-[6.16px] rounded-[9999px] w-[13.44px]" data-name="Background+Shadow">
+      <div
+        className="absolute bg-[#1f2937] bottom-[18.55px] h-[2.25px] left-[6.16px] rounded-[9999px] w-[13.44px]"
+        data-name="Background+Shadow"
+      >
         <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
       </div>
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(255,255,255,0.8),inset_0px_-2px_4px_0px_rgba(0,0,0,0.1)]" />
@@ -415,7 +620,10 @@ function BackgroundShadow4() {
 function BackgroundShadow5() {
   return (
     <BackgroundShadowBackgroundImage additionalClassNames="absolute inset-[-7.14%_-7.15%_-7.15%_-7.14%]">
-      <div className="absolute bg-[#1f2937] left-[38.4px] rounded-[9999px] size-[14.62px] top-[38.4px]" data-name="Background+Shadow">
+      <div
+        className="absolute bg-[#1f2937] left-[38.4px] rounded-[9999px] size-[14.62px] top-[38.4px]"
+        data-name="Background+Shadow"
+      >
         <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
       </div>
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(255,255,255,0.8),inset_0px_-2px_4px_0px_rgba(0,0,0,0.1)]" />
@@ -425,7 +633,10 @@ function BackgroundShadow5() {
 
 function Container3() {
   return (
-    <div className="basis-0 grow min-h-px min-w-px relative shrink-0 w-full" data-name="Container">
+    <div
+      className="basis-0 grow min-h-px min-w-px relative shrink-0 w-full"
+      data-name="Container"
+    >
       <div className="absolute flex inset-[5.55%_5.55%_5.56%_5.56%] items-center justify-center">
         <div className="flex-none rotate-[180deg] scale-y-[-100%] size-[71.11px]">
           <BackgroundShadow />
@@ -442,7 +653,10 @@ function Container3() {
 
 function Container4() {
   return (
-    <div className="content-stretch flex flex-col items-start justify-center relative shrink-0 size-[80px]" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-start justify-center relative shrink-0 size-[80px]"
+      data-name="Container"
+    >
       <Container3 />
     </div>
   );
@@ -450,7 +664,10 @@ function Container4() {
 
 function Container5() {
   return (
-    <div className="absolute content-stretch flex flex-col items-center left-[calc(50%-120px)] top-1/2 translate-x-[-50%] translate-y-[-50%]" data-name="Container">
+    <div
+      className="absolute content-stretch flex flex-col items-center left-[calc(50%-120px)] top-1/2 translate-x-[-50%] translate-y-[-50%]"
+      data-name="Container"
+    >
       <Container4 />
     </div>
   );
@@ -527,7 +744,10 @@ function BackgroundShadow11() {
 
 function Container6() {
   return (
-    <div className="basis-0 grow min-h-px min-w-px relative shrink-0 w-[91.43px]" data-name="Container">
+    <div
+      className="basis-0 grow min-h-px min-w-px relative shrink-0 w-[91.43px]"
+      data-name="Container"
+    >
       <div className="absolute flex inset-[-449.9%_0.01%_408.46%_-0.01%] items-center justify-center">
         <div className="flex-none h-[14.37px] rotate-[180deg] scale-y-[-100%] w-[91.43px]">
           <BackgroundShadow6 />
@@ -544,7 +764,10 @@ function Container6() {
 
 function Container7() {
   return (
-    <div className="content-stretch flex flex-col h-[80px] items-start justify-center pb-[29.84px] pt-[40px] px-0 relative shrink-0 w-[85.71px]" data-name="Container">
+    <div
+      className="content-stretch flex flex-col h-[80px] items-start justify-center pb-[29.84px] pt-[40px] px-0 relative shrink-0 w-[85.71px]"
+      data-name="Container"
+    >
       <Container6 />
     </div>
   );
@@ -552,7 +775,10 @@ function Container7() {
 
 function Container8() {
   return (
-    <div className="absolute content-stretch flex flex-col items-center left-[calc(50%-2.85px)] top-1/2 translate-x-[-50%] translate-y-[-50%]" data-name="Container">
+    <div
+      className="absolute content-stretch flex flex-col items-center left-[calc(50%-2.85px)] top-1/2 translate-x-[-50%] translate-y-[-50%]"
+      data-name="Container"
+    >
       <Container7 />
     </div>
   );
@@ -629,7 +855,10 @@ function BackgroundShadow17() {
 
 function Container9() {
   return (
-    <div className="basis-0 grow min-h-px min-w-px relative shrink-0 w-full" data-name="Container">
+    <div
+      className="basis-0 grow min-h-px min-w-px relative shrink-0 w-full"
+      data-name="Container"
+    >
       <div className="absolute flex inset-[11.1%_450%_11.12%_-491.44%] items-center justify-center">
         <div className="flex-none h-[71.11px] rotate-[180deg] scale-y-[-100%] w-[14.37px]">
           <BackgroundShadow12 />
@@ -646,7 +875,10 @@ function Container9() {
 
 function Container10() {
   return (
-    <div className="content-stretch flex flex-col h-[91.43px] items-start justify-center pl-[40px] pr-[29.84px] py-0 relative shrink-0 w-[80px]" data-name="Container">
+    <div
+      className="content-stretch flex flex-col h-[91.43px] items-start justify-center pl-[40px] pr-[29.84px] py-0 relative shrink-0 w-[80px]"
+      data-name="Container"
+    >
       <Container9 />
     </div>
   );
@@ -654,7 +886,10 @@ function Container10() {
 
 function Container11() {
   return (
-    <div className="absolute content-stretch flex flex-col items-center left-[calc(50%+120px)] top-[calc(50%+0.01px)] translate-x-[-50%] translate-y-[-50%]" data-name="Container">
+    <div
+      className="absolute content-stretch flex flex-col items-center left-[calc(50%+120px)] top-[calc(50%+0.01px)] translate-x-[-50%] translate-y-[-50%]"
+      data-name="Container"
+    >
       <Container10 />
     </div>
   );
@@ -662,7 +897,10 @@ function Container11() {
 
 function Container12() {
   return (
-    <div className="h-[80px] opacity-40 relative shrink-0 w-full" data-name="Container">
+    <div
+      className="h-[80px] opacity-40 relative shrink-0 w-full"
+      data-name="Container"
+    >
       <Container5 />
       <Container8 />
       <Container11 />
@@ -672,7 +910,10 @@ function Container12() {
 
 function Container13() {
   return (
-    <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-[350] justify-center leading-[0] relative shrink-0 text-[#94a3b8] text-[14px] text-center text-nowrap">
         <p className="leading-[20px]">배팅 후 다음 추첨을 기다리세요</p>
       </div>
@@ -682,7 +923,10 @@ function Container13() {
 
 function Container14() {
   return (
-    <div className="content-stretch flex flex-col gap-[16px] items-start min-w-[320px] relative shrink-0" data-name="Container">
+    <div
+      className="content-stretch flex flex-col gap-[16px] items-start min-w-[320px] relative shrink-0"
+      data-name="Container"
+    >
       <Container12 />
       <Container13 />
     </div>
@@ -691,7 +935,10 @@ function Container14() {
 
 function Container15() {
   return (
-    <div className="min-h-[260px] relative shrink-0 w-[636.8px]" data-name="Container">
+    <div
+      className="min-h-[260px] relative shrink-0 w-[636.8px]"
+      data-name="Container"
+    >
       <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-center justify-center min-h-[inherit] px-[48px] py-[72px] relative w-full">
         <Container14 />
       </div>
@@ -701,8 +948,14 @@ function Container15() {
 
 function BackgroundBorderShadow() {
   return (
-    <div className="bg-gradient-to-b from-[#0c1929] relative rounded-[12px] shrink-0 to-[#0c1929] via-50% via-[#162a45] w-full" data-name="Background+Border+Shadow">
-      <div aria-hidden="true" className="absolute border border-[#1e4a6e] border-solid inset-0 pointer-events-none rounded-[12px]" />
+    <div
+      className="bg-gradient-to-b from-[#0c1929] relative rounded-[12px] shrink-0 to-[#0c1929] via-50% via-[#162a45] w-full"
+      data-name="Background+Border+Shadow"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute border border-[#1e4a6e] border-solid inset-0 pointer-events-none rounded-[12px]"
+      />
       <div className="size-full">
         <div className="content-stretch flex flex-col items-start p-[1.6px] relative w-full">
           <Gradient />
@@ -716,10 +969,17 @@ function BackgroundBorderShadow() {
 
 function BackgroundShadow18() {
   return (
-    <div className="bg-gradient-to-r content-stretch flex flex-col from-[#db2777] items-start overflow-clip px-[16px] py-[6px] relative rounded-[9999px] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] shrink-0 to-[#ec4899]" data-name="Background+Shadow">
+    <div
+      className="bg-gradient-to-r content-stretch flex flex-col from-[#db2777] items-start overflow-clip px-[16px] py-[6px] relative rounded-[9999px] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] shrink-0 to-[#ec4899]"
+      data-name="Background+Shadow"
+    >
       <div className="flex flex-col font-['Inter','Noto_Sans_KR',sans-serif] font-bold justify-center leading-[0] not-italic relative shrink-0 text-[18px] text-nowrap text-white">
         <p className="leading-[28px]">
-          211<span className="font-['Inter','Noto_Sans_KR',sans-serif] font-normal not-italic text-[#fbcfe8]">/480</span>회차
+          211
+          <span className="font-['Inter','Noto_Sans_KR',sans-serif] font-normal not-italic text-[#fbcfe8]">
+            /480
+          </span>
+          회차
         </p>
       </div>
     </div>
@@ -728,8 +988,14 @@ function BackgroundShadow18() {
 
 function OverlayBorder1() {
   return (
-    <div className="bg-[rgba(34,197,94,0.2)] content-stretch flex flex-col items-start px-[12.8px] py-[4.8px] relative rounded-[9999px] shrink-0" data-name="Overlay+Border">
-      <div aria-hidden="true" className="absolute border border-[rgba(34,197,94,0.4)] border-solid inset-0 pointer-events-none rounded-[9999px]" />
+    <div
+      className="bg-[rgba(34,197,94,0.2)] content-stretch flex flex-col items-start px-[12.8px] py-[4.8px] relative rounded-[9999px] shrink-0"
+      data-name="Overlay+Border"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute border border-[rgba(34,197,94,0.4)] border-solid inset-0 pointer-events-none rounded-[9999px]"
+      />
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#4ade80] text-[14px] text-nowrap">
         <p className="leading-[20px]">배팅 중</p>
       </div>
@@ -750,7 +1016,10 @@ function Container16() {
 
 function Container17() {
   return (
-    <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-start relative shrink-0"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['GulimChe',sans-serif] justify-center leading-[0] not-italic relative shrink-0 text-[#22d3ee] text-[60px] text-nowrap tracking-[3px]">
         <p className="leading-[60px]">01:20</p>
       </div>
@@ -770,8 +1039,14 @@ function Container18() {
 
 function OverlayShadow() {
   return (
-    <div className="bg-[rgba(51,65,85,0.8)] h-[12px] overflow-clip relative rounded-[9999px] shrink-0 w-full" data-name="Overlay+Shadow">
-      <div className="absolute bg-gradient-to-r from-[#0891b2] inset-[0_55.56%_0_0] rounded-[9999px] to-[#22d3ee] via-50% via-[#06b6d4]" data-name="Gradient" />
+    <div
+      className="bg-[rgba(51,65,85,0.8)] h-[12px] overflow-clip relative rounded-[9999px] shrink-0 w-full"
+      data-name="Overlay+Shadow"
+    >
+      <div
+        className="absolute bg-gradient-to-r from-[#0891b2] inset-[0_55.56%_0_0] rounded-[9999px] to-[#22d3ee] via-50% via-[#06b6d4]"
+        data-name="Gradient"
+      />
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_2px_4px_0px_rgba(0,0,0,0.05)]" />
     </div>
   );
@@ -779,7 +1054,10 @@ function OverlayShadow() {
 
 function Container19() {
   return (
-    <div className="content-stretch flex flex-col items-start relative self-stretch shrink-0" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-start relative self-stretch shrink-0"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-[350] justify-center leading-[0] relative shrink-0 text-[#94a3b8] text-[12px] text-nowrap">
         <p className="leading-[16px]">212회차 추첨까지</p>
       </div>
@@ -789,7 +1067,10 @@ function Container19() {
 
 function Container20() {
   return (
-    <div className="content-stretch flex items-start justify-between relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex items-start justify-between relative shrink-0 w-full"
+      data-name="Container"
+    >
       <ContainerBackgroundImageAndText text="0:00" />
       <Container19 />
       <ContainerBackgroundImageAndText text="3:00" />
@@ -810,7 +1091,10 @@ function Container21() {
 
 function BackgroundBorderShadow1() {
   return (
-    <div className="bg-gradient-to-r from-[rgba(30,41,59,0.8)] relative rounded-[16px] shrink-0 to-[rgba(30,41,59,0.8)] via-50% via-[rgba(15,23,42,0.9)] w-full" data-name="Background+Border+Shadow">
+    <div
+      className="bg-gradient-to-r from-[rgba(30,41,59,0.8)] relative rounded-[16px] shrink-0 to-[rgba(30,41,59,0.8)] via-50% via-[rgba(15,23,42,0.9)] w-full"
+      data-name="Background+Border+Shadow"
+    >
       <div className="overflow-clip rounded-[inherit] size-full">
         <div className="content-stretch flex flex-col gap-[12px] items-start p-[16.8px] relative w-full">
           <Container16 />
@@ -818,7 +1102,10 @@ function BackgroundBorderShadow1() {
           <Container21 />
         </div>
       </div>
-      <div aria-hidden="true" className="absolute border border-[rgba(236,72,153,0.3)] border-solid inset-0 pointer-events-none rounded-[16px] shadow-[0px_10px_15px_-3px_rgba(236,72,153,0.1),0px_4px_6px_-4px_rgba(236,72,153,0.1)]" />
+      <div
+        aria-hidden="true"
+        className="absolute border border-[rgba(236,72,153,0.3)] border-solid inset-0 pointer-events-none rounded-[16px] shadow-[0px_10px_15px_-3px_rgba(236,72,153,0.1),0px_4px_6px_-4px_rgba(236,72,153,0.1)]"
+      />
     </div>
   );
 }
@@ -826,12 +1113,45 @@ function BackgroundBorderShadow1() {
 function Svg1() {
   return (
     <div className="relative shrink-0 size-[20px]" data-name="SVG">
-      <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 20 20">
+      <svg
+        className="block size-full"
+        fill="none"
+        preserveAspectRatio="none"
+        viewBox="0 0 20 20"
+      >
         <g id="SVG">
-          <path d={svgPaths.p1e57e600} id="Vector" stroke="var(--stroke-0, #FACC15)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.66667" />
-          <path d={svgPaths.p2a7ce900} id="Vector_2" stroke="var(--stroke-0, #FACC15)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.66667" />
-          <path d="M5.83333 5H6.66667V8.33333" id="Vector_3" stroke="var(--stroke-0, #FACC15)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.66667" />
-          <path d={svgPaths.p25bee380} id="Vector_4" stroke="var(--stroke-0, #FACC15)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.66667" />
+          <path
+            d={svgPaths.p1e57e600}
+            id="Vector"
+            stroke="var(--stroke-0, #FACC15)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.66667"
+          />
+          <path
+            d={svgPaths.p2a7ce900}
+            id="Vector_2"
+            stroke="var(--stroke-0, #FACC15)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.66667"
+          />
+          <path
+            d="M5.83333 5H6.66667V8.33333"
+            id="Vector_3"
+            stroke="var(--stroke-0, #FACC15)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.66667"
+          />
+          <path
+            d={svgPaths.p25bee380}
+            id="Vector_4"
+            stroke="var(--stroke-0, #FACC15)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.66667"
+          />
         </g>
       </svg>
     </div>
@@ -840,7 +1160,10 @@ function Svg1() {
 
 function Container22() {
   return (
-    <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-start relative shrink-0"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-[350] justify-center leading-[0] relative shrink-0 text-[#fde047] text-[14px] text-nowrap">
         <p className="leading-[20px]">내 잔액</p>
       </div>
@@ -873,8 +1196,14 @@ function Container24() {
 
 function OverlayBorder2() {
   return (
-    <div className="bg-[rgba(234,179,8,0.1)] relative rounded-[9px] shrink-0 w-full" data-name="Overlay+Border">
-      <div aria-hidden="true" className="absolute border border-[rgba(234,179,8,0.3)] border-solid inset-0 pointer-events-none rounded-[9px]" />
+    <div
+      className="bg-[rgba(234,179,8,0.1)] relative rounded-[9px] shrink-0 w-full"
+      data-name="Overlay+Border"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute border border-[rgba(234,179,8,0.3)] border-solid inset-0 pointer-events-none rounded-[9px]"
+      />
       <div className="flex flex-row items-center size-full">
         <div className="content-stretch flex items-center justify-between p-[12.8px] relative w-full">
           <Container23 />
@@ -887,7 +1216,10 @@ function OverlayBorder2() {
 
 function Label() {
   return (
-    <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-name="Label">
+    <div
+      className="content-stretch flex flex-col items-start relative shrink-0 w-full"
+      data-name="Label"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-[350] justify-center leading-[0] relative shrink-0 text-[#94a3b8] text-[12px] w-full">
         <p className="leading-[16px]">배팅 금액 (최소 5,000P)</p>
       </div>
@@ -897,7 +1229,10 @@ function Label() {
 
 function Container25() {
   return (
-    <div className="absolute bottom-[8.8px] content-stretch flex flex-col items-center left-[12.8px] overflow-clip pb-[0.8px] pt-[2.4px] px-[260.53px] top-[7.2px]" data-name="Container">
+    <div
+      className="absolute bottom-[8.8px] content-stretch flex flex-col items-center left-[12.8px] overflow-clip pb-[0.8px] pt-[2.4px] px-[260.53px] top-[7.2px]"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Inter','Noto_Sans_KR',sans-serif] font-semibold justify-center leading-[0] not-italic relative shrink-0 text-[#a88a94] text-[14px] text-center text-nowrap">
         <p className="leading-[normal]">5,000P 이상</p>
       </div>
@@ -906,34 +1241,57 @@ function Container25() {
 }
 
 function Container26() {
-  return <div className="basis-0 grow h-[16.8px] min-h-px min-w-px shrink-0" data-name="Container" />;
+  return (
+    <div
+      className="basis-0 grow h-[16.8px] min-h-px min-w-px shrink-0"
+      data-name="Container"
+    />
+  );
 }
 
 function Container27() {
   return (
-    <div className="absolute bottom-[9.6px] content-stretch flex items-center left-[12.8px] top-[9.6px]" data-name="Container">
+    <div
+      className="absolute bottom-[9.6px] content-stretch flex items-center left-[12.8px] top-[9.6px]"
+      data-name="Container"
+    >
       <Container26 />
-      <div className="h-full min-w-[15px] opacity-0 shrink-0 w-[15px]" data-name="Rectangle" />
+      <div
+        className="h-full min-w-[15px] opacity-0 shrink-0 w-[15px]"
+        data-name="Rectangle"
+      />
     </div>
   );
 }
 
 function Input() {
   return (
-    <div className="bg-[rgba(30,41,59,0.6)] h-[36px] relative rounded-[6px] shrink-0 w-full" data-name="Input">
+    <div
+      className="bg-[rgba(30,41,59,0.6)] h-[36px] relative rounded-[6px] shrink-0 w-full"
+      data-name="Input"
+    >
       <div className="overflow-clip relative rounded-[inherit] size-full">
         <Container25 />
         <Container27 />
       </div>
-      <div aria-hidden="true" className="absolute border border-[#475569] border-solid inset-0 pointer-events-none rounded-[6px]" />
+      <div
+        aria-hidden="true"
+        className="absolute border border-[#475569] border-solid inset-0 pointer-events-none rounded-[6px]"
+      />
     </div>
   );
 }
 
 function Button() {
   return (
-    <div className="bg-[rgba(30,41,59,0.4)] content-stretch flex items-center justify-center min-h-[32px] pb-[8.4px] pt-[7.6px] px-[12.8px] relative rounded-[6px] shrink-0" data-name="Button">
-      <div aria-hidden="true" className="absolute border border-[rgba(255,255,255,0.1)] border-solid inset-0 pointer-events-none rounded-[6px]" />
+    <div
+      className="bg-[rgba(30,41,59,0.4)] content-stretch flex items-center justify-center min-h-[32px] pb-[8.4px] pt-[7.6px] px-[12.8px] relative rounded-[6px] shrink-0"
+      data-name="Button"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute border border-[rgba(255,255,255,0.1)] border-solid inset-0 pointer-events-none rounded-[6px]"
+      />
       <div className="flex flex-col font-['Inter','Noto_Sans_KR',sans-serif] font-medium justify-center leading-[0] not-italic relative shrink-0 text-[#f5f0f1] text-[12px] text-center text-nowrap">
         <p className="leading-[16px]">10만</p>
       </div>
@@ -943,7 +1301,10 @@ function Button() {
 
 function Container28() {
   return (
-    <div className="content-start flex flex-wrap gap-[0px_8px] items-start justify-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-start flex flex-wrap gap-[0px_8px] items-start justify-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <ButtonBackgroundImageAndText text="5천" />
       <ButtonBackgroundImageAndText text="1만" />
       <ButtonBackgroundImageAndText text="5만" />
@@ -955,7 +1316,10 @@ function Container28() {
 
 function Container29() {
   return (
-    <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full"
+      data-name="Container"
+    >
       <Label />
       <Input />
       <Container28 />
@@ -965,7 +1329,10 @@ function Container29() {
 
 function Container30() {
   return (
-    <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-[350] justify-center leading-[0] relative shrink-0 text-[#94a3b8] text-[12px] text-center w-full">
         <p className="leading-[16px]">홀/짝 (합계 기준) - 최대 2개 선택 가능</p>
       </div>
@@ -975,16 +1342,28 @@ function Container30() {
 
 function Container31() {
   return (
-    <div className="content-stretch flex gap-[12px] items-start relative shrink-0 w-full" data-name="Container">
-      <ButtonBackgroundImageAndText1 text="홀" additionalClassNames="from-[#ef4444] to-[#dc2626]" />
-      <ButtonBackgroundImageAndText1 text="짝" additionalClassNames="from-[#3b82f6] to-[#2563eb]" />
+    <div
+      className="content-stretch flex gap-[12px] items-start relative shrink-0 w-full"
+      data-name="Container"
+    >
+      <ButtonBackgroundImageAndText1
+        text="홀"
+        additionalClassNames="from-[#ef4444] to-[#dc2626]"
+      />
+      <ButtonBackgroundImageAndText1
+        text="짝"
+        additionalClassNames="from-[#3b82f6] to-[#2563eb]"
+      />
     </div>
   );
 }
 
 function Container32() {
   return (
-    <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full"
+      data-name="Container"
+    >
       <Container30 />
       <Container31 />
     </div>
@@ -993,7 +1372,10 @@ function Container32() {
 
 function Container33() {
   return (
-    <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Inter','Noto_Sans_KR',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[#94a3b8] text-[12px] text-center w-full">
         <p className="leading-[16px]">소/대 (합계: 소 3~9, 대 10~18)</p>
       </div>
@@ -1003,16 +1385,28 @@ function Container33() {
 
 function Container34() {
   return (
-    <div className="content-stretch flex gap-[12px] items-start relative shrink-0 w-full" data-name="Container">
-      <ButtonBackgroundImageAndText1 text="소" additionalClassNames="from-[#a855f7] to-[#9333ea]" />
-      <ButtonBackgroundImageAndText1 text="대" additionalClassNames="from-[#f97316] to-[#ea580c]" />
+    <div
+      className="content-stretch flex gap-[12px] items-start relative shrink-0 w-full"
+      data-name="Container"
+    >
+      <ButtonBackgroundImageAndText1
+        text="소"
+        additionalClassNames="from-[#a855f7] to-[#9333ea]"
+      />
+      <ButtonBackgroundImageAndText1
+        text="대"
+        additionalClassNames="from-[#f97316] to-[#ea580c]"
+      />
     </div>
   );
 }
 
 function Container35() {
   return (
-    <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full"
+      data-name="Container"
+    >
       <Container33 />
       <Container34 />
     </div>
@@ -1021,7 +1415,10 @@ function Container35() {
 
 function Container36() {
   return (
-    <div className="content-stretch flex flex-col gap-[16px] items-start relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex flex-col gap-[16px] items-start relative shrink-0 w-full"
+      data-name="Container"
+    >
       <OverlayBorder2 />
       <Container29 />
       <Container32 />
@@ -1047,7 +1444,10 @@ function Container37() {
 
 function Background1() {
   return (
-    <div className="bg-gradient-to-b content-stretch flex flex-col from-[#2d1f3d] items-start relative rounded-[16px] self-stretch shrink-0 to-[#1e1428] w-[688px]" data-name="Background">
+    <div
+      className="bg-gradient-to-b content-stretch flex flex-col from-[#2d1f3d] items-start relative rounded-[16px] self-stretch shrink-0 to-[#1e1428] w-[688px]"
+      data-name="Background"
+    >
       <Background />
       <Container37 />
     </div>
@@ -1057,19 +1457,64 @@ function Background1() {
 function Svg2() {
   return (
     <SvgBackgroundImage>
-      <path d={svgPaths.p1c437700} id="Vector" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d={svgPaths.p25d12700} id="Vector_2" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d="M4 12H4.00667" id="Vector_3" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d="M6.66667 9.33333H6.67333" id="Vector_4" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d="M10 4H10.0067" id="Vector_5" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d="M12 6H12.0067" id="Vector_6" stroke="var(--stroke-0, #F472B6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
+      <path
+        d={svgPaths.p1c437700}
+        id="Vector"
+        stroke="var(--stroke-0, #F472B6)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d={svgPaths.p25d12700}
+        id="Vector_2"
+        stroke="var(--stroke-0, #F472B6)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d="M4 12H4.00667"
+        id="Vector_3"
+        stroke="var(--stroke-0, #F472B6)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d="M6.66667 9.33333H6.67333"
+        id="Vector_4"
+        stroke="var(--stroke-0, #F472B6)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d="M10 4H10.0067"
+        id="Vector_5"
+        stroke="var(--stroke-0, #F472B6)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d="M12 6H12.0067"
+        id="Vector_6"
+        stroke="var(--stroke-0, #F472B6)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
     </SvgBackgroundImage>
   );
 }
 
 function Container38() {
   return (
-    <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-start relative shrink-0"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#fbcfe8] text-[14px] text-nowrap">
         <p className="leading-[20px]">최근 결과</p>
       </div>
@@ -1079,7 +1524,10 @@ function Container38() {
 
 function Container39() {
   return (
-    <div className="content-stretch flex gap-[8px] items-center relative shrink-0" data-name="Container">
+    <div
+      className="content-stretch flex gap-[8px] items-center relative shrink-0"
+      data-name="Container"
+    >
       <Svg2 />
       <Container38 />
     </div>
@@ -1097,8 +1545,14 @@ function Container40() {
 
 function BackgroundHorizontalBorder() {
   return (
-    <div className="bg-gradient-to-r from-[rgba(219,39,119,0.4)] relative shrink-0 to-[rgba(190,24,93,0.3)] w-full" data-name="Background+HorizontalBorder">
-      <div aria-hidden="true" className="absolute border-[0px_0px_0.8px] border-[rgba(236,72,153,0.3)] border-solid inset-0 pointer-events-none" />
+    <div
+      className="bg-gradient-to-r from-[rgba(219,39,119,0.4)] relative shrink-0 to-[rgba(190,24,93,0.3)] w-full"
+      data-name="Background+HorizontalBorder"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute border-[0px_0px_0.8px] border-[rgba(236,72,153,0.3)] border-solid inset-0 pointer-events-none"
+      />
       <BackgroundImage12>
         <Container40 />
       </BackgroundImage12>
@@ -1108,7 +1562,10 @@ function BackgroundHorizontalBorder() {
 
 function Background2() {
   return (
-    <div className="basis-0 bg-gradient-to-b content-stretch flex flex-col from-[#2d1f3d] grow items-start min-h-px min-w-px overflow-clip relative rounded-[16px] shrink-0 to-[#1e1428] w-full" data-name="Background">
+    <div
+      className="basis-0 bg-gradient-to-b content-stretch flex flex-col from-[#2d1f3d] grow items-start min-h-px min-w-px overflow-clip relative rounded-[16px] shrink-0 to-[#1e1428] w-full"
+      data-name="Background"
+    >
       <BackgroundHorizontalBorder />
       <ContainerBackgroundImage text="아직 결과가 없습니다" />
     </div>
@@ -1118,19 +1575,64 @@ function Background2() {
 function Svg3() {
   return (
     <SvgBackgroundImage>
-      <path d={svgPaths.p30052a00} id="Vector" stroke="var(--stroke-0, #22D3EE)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d={svgPaths.p1b84be20} id="Vector_2" stroke="var(--stroke-0, #22D3EE)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d="M2.66667 14.6667H13.3333" id="Vector_3" stroke="var(--stroke-0, #22D3EE)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d={svgPaths.p3205b80} id="Vector_4" stroke="var(--stroke-0, #22D3EE)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d={svgPaths.p3222c80} id="Vector_5" stroke="var(--stroke-0, #22D3EE)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-      <path d={svgPaths.p2274e770} id="Vector_6" stroke="var(--stroke-0, #22D3EE)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
+      <path
+        d={svgPaths.p30052a00}
+        id="Vector"
+        stroke="var(--stroke-0, #22D3EE)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d={svgPaths.p1b84be20}
+        id="Vector_2"
+        stroke="var(--stroke-0, #22D3EE)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d="M2.66667 14.6667H13.3333"
+        id="Vector_3"
+        stroke="var(--stroke-0, #22D3EE)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d={svgPaths.p3205b80}
+        id="Vector_4"
+        stroke="var(--stroke-0, #22D3EE)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d={svgPaths.p3222c80}
+        id="Vector_5"
+        stroke="var(--stroke-0, #22D3EE)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
+      <path
+        d={svgPaths.p2274e770}
+        id="Vector_6"
+        stroke="var(--stroke-0, #22D3EE)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.33333"
+      />
     </SvgBackgroundImage>
   );
 }
 
 function Container41() {
   return (
-    <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-start relative shrink-0"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#a5f3fc] text-[14px] text-nowrap">
         <p className="leading-[20px]">내 배팅 기록</p>
       </div>
@@ -1140,7 +1642,10 @@ function Container41() {
 
 function Container42() {
   return (
-    <div className="content-stretch flex gap-[8px] items-center relative shrink-0" data-name="Container">
+    <div
+      className="content-stretch flex gap-[8px] items-center relative shrink-0"
+      data-name="Container"
+    >
       <Svg3 />
       <Container41 />
     </div>
@@ -1158,8 +1663,14 @@ function Container43() {
 
 function BackgroundHorizontalBorder1() {
   return (
-    <div className="bg-gradient-to-r from-[rgba(8,145,178,0.4)] relative shrink-0 to-[rgba(14,116,144,0.3)] w-full" data-name="Background+HorizontalBorder">
-      <div aria-hidden="true" className="absolute border-[0px_0px_0.8px] border-[rgba(6,182,212,0.3)] border-solid inset-0 pointer-events-none" />
+    <div
+      className="bg-gradient-to-r from-[rgba(8,145,178,0.4)] relative shrink-0 to-[rgba(14,116,144,0.3)] w-full"
+      data-name="Background+HorizontalBorder"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute border-[0px_0px_0.8px] border-[rgba(6,182,212,0.3)] border-solid inset-0 pointer-events-none"
+      />
       <BackgroundImage12>
         <Container43 />
       </BackgroundImage12>
@@ -1169,7 +1680,10 @@ function BackgroundHorizontalBorder1() {
 
 function Background3() {
   return (
-    <div className="basis-0 bg-gradient-to-b content-stretch flex flex-col from-[#1f2d3d] grow items-start min-h-px min-w-px overflow-clip relative rounded-[16px] shrink-0 to-[#141e28] w-full" data-name="Background">
+    <div
+      className="basis-0 bg-gradient-to-b content-stretch flex flex-col from-[#1f2d3d] grow items-start min-h-px min-w-px overflow-clip relative rounded-[16px] shrink-0 to-[#141e28] w-full"
+      data-name="Background"
+    >
       <BackgroundHorizontalBorder1 />
       <ContainerBackgroundImage text="배팅 기록이 없습니다" />
     </div>
@@ -1178,7 +1692,10 @@ function Background3() {
 
 function Container44() {
   return (
-    <div className="content-stretch flex flex-col gap-[12px] items-start justify-center relative self-stretch shrink-0 w-[320px]" data-name="Container">
+    <div
+      className="content-stretch flex flex-col gap-[12px] items-start justify-center relative self-stretch shrink-0 w-[320px]"
+      data-name="Container"
+    >
       <Background2 />
       <Background3 />
     </div>
@@ -1187,7 +1704,10 @@ function Container44() {
 
 function Container45() {
   return (
-    <div className="content-stretch flex gap-[16px] items-start justify-center max-w-[1024px] relative shrink-0 w-[1024px]" data-name="Container">
+    <div
+      className="content-stretch flex gap-[16px] items-start justify-center max-w-[1024px] relative shrink-0 w-[1024px]"
+      data-name="Container"
+    >
       <Background1 />
       <Container44 />
     </div>
@@ -1196,7 +1716,10 @@ function Container45() {
 
 function MainSection() {
   return (
-    <div className="content-stretch flex flex-col gap-[24px] items-center max-w-[1280px] px-[32px] py-0 relative shrink-0 w-[1280px]" data-name="Main → Section">
+    <div
+      className="content-stretch flex flex-col gap-[24px] items-center max-w-[1280px] px-[32px] py-0 relative shrink-0 w-[1280px]"
+      data-name="Main → Section"
+    >
       <Container />
       <Container45 />
     </div>
@@ -1206,12 +1729,28 @@ function MainSection() {
 function Svg4() {
   return (
     <div className="relative shrink-0 size-[32px]" data-name="SVG">
-      <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 32 32">
+      <svg
+        className="block size-full"
+        fill="none"
+        preserveAspectRatio="none"
+        viewBox="0 0 32 32"
+      >
         <g id="SVG">
-          <path d={svgPaths.p1ce57300} fill="url(#paint0_linear_1_219)" id="Vector" />
+          <path
+            d={svgPaths.p1ce57300}
+            fill="url(#paint0_linear_1_219)"
+            id="Vector"
+          />
         </g>
         <defs>
-          <linearGradient gradientUnits="userSpaceOnUse" id="paint0_linear_1_219" x1="4" x2="2771.06" y1="2802.67" y2="430.902">
+          <linearGradient
+            gradientUnits="userSpaceOnUse"
+            id="paint0_linear_1_219"
+            x1="4"
+            x2="2771.06"
+            y1="2802.67"
+            y2="430.902"
+          >
             <stop stopColor="#F42547" />
             <stop offset="0.4" stopColor="#F0427C" />
             <stop offset="0.7" stopColor="#ED5EA6" />
@@ -1225,11 +1764,20 @@ function Svg4() {
 
 function Container46() {
   return (
-    <div className="content-stretch flex flex-col items-start pb-[2px] pt-0 px-0 relative shrink-0" data-name="Container">
-      <div className="bg-clip-text bg-gradient-to-r flex flex-col font-['Gungsuh',sans-serif] from-[#f9a8d4] justify-center leading-[0] not-italic relative shrink-0 text-[20px] text-nowrap to-[#f472b6] tracking-[0.5px] via-50% via-[#e9638f]" style={{ WebkitTextFillColor: "transparent" }}>
+    <div
+      className="content-stretch flex flex-col items-start pb-[2px] pt-0 px-0 relative shrink-0"
+      data-name="Container"
+    >
+      <div
+        className="bg-clip-text bg-gradient-to-r flex flex-col font-['Gungsuh',sans-serif] from-[#f9a8d4] justify-center leading-[0] not-italic relative shrink-0 text-[20px] text-nowrap to-[#f472b6] tracking-[0.5px] via-50% via-[#e9638f]"
+        style={{ WebkitTextFillColor: "transparent" }}
+      >
         <p className="leading-[28px]">
           시크릿
-          <span className="bg-clip-text bg-gradient-to-r font-['Gungsuh',sans-serif] from-[#f472b6] not-italic to-[#f9a8d4] via-50% via-[#db57af]" style={{ WebkitTextFillColor: "transparent" }}>
+          <span
+            className="bg-clip-text bg-gradient-to-r font-['Gungsuh',sans-serif] from-[#f472b6] not-italic to-[#f9a8d4] via-50% via-[#db57af]"
+            style={{ WebkitTextFillColor: "transparent" }}
+          >
             데이
           </span>
         </p>
@@ -1240,7 +1788,10 @@ function Container46() {
 
 function Container47() {
   return (
-    <div className="content-stretch flex gap-[8px] items-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex gap-[8px] items-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <Svg4 />
       <Container46 />
     </div>
@@ -1249,9 +1800,14 @@ function Container47() {
 
 function Container48() {
   return (
-    <div className="content-stretch flex flex-col items-start max-w-[448px] relative shrink-0 w-[448px]" data-name="Container">
+    <div
+      className="content-stretch flex flex-col items-start max-w-[448px] relative shrink-0 w-[448px]"
+      data-name="Container"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-[350] justify-center leading-[24px] relative shrink-0 text-[#a88a94] text-[16px] text-nowrap">
-        <p className="mb-0">특별한 데이트를 위한 숙소와 코스를 한 번에 예약하세요. 잊지 못할</p>
+        <p className="mb-0">
+          특별한 데이트를 위한 숙소와 코스를 한 번에 예약하세요. 잊지 못할
+        </p>
         <p>추억을 만들어 드립니다.</p>
       </div>
     </div>
@@ -1260,7 +1816,10 @@ function Container48() {
 
 function Container49() {
   return (
-    <div className="content-stretch flex flex-col gap-[16px] items-start relative self-stretch shrink-0 w-[800px]" data-name="Container">
+    <div
+      className="content-stretch flex flex-col gap-[16px] items-start relative self-stretch shrink-0 w-[800px]"
+      data-name="Container"
+    >
       <Container47 />
       <Container48 />
     </div>
@@ -1269,7 +1828,10 @@ function Container49() {
 
 function Heading1() {
   return (
-    <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-name="Heading 4">
+    <div
+      className="content-stretch flex flex-col items-start relative shrink-0 w-full"
+      data-name="Heading 4"
+    >
       <div className="flex flex-col font-['Noto_Sans_KR',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#f5f0f1] text-[16px] w-full">
         <p className="leading-[24px]">빠른 링크</p>
       </div>
@@ -1279,7 +1841,10 @@ function Heading1() {
 
 function Item() {
   return (
-    <div className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full" data-name="Item">
+    <div
+      className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full"
+      data-name="Item"
+    >
       <LinkBackgroundImageAndText text="메인" />
     </div>
   );
@@ -1287,7 +1852,10 @@ function Item() {
 
 function Item1() {
   return (
-    <div className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full" data-name="Item">
+    <div
+      className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full"
+      data-name="Item"
+    >
       <LinkBackgroundImageAndText text="숙소 예약" />
     </div>
   );
@@ -1295,7 +1863,10 @@ function Item1() {
 
 function Item2() {
   return (
-    <div className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full" data-name="Item">
+    <div
+      className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full"
+      data-name="Item"
+    >
       <LinkBackgroundImageAndText text="VIP영상관" />
     </div>
   );
@@ -1303,7 +1874,10 @@ function Item2() {
 
 function Item3() {
   return (
-    <div className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full" data-name="Item">
+    <div
+      className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full"
+      data-name="Item"
+    >
       <LinkBackgroundImageAndText text="포인트" />
     </div>
   );
@@ -1311,7 +1885,10 @@ function Item3() {
 
 function Item4() {
   return (
-    <div className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full" data-name="Item">
+    <div
+      className="content-stretch flex flex-col items-start pb-[1.6px] pt-[2.4px] px-0 relative shrink-0 w-full"
+      data-name="Item"
+    >
       <LinkBackgroundImageAndText text="미니게임" />
     </div>
   );
@@ -1319,7 +1896,10 @@ function Item4() {
 
 function List() {
   return (
-    <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full" data-name="List">
+    <div
+      className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full"
+      data-name="List"
+    >
       <Item />
       <Item1 />
       <Item2 />
@@ -1331,7 +1911,10 @@ function List() {
 
 function Container50() {
   return (
-    <div className="content-stretch flex flex-col gap-[16px] items-start relative self-stretch shrink-0 w-[384px]" data-name="Container">
+    <div
+      className="content-stretch flex flex-col gap-[16px] items-start relative self-stretch shrink-0 w-[384px]"
+      data-name="Container"
+    >
       <Heading1 />
       <List />
     </div>
@@ -1340,7 +1923,10 @@ function Container50() {
 
 function Container51() {
   return (
-    <div className="content-stretch flex gap-[32px] items-start justify-center relative shrink-0 w-full" data-name="Container">
+    <div
+      className="content-stretch flex gap-[32px] items-start justify-center relative shrink-0 w-full"
+      data-name="Container"
+    >
       <Container49 />
       <Container50 />
     </div>
@@ -1352,7 +1938,9 @@ function Container52() {
     <div className="relative shrink-0 w-full" data-name="Container">
       <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-center relative w-full">
         <div className="flex flex-col font-['Inter','Noto_Sans_KR',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[#a88a94] text-[14px] text-center w-full">
-          <p className="leading-[20px]">© 2025 시크릿데이. All rights reserved.</p>
+          <p className="leading-[20px]">
+            © 2025 시크릿데이. All rights reserved.
+          </p>
         </div>
       </div>
     </div>
@@ -1361,8 +1949,14 @@ function Container52() {
 
 function HorizontalBorder() {
   return (
-    <div className="content-stretch flex flex-col items-start pb-0 pt-[32.8px] px-0 relative shrink-0 w-full" data-name="HorizontalBorder">
-      <div aria-hidden="true" className="absolute border-[#37252b] border-[0.8px_0px_0px] border-solid inset-0 pointer-events-none" />
+    <div
+      className="content-stretch flex flex-col items-start pb-0 pt-[32.8px] px-0 relative shrink-0 w-full"
+      data-name="HorizontalBorder"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute border-[#37252b] border-[0.8px_0px_0px] border-solid inset-0 pointer-events-none"
+      />
       <Container52 />
     </div>
   );
@@ -1370,7 +1964,10 @@ function HorizontalBorder() {
 
 function Container53() {
   return (
-    <div className="max-w-[1280px] relative shrink-0 w-full" data-name="Container">
+    <div
+      className="max-w-[1280px] relative shrink-0 w-full"
+      data-name="Container"
+    >
       <div className="max-w-[inherit] size-full">
         <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col gap-[32px] items-start max-w-[inherit] px-[32px] py-0 relative w-full">
           <Container51 />
@@ -1384,7 +1981,10 @@ function Container53() {
 function Footer() {
   return (
     <div className="bg-[#29191e] relative shrink-0 w-full" data-name="Footer">
-      <div aria-hidden="true" className="absolute border-[#37252b] border-[0.8px_0px_0px] border-solid inset-0 pointer-events-none" />
+      <div
+        aria-hidden="true"
+        className="absolute border-[#37252b] border-[0.8px_0px_0px] border-solid inset-0 pointer-events-none"
+      />
       <div className="size-full">
         <div className="content-stretch flex flex-col items-start pb-[48px] pt-[48.8px] px-[320px] relative w-full">
           <Container53 />
@@ -1396,7 +1996,10 @@ function Footer() {
 
 export default function Background4() {
   return (
-    <div className="bg-[#201317] content-stretch flex flex-col gap-[48px] items-center pb-0 pt-[128px] px-0 relative size-full" data-name="Background">
+    <div
+      className="bg-[#201317] content-stretch flex flex-col gap-[48px] items-center pb-0 pt-[128px] px-0 relative size-full"
+      data-name="Background"
+    >
       <MainSection />
       <Footer />
     </div>

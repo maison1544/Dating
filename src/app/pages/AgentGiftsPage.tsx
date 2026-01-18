@@ -1,167 +1,185 @@
 import { AdminLayout } from "../components/AdminLayout";
-import { useState } from "react";
-import { Calendar, ChevronDown, X, Package } from "lucide-react";
+import { DateRangePicker } from "../components/DateRangePicker";
+import { useState, useMemo } from "react";
+import { ChevronDown, X, Package } from "lucide-react";
+import { useGiftItems, useAgentGiftTransactions } from "../hooks/useSupabase";
+import { useAuth } from "../contexts/AuthContext";
+import { formatKST } from "../../lib/dateUtils";
 
 interface GiftRecord {
-  id: number;
+  id: string;
   memberName: string;
   memberNickname: string;
+  giftId: string;
   giftName: string;
   giftIcon: string;
   points: number;
+  quantity: number;
+  dateKey: string;
   date: string;
+  profileId: string;
   profileName: string;
   type: "received" | "sent"; // 받은 기프트 / 보낸 기프트
 }
 
-const GIFTS = [
-  { id: 1, name: "장미", points: 80, icon: "🌹" },
-  { id: 2, name: "초콜릿", points: 240, icon: "🍫" },
-  { id: 3, name: "샴페인", points: 400, icon: "🍾" },
-  { id: 4, name: "하트 풍선", points: 160, icon: "💝" },
-  { id: 5, name: "다이아 반지", points: 800, icon: "💍" },
-  { id: 6, name: "럭셔리 향수", points: 2000, icon: "🧴" },
-];
-
 export function AgentGiftsPage() {
+  const { adminAccount } = useAuth();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [selectedGift, setSelectedGift] = useState<string>("all");
-  const [giftTypeFilter, setGiftTypeFilter] = useState<"all" | "received" | "sent">("all");
+  const [selectedGiftId, setSelectedGiftId] = useState<string>("all");
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("all");
+  const [giftTypeFilter, setGiftTypeFilter] = useState<
+    "all" | "received" | "sent"
+  >("all");
   const [isDateRangeValid, setIsDateRangeValid] = useState(true);
   const [isGiftDropdownOpen, setIsGiftDropdownOpen] = useState(false);
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
 
-  // 선물 내역 더미 데이터
-  const [giftRecords] = useState<GiftRecord[]>([
-    {
-      id: 1,
-      memberName: "김철수",
-      memberNickname: "철수맨",
-      giftName: "장미",
-      giftIcon: "🌹",
-      points: 80,
-      date: "2025-12-17 14:52",
-      profileName: "지수",
-      type: "received",
-    },
-    {
-      id: 2,
-      memberName: "이영희",
-      memberNickname: "영희공주",
-      giftName: "초콜릿",
-      giftIcon: "🍫",
-      points: 240,
-      date: "2025-12-17 13:20",
-      profileName: "수지",
-      type: "sent",
-    },
-    {
-      id: 3,
-      memberName: "최지우",
-      memberNickname: "지우별",
-      giftName: "하트 풍선",
-      giftIcon: "💝",
-      points: 160,
-      date: "2025-12-17 10:50",
-      profileName: "지수",
-      type: "received",
-    },
-    {
-      id: 4,
-      memberName: "김철수",
-      memberNickname: "철수맨",
-      giftName: "샴페인",
-      giftIcon: "🍾",
-      points: 400,
-      date: "2025-12-16 18:30",
-      profileName: "지수",
-      type: "received",
-    },
-    {
-      id: 5,
-      memberName: "박민수",
-      memberNickname: "민수킹",
-      giftName: "장미",
-      giftIcon: "🌹",
-      points: 80,
-      date: "2025-12-16 15:20",
-      profileName: "예린",
-      type: "sent",
-    },
-    {
-      id: 6,
-      memberName: "최지우",
-      memberNickname: "지우별",
-      giftName: "다이아 반지",
-      giftIcon: "💍",
-      points: 800,
-      date: "2025-12-15 20:15",
-      profileName: "지수",
-      type: "received",
-    },
-    {
-      id: 7,
-      memberName: "이영희",
-      memberNickname: "영희공주",
-      giftName: "럭셔리 향수",
-      giftIcon: "🧴",
-      points: 2000,
-      date: "2025-12-15 16:45",
-      profileName: "수지",
-      type: "sent",
-    },
-    {
-      id: 8,
-      memberName: "김철수",
-      memberNickname: "철수맨",
-      giftName: "초콜릿",
-      giftIcon: "🍫",
-      points: 240,
-      date: "2025-12-14 12:30",
-      profileName: "지수",
-      type: "received",
-    },
-  ]);
+  // Supabase hooks for real data
+  const {
+    transactions: dbTransactions,
+    isLoading,
+    error,
+    refetch,
+  } = useAgentGiftTransactions(adminAccount?.id);
+  const { gifts: dbGifts } = useGiftItems();
 
-  // 필터링된 선물 내역
-  const getFilteredGiftRecords = () => {
+  // Transform gifts from Supabase for dropdown
+  const giftsList = useMemo(() => {
+    return dbGifts.map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      points: g.buy_price,
+      icon: g.emoji,
+    }));
+  }, [dbGifts]);
+
+  const selectedGiftLabel = useMemo(() => {
+    if (selectedGiftId === "all") return "기프트 종류";
+    const g = giftsList.find((x) => x.id === selectedGiftId);
+    if (!g) return "기프트 종류";
+    return `${g.icon} ${g.name}`;
+  }, [giftsList, selectedGiftId]);
+
+  // Transform transactions from Supabase
+  const transformedRecords: GiftRecord[] = useMemo(() => {
+    if (dbTransactions.length === 0) return [];
+
+    const formatDateKey = (value: string | null) => {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, "0");
+      const dd = String(date.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    return dbTransactions.map((t: any) => {
+      const profileId =
+        t.receiver_type === "profile"
+          ? (t.receiver_id as string)
+          : t.sender_type === "profile"
+            ? (t.sender_id as string)
+            : "";
+
+      const type: "received" | "sent" =
+        t.sender_type === "user" && t.receiver_type === "profile"
+          ? "received"
+          : t.sender_type === "profile" && t.receiver_type === "user"
+            ? "sent"
+            : t.receiver_type === "profile"
+              ? "received"
+              : "sent";
+
+      return {
+        id: t.id,
+        memberName: t.users?.name || "Unknown",
+        memberNickname: t.users?.nickname || "Unknown",
+        giftId: t.gift_id || t.gifts?.id || "",
+        giftName: t.gifts?.name || "Unknown",
+        giftIcon: t.gifts?.emoji || "🎁",
+        points: Number(t.points_amount || 0),
+        quantity: Number(t.quantity ?? 1),
+        dateKey: formatDateKey(t.created_at),
+        date: t.created_at ? formatKST(t.created_at, "datetime") : "-",
+        profileId,
+        profileName: t.profileName || "Unknown",
+        type,
+      };
+    });
+  }, [dbTransactions]);
+
+  // Use transformed Supabase data
+  const giftRecords = transformedRecords;
+
+  const filteredGiftRecords = useMemo(() => {
     return giftRecords.filter((record) => {
-      // 날짜 필터
       if (startDate || endDate) {
-        const recordDate = record.date.split(" ")[0];
+        const recordDate = record.dateKey;
         if (startDate && recordDate < startDate) return false;
         if (endDate && recordDate > endDate) return false;
       }
 
-      // 기프트 종류 필터
-      if (selectedGift !== "all" && record.giftName !== selectedGift) {
+      if (selectedGiftId !== "all" && record.giftId !== selectedGiftId) {
         return false;
       }
 
-      // 받은/보낸 기프트 필터
+      if (
+        selectedProfileId !== "all" &&
+        record.profileId !== selectedProfileId
+      ) {
+        return false;
+      }
+
       if (giftTypeFilter !== "all" && record.type !== giftTypeFilter) {
         return false;
       }
 
       return true;
     });
-  };
+  }, [
+    endDate,
+    giftRecords,
+    giftTypeFilter,
+    selectedGiftId,
+    selectedProfileId,
+    startDate,
+  ]);
+
+  const profileList = useMemo(() => {
+    const map = new Map<string, string>();
+    giftRecords.forEach((r) => {
+      if (!r.profileId) return;
+      if (!map.has(r.profileId)) map.set(r.profileId, r.profileName);
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [giftRecords]);
+
+  const selectedProfileLabel = useMemo(() => {
+    if (selectedProfileId === "all") return "프로필";
+    const p = profileList.find((x) => x.id === selectedProfileId);
+    return p?.name || "프로필";
+  }, [profileList, selectedProfileId]);
 
   // 받은 기프트 통계
   const getReceivedStats = () => {
-    const received = giftRecords.filter((r) => r.type === "received");
+    const received = filteredGiftRecords.filter((r) => r.type === "received");
     return {
-      count: received.length,
+      count: received.reduce((sum, r) => sum + r.quantity, 0),
       total: received.reduce((sum, r) => sum + r.points, 0),
     };
   };
 
   // 보낸 기프트 통계
   const getSentStats = () => {
-    const sent = giftRecords.filter((r) => r.type === "sent");
+    const sent = filteredGiftRecords.filter((r) => r.type === "sent");
     return {
-      count: sent.length,
+      count: sent.reduce((sum, r) => sum + r.quantity, 0),
       total: sent.reduce((sum, r) => sum + r.points, 0),
     };
   };
@@ -171,18 +189,21 @@ export function AgentGiftsPage() {
 
   // 받은 기프트 인벤토리 집계
   const getInventory = () => {
-    const received = giftRecords.filter((r) => r.type === "received");
-    const inventory = new Map<string, { icon: string; count: number; totalPoints: number }>();
+    const received = filteredGiftRecords.filter((r) => r.type === "received");
+    const inventory = new Map<
+      string,
+      { icon: string; count: number; totalPoints: number }
+    >();
 
     received.forEach((record) => {
       const existing = inventory.get(record.giftName);
       if (existing) {
-        existing.count += 1;
+        existing.count += record.quantity;
         existing.totalPoints += record.points;
       } else {
         inventory.set(record.giftName, {
           icon: record.giftIcon,
-          count: 1,
+          count: record.quantity,
           totalPoints: record.points,
         });
       }
@@ -208,6 +229,25 @@ export function AgentGiftsPage() {
           </p>
         </div>
 
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-red-300 text-sm font-medium">
+                  기프트 내역을 불러오지 못했습니다
+                </p>
+                <p className="text-red-200/80 text-xs mt-1">{error.message}</p>
+              </div>
+              <button
+                onClick={() => void refetch()}
+                className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-100 rounded-lg text-sm transition-colors"
+              >
+                재시도
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 통계 한 줄 */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <div className="flex items-center gap-8 text-sm">
@@ -217,7 +257,8 @@ export function AgentGiftsPage() {
             >
               <span className="text-gray-400">받은 기프트:</span>
               <span className="text-green-400 font-semibold">
-                {receivedStats.total.toLocaleString()}P ({receivedStats.count}개)
+                {receivedStats.total.toLocaleString()}P ({receivedStats.count}
+                개)
               </span>
               <Package size={16} className="text-green-400" />
             </button>
@@ -236,42 +277,17 @@ export function AgentGiftsPage() {
           <div className="flex flex-col md:flex-row gap-4">
             {/* 날짜 필터 */}
             <div className="flex items-center gap-2 flex-1">
-              <Calendar size={16} className="text-gray-400" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  const newStart = e.target.value;
-                  setStartDate(newStart);
-                  if (endDate) {
-                    setIsDateRangeValid(newStart <= endDate);
-                  }
-                }}
-                className={`bg-gray-800 border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 ${
-                  !isDateRangeValid ? "border-red-500" : "border-gray-700"
-                }`}
-              />
-              <span className="text-gray-400">~</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  const newEnd = e.target.value;
-                  setEndDate(newEnd);
-                  if (startDate) {
-                    setIsDateRangeValid(startDate <= newEnd);
-                  }
-                }}
-                className={`bg-gray-800 border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 ${
-                  !isDateRangeValid ? "border-red-500" : "border-gray-700"
-                }`}
+              <DateRangePicker
+                startDate={startDate}
+                endDate={endDate}
+                onStartDateChange={setStartDate}
+                onEndDateChange={setEndDate}
               />
               {(startDate || endDate) && (
                 <button
                   onClick={() => {
                     setStartDate("");
                     setEndDate("");
-                    setIsDateRangeValid(true);
                   }}
                   className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
                 >
@@ -320,43 +336,83 @@ export function AgentGiftsPage() {
                 onClick={() => setIsGiftDropdownOpen(!isGiftDropdownOpen)}
                 className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 min-w-[150px] justify-between"
               >
-                <span>
-                  {selectedGift === "all"
-                    ? "기프트 종류"
-                    : GIFTS.find((g) => g.name === selectedGift)?.icon +
-                      " " +
-                      selectedGift}
-                </span>
+                <span>{selectedGiftLabel}</span>
                 <ChevronDown size={16} />
               </button>
               {isGiftDropdownOpen && (
                 <div className="absolute top-full mt-1 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 min-w-[150px]">
                   <button
                     onClick={() => {
-                      setSelectedGift("all");
+                      setSelectedGiftId("all");
                       setIsGiftDropdownOpen(false);
                     }}
                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors first:rounded-t-lg ${
-                      selectedGift === "all" ? "text-indigo-400" : "text-white"
+                      selectedGiftId === "all"
+                        ? "text-indigo-400"
+                        : "text-white"
                     }`}
                   >
                     전체
                   </button>
-                  {GIFTS.map((gift) => (
+                  {giftsList.map((gift) => (
                     <button
                       key={gift.id}
                       onClick={() => {
-                        setSelectedGift(gift.name);
+                        setSelectedGiftId(gift.id);
                         setIsGiftDropdownOpen(false);
                       }}
                       className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors last:rounded-b-lg ${
-                        selectedGift === gift.name
+                        selectedGiftId === gift.id
                           ? "text-indigo-400"
                           : "text-white"
                       }`}
                     >
                       <span className="mr-2">{gift.icon}</span>
                       {gift.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 프로필 드롭다운 */}
+            <div className="relative">
+              <button
+                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 min-w-[150px] justify-between"
+              >
+                <span>{selectedProfileLabel}</span>
+                <ChevronDown size={16} />
+              </button>
+              {isProfileDropdownOpen && (
+                <div className="absolute top-full mt-1 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 min-w-[150px]">
+                  <button
+                    onClick={() => {
+                      setSelectedProfileId("all");
+                      setIsProfileDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors first:rounded-t-lg ${
+                      selectedProfileId === "all"
+                        ? "text-indigo-400"
+                        : "text-white"
+                    }`}
+                  >
+                    전체
+                  </button>
+                  {profileList.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedProfileId(p.id);
+                        setIsProfileDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors last:rounded-b-lg ${
+                        selectedProfileId === p.id
+                          ? "text-indigo-400"
+                          : "text-white"
+                      }`}
+                    >
+                      {p.name}
                     </button>
                   ))}
                 </div>
@@ -397,7 +453,16 @@ export function AgentGiftsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {getFilteredGiftRecords().length === 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="text-center text-gray-500 py-8 text-sm"
+                    >
+                      불러오는 중...
+                    </td>
+                  </tr>
+                ) : filteredGiftRecords.length === 0 ? (
                   <tr>
                     <td
                       colSpan={6}
@@ -407,7 +472,7 @@ export function AgentGiftsPage() {
                     </td>
                   </tr>
                 ) : (
-                  getFilteredGiftRecords().map((record) => (
+                  filteredGiftRecords.map((record) => (
                     <tr
                       key={record.id}
                       className="hover:bg-gray-800/50 transition-colors"
@@ -435,7 +500,10 @@ export function AgentGiftsPage() {
                       <td className="text-white text-sm px-4 py-3">
                         <span className="flex items-center gap-2">
                           <span className="text-xl">{record.giftIcon}</span>
-                          <span>{record.giftName}</span>
+                          <span>
+                            {record.giftName}
+                            {record.quantity > 1 ? ` x${record.quantity}` : ""}
+                          </span>
                         </span>
                       </td>
                       <td
@@ -468,7 +536,8 @@ export function AgentGiftsPage() {
                   받은 기프트 인벤토리
                 </h3>
                 <p className="text-gray-400 text-sm mt-1">
-                  총 {receivedStats.total.toLocaleString()}P · {receivedStats.count}개 기프트
+                  총 {receivedStats.total.toLocaleString()}P ·{" "}
+                  {receivedStats.count}개 기프트
                 </p>
               </div>
               <button

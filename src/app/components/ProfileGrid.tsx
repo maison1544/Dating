@@ -1,14 +1,16 @@
-import { ProfileCard } from './ProfileCard';
-import { ProfileDetailModal } from './ProfileDetailModal';
-import { useState } from 'react';
-import { useProfiles } from '../contexts/ProfileContext';
+import { ProfileCard } from "./ProfileCard";
+import { ProfileDetailModal } from "./ProfileDetailModal";
+import { useState } from "react";
+import { useProfiles } from "../contexts/ProfileContext";
 
 export function ProfileGrid() {
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const { profiles } = useProfiles();
-  
-  // 홈화면에서는 온라인 상태인 사람만 표시
-  const onlineProfiles = profiles.filter(profile => profile.online);
+
+  const sortedProfiles = [...profiles].sort((a, b) => {
+    if (a.online === b.online) return 0;
+    return a.online ? -1 : 1;
+  });
 
   return (
     <section className="py-16 px-4 sm:px-6 lg:px-8 bg-black">
@@ -31,8 +33,12 @@ export function ProfileGrid() {
 
         {/* Grid - Responsive: 2 columns on mobile, 2 on tablet, 3 on desktop */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {onlineProfiles.map((profile) => (
-            <div key={profile.id} onClick={() => setSelectedProfile(profile)} className="cursor-pointer">
+          {sortedProfiles.map((profile) => (
+            <div
+              key={profile.id}
+              onClick={() => setSelectedProfile(profile)}
+              className="cursor-pointer"
+            >
               <ProfileCard {...profile} />
             </div>
           ))}

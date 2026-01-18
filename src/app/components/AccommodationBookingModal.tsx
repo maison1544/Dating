@@ -1,37 +1,46 @@
-import { X, MapPin, Calendar, Users, Check } from 'lucide-react';
-import { useState } from 'react';
+import { X, Calendar, Users, Check } from "lucide-react";
+import { useState } from "react";
+import { useAlert } from "../contexts/AlertContext";
 
 interface AccommodationBookingModalProps {
   isOpen: boolean;
   onClose: () => void;
   accommodation: {
     name: string;
-    location: string;
     price: number;
   };
 }
 
-export function AccommodationBookingModal({ isOpen, onClose, accommodation }: AccommodationBookingModalProps) {
-  const [date, setDate] = useState('');
-  const [people, setPeople] = useState('2');
+export function AccommodationBookingModal({
+  isOpen,
+  onClose,
+  accommodation,
+}: AccommodationBookingModalProps) {
+  const [date, setDate] = useState("");
+  const [people, setPeople] = useState("2");
+  const { showAlert } = useAlert();
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // 예약 로직
-    alert('예약이 완료되었습니다!');
+    showAlert({
+      title: "예약 완료",
+      message: "예약이 완료되었습니다!",
+      type: "success",
+    });
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="relative bg-gray-900 rounded-lg max-w-md w-full mx-4 border border-gray-800">
         {/* Close Button */}
@@ -50,15 +59,6 @@ export function AccommodationBookingModal({ isOpen, onClose, accommodation }: Ac
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Location */}
-          <div>
-            <label className="text-gray-400 text-sm mb-2 block">지역</label>
-            <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-2">
-              <MapPin size={16} className="text-gray-400" />
-              <span className="text-white">{accommodation.location}</span>
-            </div>
-          </div>
-
           {/* Date */}
           <div>
             <label className="text-gray-400 text-sm mb-2 block">날짜</label>
@@ -70,7 +70,10 @@ export function AccommodationBookingModal({ isOpen, onClose, accommodation }: Ac
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
                 required
               />
-              <Calendar size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Calendar
+                size={16}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
             </div>
           </div>
 
@@ -87,18 +90,25 @@ export function AccommodationBookingModal({ isOpen, onClose, accommodation }: Ac
               <option value="3">3명</option>
               <option value="4">4명</option>
             </select>
-            <Users size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Users
+              size={16}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
           </div>
 
           {/* Price */}
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-gray-400">1박 요금</span>
-              <span className="text-white">{accommodation.price.toLocaleString()}원</span>
+              <span className="text-white">
+                {accommodation.price.toLocaleString()}원
+              </span>
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-gray-700">
               <span className="text-white">총 금액</span>
-              <span className="text-pink-500 text-xl">{accommodation.price.toLocaleString()}원</span>
+              <span className="text-pink-500 text-xl">
+                {accommodation.price.toLocaleString()}원
+              </span>
             </div>
           </div>
 

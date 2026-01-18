@@ -1,101 +1,112 @@
 import { AdminLayout } from "../components/AdminLayout";
 import { useState } from "react";
-import { Calendar } from "lucide-react";
+import {
+  Activity,
+  Calendar,
+  TrendingUp,
+  TrendingDown,
+  Users,
+  Wallet,
+} from "lucide-react";
+import { DateRangePicker } from "../components/DateRangePicker";
+import { useAdminDashboardData, useDashboardStats } from "../hooks/useSupabase";
+import { formatKST } from "../../lib/dateUtils";
 
 export function AdminDashboardPage() {
-  const [period, setPeriod] = useState<
-    "today" | "week" | "month" | "custom"
-  >("today");
+  const [period, setPeriod] = useState<"today" | "week" | "month" | "custom">(
+    "today",
+  );
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // 기간별 데이터
-  const statsData = {
-    today: {
-      date: "2025-12-15",
-      newMembers: 45,
-      approvedMembers: 45,
-      rejectedMembers: 4,
-      deposits: 520000,
-      depositCount: 28,
-      withdrawals: 50000,
-      withdrawalCount: 5,
-      totalRolling: 85000,
-      ladderRolling: 45000,
-      powerballRolling: 40000,
-      ladderRevenue: 180000,
-      powerballRevenue: 150000,
-      itemPurchase: 120000,
-      itemPurchaseCount: 15,
-      itemRevenue: 120000,
-      miniGameRevenue: 330000,
-    },
-    week: {
-      date: "2025-12-09 ~ 2025-12-15",
-      newMembers: 312,
-      approvedMembers: 298,
-      rejectedMembers: 28,
-      deposits: 3640000,
-      depositCount: 196,
-      withdrawals: 350000,
-      withdrawalCount: 35,
-      totalRolling: 595000,
-      ladderRolling: 315000,
-      powerballRolling: 280000,
-      ladderRevenue: 1260000,
-      powerballRevenue: 1050000,
-      itemPurchase: 840000,
-      itemPurchaseCount: 105,
-      itemRevenue: 840000,
-      miniGameRevenue: 2310000,
-    },
-    month: {
-      date: "2025-11-15 ~ 2025-12-15",
-      newMembers: 1156,
-      approvedMembers: 1102,
-      rejectedMembers: 104,
-      deposits: 15600000,
-      depositCount: 840,
-      withdrawals: 1500000,
-      withdrawalCount: 150,
-      totalRolling: 2340000,
-      ladderRolling: 1404000,
-      powerballRolling: 936000,
-      ladderRevenue: 5400000,
-      powerballRevenue: 4500000,
-      itemPurchase: 3600000,
-      itemPurchaseCount: 450,
-      itemRevenue: 3600000,
-      miniGameRevenue: 9900000,
-    },
-    custom: {
-      date:
-        startDate && endDate
+  // Supabase에서 통계 데이터 가져오기
+  const { stats } = useDashboardStats(period, startDate, endDate);
+  const {
+    cards,
+    revenueTrend,
+    gameBetting,
+    memberStatus,
+    recentActivities,
+    isLoading,
+    error,
+    refetch,
+  } = useAdminDashboardData(period, startDate, endDate);
+
+  // 날짜 표시 계산
+  const getDateDisplay = () => {
+    const now = new Date();
+    switch (period) {
+      case "today":
+        return formatKST(now, "date");
+      case "week":
+        const weekAgo = new Date(now);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return `${formatKST(weekAgo, "date")} ~ ${formatKST(now, "date")}`;
+      case "month":
+        const monthAgo = new Date(now);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        return `${formatKST(monthAgo, "date")} ~ ${formatKST(now, "date")}`;
+      case "custom":
+        return startDate && endDate
           ? `${startDate} ~ ${endDate}`
-          : "날짜를 선택하세요",
-      newMembers: 78,
-      approvedMembers: 74,
-      rejectedMembers: 8,
-      deposits: 890000,
-      depositCount: 48,
-      withdrawals: 120000,
-      withdrawalCount: 12,
-      totalRolling: 156000,
-      ladderRolling: 93600,
-      powerballRolling: 62400,
-      ladderRevenue: 390000,
-      powerballRevenue: 325000,
-      itemPurchase: 240000,
-      itemPurchaseCount: 30,
-      itemRevenue: 240000,
-      miniGameRevenue: 715000,
-    },
+          : "날짜를 선택하세요";
+      default:
+        return formatKST(now, "date");
+    }
   };
 
-  const currentStats = statsData[period];
-  
   // 전체 매출 = 입금액 - 출금액
-  const totalRevenue = currentStats.deposits - currentStats.withdrawals;
+  const totalRevenue = stats.deposits - stats.withdrawals;
+
+  const formatMoney = (value: number) => {
+    const sign = value < 0 ? "-" : "";
+    return `${sign}${Math.abs(Math.round(value)).toLocaleString()}원`;
+  };
+
+  const formatCount = (value: number) =>
+    `${Math.round(value).toLocaleString()}명`;
+
+  const percentChange = (value: number, prev: number) => {
+    if (prev === 0) {
+      if (value === 0) return 0;
+      return 100;
+    }
+    return ((value - prev) / prev) * 100;
+  };
+
+  const renderDelta = (value: number, prev: number) => {
+    const delta = value - prev;
+    const pct = percentChange(value, prev);
+    const isUp = delta >= 0;
+    const Icon = isUp ? TrendingUp : TrendingDown;
+    return (
+      <div
+        className={`inline-flex items-center gap-1 text-xs ${
+          isUp ? "text-emerald-300" : "text-rose-300"
+        }`}
+      >
+        <Icon size={14} />
+        <span>
+          {delta >= 0 ? "+" : "-"}
+          {Math.abs(Math.round(delta)).toLocaleString()} ({pct >= 0 ? "+" : ""}
+          {pct.toFixed(1)}%)
+        </span>
+      </div>
+    );
+  };
+
+  const maxTrend = Math.max(
+    1,
+    ...revenueTrend.map((d) => Math.max(d.deposits, d.withdrawals)),
+  );
+  const gameTotal = Math.max(1, gameBetting.powerball);
+  const memberTotal = Math.max(
+    1,
+    memberStatus.active +
+      memberStatus.pending +
+      memberStatus.suspended +
+      memberStatus.deleted,
+  );
 
   return (
     <AdminLayout>
@@ -162,26 +173,328 @@ export function AdminDashboardPage() {
               {/* Custom Date Range */}
               {period === "custom" && (
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 bg-gray-800/40 border border-gray-700/30 rounded-lg p-2 w-full sm:w-auto">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) =>
-                      setStartDate(e.target.value)
-                    }
-                    className="bg-gray-800/60 border border-gray-600/30 rounded-lg px-3 py-2 text-gray-200 text-sm focus:outline-none focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/50 w-full sm:w-auto"
-                  />
-                  <span className="text-gray-400 hidden sm:inline">
-                    ~
-                  </span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="bg-gray-800/60 border border-gray-600/30 rounded-lg px-3 py-2 text-gray-200 text-sm focus:outline-none focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/50 w-full sm:w-auto"
+                  <DateRangePicker
+                    startDate={startDate}
+                    endDate={endDate}
+                    onStartDateChange={setStartDate}
+                    onEndDateChange={setEndDate}
                   />
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 shadow-xl">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-gray-400 text-xs">신규 회원</div>
+                  <div className="text-gray-100 text-2xl mt-1">
+                    {formatCount(cards.newMembers.value)}
+                  </div>
+                  <div className="mt-2">
+                    {renderDelta(cards.newMembers.value, cards.newMembers.prev)}
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-lg bg-indigo-500/15 border border-indigo-400/20 flex items-center justify-center">
+                  <Users className="text-indigo-300" size={18} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 shadow-xl">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-gray-400 text-xs">입금</div>
+                  <div className="text-gray-100 text-2xl mt-1">
+                    {formatMoney(cards.deposits.value)}
+                  </div>
+                  <div className="mt-2">
+                    {renderDelta(cards.deposits.value, cards.deposits.prev)}
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/15 border border-emerald-400/20 flex items-center justify-center">
+                  <Wallet className="text-emerald-300" size={18} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 shadow-xl">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-gray-400 text-xs">출금</div>
+                  <div className="text-gray-100 text-2xl mt-1">
+                    {formatMoney(cards.withdrawals.value)}
+                  </div>
+                  <div className="mt-2">
+                    {renderDelta(
+                      cards.withdrawals.value,
+                      cards.withdrawals.prev,
+                    )}
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-lg bg-rose-500/15 border border-rose-400/20 flex items-center justify-center">
+                  <TrendingDown className="text-rose-300" size={18} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 shadow-xl">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-gray-400 text-xs">전체 매출</div>
+                  <div className="text-gray-100 text-2xl mt-1">
+                    {formatMoney(cards.totalRevenue.value)}
+                  </div>
+                  <div className="mt-2">
+                    {renderDelta(
+                      cards.totalRevenue.value,
+                      cards.totalRevenue.prev,
+                    )}
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-lg bg-amber-500/15 border border-amber-400/20 flex items-center justify-center">
+                  <TrendingUp className="text-amber-300" size={18} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Loading/Error */}
+          {error && (
+            <div className="bg-rose-500/10 border border-rose-400/20 rounded-lg p-4 text-rose-200 text-sm flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Activity size={16} />
+                <span>대시보드 데이터를 불러오지 못했습니다.</span>
+              </div>
+              <button
+                onClick={() => refetch()}
+                className="px-3 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 text-sm"
+              >
+                다시 시도
+              </button>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 animate-pulse">
+                <div className="h-4 w-40 bg-gray-700/40 rounded" />
+                <div className="mt-4 h-40 bg-gray-700/20 rounded" />
+              </div>
+              <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 animate-pulse">
+                <div className="h-4 w-40 bg-gray-700/40 rounded" />
+                <div className="mt-4 h-40 bg-gray-700/20 rounded" />
+              </div>
+            </div>
+          )}
+
+          {!isLoading && !error && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Trend */}
+              <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 shadow-xl">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="text-gray-100">최근 7일 입/출금 추이</div>
+                    <div className="text-xs text-gray-400">
+                      입금(인디고) / 출금(로즈)
+                    </div>
+                  </div>
+                </div>
+                {revenueTrend.length === 0 ? (
+                  <div className="text-gray-400 text-sm py-12 text-center">
+                    표시할 데이터가 없습니다
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {revenueTrend.map((d) => (
+                      <div key={d.date} className="flex items-center gap-3">
+                        <div className="w-20 text-xs text-gray-400">
+                          {d.date.slice(5)}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 flex-1 bg-gray-900/40 rounded overflow-hidden">
+                              <div
+                                className="h-2 bg-indigo-500/70"
+                                style={{
+                                  width: `${(d.deposits / maxTrend) * 100}%`,
+                                }}
+                              />
+                            </div>
+                            <div className="text-xs text-indigo-200 w-24 text-right">
+                              +{Math.round(d.deposits).toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="h-2 flex-1 bg-gray-900/40 rounded overflow-hidden">
+                              <div
+                                className="h-2 bg-rose-500/70"
+                                style={{
+                                  width: `${(d.withdrawals / maxTrend) * 100}%`,
+                                }}
+                              />
+                            </div>
+                            <div className="text-xs text-rose-200 w-24 text-right">
+                              -{Math.round(d.withdrawals).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Breakdown */}
+              <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 shadow-xl">
+                <div className="text-gray-100">오늘 게임 베팅 분포</div>
+                <div className="text-xs text-gray-400">파워볼</div>
+
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-300">파워볼</span>
+                      <span className="text-gray-100">
+                        {Math.round(gameBetting.powerball).toLocaleString()}원
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-900/40 rounded overflow-hidden mt-2">
+                      <div
+                        className="h-2 bg-violet-500/70"
+                        style={{
+                          width: `${
+                            (gameBetting.powerball / gameTotal) * 100
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="text-gray-100">회원 상태</div>
+                  <div className="mt-3 space-y-2">
+                    {(
+                      [
+                        ["active", "활성", "bg-emerald-500/70"],
+                        ["pending", "대기", "bg-amber-500/70"],
+                        ["suspended", "정지", "bg-rose-500/70"],
+                        ["deleted", "삭제", "bg-gray-500/70"],
+                      ] as const
+                    ).map(([key, label, barClass]) => {
+                      const value = memberStatus[key];
+                      return (
+                        <div key={key}>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-300">{label}</span>
+                            <span className="text-gray-100">
+                              {Math.round(value).toLocaleString()}명
+                            </span>
+                          </div>
+                          <div className="h-2 bg-gray-900/40 rounded overflow-hidden mt-2">
+                            <div
+                              className={`h-2 ${barClass}`}
+                              style={{
+                                width: `${(value / memberTotal) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Recent Activity */}
+          <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg overflow-hidden shadow-xl">
+            <div className="px-4 py-3 border-b border-gray-700/30 bg-gray-800/60 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="text-gray-300" size={16} />
+                <span className="text-gray-100">최근 활동</span>
+                <span className="text-xs text-gray-400">최근 10건</span>
+              </div>
+              <button
+                onClick={() => refetch()}
+                className="text-xs text-gray-300 hover:text-gray-100 px-3 py-2 rounded-lg hover:bg-gray-700/30"
+              >
+                새로고침
+              </button>
+            </div>
+            {isLoading ? (
+              <div className="p-6 text-gray-400 text-sm">불러오는 중...</div>
+            ) : recentActivities.length === 0 ? (
+              <div className="p-6 text-gray-400 text-sm">
+                표시할 최근 활동이 없습니다
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="text-sm w-full">
+                  <thead>
+                    <tr className="border-b border-gray-700/30 bg-gray-800/40">
+                      <th className="px-4 py-3 text-left text-xs text-gray-400 whitespace-nowrap">
+                        시간
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs text-gray-400 whitespace-nowrap">
+                        유형
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs text-gray-400 whitespace-nowrap">
+                        사용자
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs text-gray-400 whitespace-nowrap">
+                        금액
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs text-gray-400 whitespace-nowrap">
+                        비고
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentActivities.map((a) => {
+                      const time = a.created_at
+                        ? formatKST(a.created_at, "datetime")
+                        : "-";
+                      const amount =
+                        typeof a.amount === "number"
+                          ? Math.round(a.amount)
+                          : null;
+                      return (
+                        <tr
+                          key={a.id}
+                          className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors"
+                        >
+                          <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                            {time}
+                          </td>
+                          <td className="px-4 py-3 text-gray-100 whitespace-nowrap">
+                            {a.meta || a.type}
+                          </td>
+                          <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                            {a.userName}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-100 whitespace-nowrap">
+                            {amount === null
+                              ? "-"
+                              : a.type === "withdraw"
+                                ? `-${Math.abs(amount).toLocaleString()}`
+                                : a.type === "charge"
+                                  ? `+${Math.abs(amount).toLocaleString()}`
+                                  : amount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-gray-400 whitespace-nowrap">
+                            {a.status || "-"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Statistics Table */}
@@ -204,7 +517,7 @@ export function AdminDashboardPage() {
                       날짜
                     </td>
                     <td className="px-4 py-3 text-gray-100">
-                      {currentStats.date}
+                      {getDateDisplay()}
                     </td>
                   </tr>
                   <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
@@ -212,11 +525,9 @@ export function AdminDashboardPage() {
                       신규 회원
                     </td>
                     <td className="px-4 py-3 text-gray-100">
-                      {currentStats.newMembers.toLocaleString()}
-                      명 (승인{" "}
-                      {currentStats.approvedMembers.toLocaleString()}
-                      명, 거절{" "}
-                      {currentStats.rejectedMembers.toLocaleString()}
+                      {stats.newMembers.toLocaleString()}명 (승인{" "}
+                      {stats.approvedMembers.toLocaleString()}
+                      명, 거절 {stats.rejectedMembers.toLocaleString()}
                       명)
                     </td>
                   </tr>
@@ -225,9 +536,8 @@ export function AdminDashboardPage() {
                       입금액
                     </td>
                     <td className="px-4 py-3 text-gray-100">
-                      +{currentStats.deposits.toLocaleString()}
-                      원 (
-                      {currentStats.depositCount.toLocaleString()}
+                      +{stats.deposits.toLocaleString()}원 (
+                      {stats.depositCount.toLocaleString()}
                       건)
                     </td>
                   </tr>
@@ -236,10 +546,8 @@ export function AdminDashboardPage() {
                       출금액
                     </td>
                     <td className="px-4 py-3 text-gray-100">
-                      -
-                      {currentStats.withdrawals.toLocaleString()}
-                      원 (
-                      {currentStats.withdrawalCount.toLocaleString()}
+                      -{stats.withdrawals.toLocaleString()}원 (
+                      {stats.withdrawalCount.toLocaleString()}
                       건)
                     </td>
                   </tr>
@@ -248,23 +556,9 @@ export function AdminDashboardPage() {
                       미니게임 전체 롤링/매출
                     </td>
                     <td className="px-4 py-3 text-gray-100">
-                      {currentStats.totalRolling.toLocaleString()}
-                      원 /{" "}
-                      {currentStats.miniGameRevenue >= 0 ? '+' : ''}
-                      {currentStats.miniGameRevenue.toLocaleString()}
-                      원
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      사다리 롤링/매출
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      {currentStats.ladderRolling.toLocaleString()}
-                      원 /{" "}
-                      {currentStats.ladderRevenue >= 0 ? '+' : ''}
-                      {currentStats.ladderRevenue.toLocaleString()}
-                      원
+                      {stats.totalRolling.toLocaleString()}원 /{" "}
+                      {stats.miniGameRevenue >= 0 ? "+" : ""}
+                      {stats.miniGameRevenue.toLocaleString()}원
                     </td>
                   </tr>
                   <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
@@ -272,11 +566,9 @@ export function AdminDashboardPage() {
                       파워볼 롤링/매출
                     </td>
                     <td className="px-4 py-3 text-gray-100">
-                      {currentStats.powerballRolling.toLocaleString()}
-                      원 /{" "}
-                      {currentStats.powerballRevenue >= 0 ? '+' : ''}
-                      {currentStats.powerballRevenue.toLocaleString()}
-                      원
+                      {stats.powerballRolling.toLocaleString()}원 /{" "}
+                      {stats.powerballRevenue >= 0 ? "+" : ""}
+                      {stats.powerballRevenue.toLocaleString()}원
                     </td>
                   </tr>
                   <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
@@ -284,9 +576,8 @@ export function AdminDashboardPage() {
                       아이템 구매 금액
                     </td>
                     <td className="px-4 py-3 text-gray-100">
-                      {currentStats.itemPurchase.toLocaleString()}
-                      원 (
-                      {currentStats.itemPurchaseCount.toLocaleString()}
+                      {stats.itemPurchase.toLocaleString()}원 (
+                      {stats.itemPurchaseCount.toLocaleString()}
                       건)
                     </td>
                   </tr>
@@ -295,9 +586,8 @@ export function AdminDashboardPage() {
                       전체 매출
                     </td>
                     <td className="px-4 py-3 text-gray-100">
-                      {totalRevenue >= 0 ? '+' : ''}
-                      {totalRevenue.toLocaleString()}
-                      원
+                      {totalRevenue >= 0 ? "+" : ""}
+                      {totalRevenue.toLocaleString()}원
                     </td>
                   </tr>
                 </tbody>
