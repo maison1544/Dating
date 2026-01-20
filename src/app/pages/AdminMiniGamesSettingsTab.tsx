@@ -381,7 +381,8 @@ export function AdminMiniGamesSettingsTab() {
     refetchLadder();
   };
   const isLoading = isPowerballLoading || isLadderLoading;
-  const hasLoadedOnce = !!powerballSettings && !!ladderSettings;
+  const _hasLoadedOnce = !!powerballSettings && !!ladderSettings;
+  void _hasLoadedOnce;
 
   return (
     <div className="space-y-3">

@@ -78,7 +78,7 @@ export function AgentDashboardPage() {
   const [revenueTypeFilter, setRevenueTypeFilter] = useState<
     "all" | "충전" | "출금"
   >("all");
-  const [isRevenueDateRangeValid, setIsRevenueDateRangeValid] = useState(true);
+  const [, setIsRevenueDateRangeValid] = useState(true);
 
   // 에이전트 정보 from Supabase
   const agentInfo = {

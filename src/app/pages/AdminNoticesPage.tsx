@@ -61,7 +61,7 @@ export function AdminNoticesPage() {
     id: n.id,
     title: n.title || "",
     content: n.content || "",
-    author: n.author || "관리자",
+    author: n.admins?.username || "관리자",
     created_at: n.created_at,
     is_pinned: n.is_pinned || false,
   }));
@@ -69,7 +69,7 @@ export function AdminNoticesPage() {
   const filteredNotices = notices.filter(
     (notice) =>
       notice.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      notice.content.toLowerCase().includes(searchTerm.toLowerCase())
+      notice.content.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const formatDate = (dateString: string) => {
@@ -122,6 +122,9 @@ export function AdminNoticesPage() {
         content: formData.content,
         author_id: adminAccount?.id ?? null,
         is_pinned: formData.is_pinned,
+        category: null,
+        is_published: true,
+        view_count: 0,
       });
     }
 

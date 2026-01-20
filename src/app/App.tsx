@@ -145,10 +145,6 @@ export default function App() {
                           />
                           <Route path="/ranking" element={<RankingPage />} />
                           <Route
-                            path="/accommodation"
-                            element={<RankingPage />}
-                          />
-                          <Route
                             path="/point"
                             element={
                               <RequireUser>

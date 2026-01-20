@@ -21,12 +21,6 @@ export function NoticePage() {
     return formatKST(dateString, "date");
   };
 
-  const resolveAuthorLabel = (notice: any) => {
-    const adminName = notice?.admins?.name;
-    if (typeof adminName === "string" && adminName.trim()) return adminName;
-    return "관리자";
-  };
-
   const incrementNoticeView = useCallback(
     async (noticeId: string) => {
       if (isAuthLoading) return;

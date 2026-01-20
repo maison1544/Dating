@@ -31,7 +31,7 @@ export function AgentGiftsPage() {
   const [giftTypeFilter, setGiftTypeFilter] = useState<
     "all" | "received" | "sent"
   >("all");
-  const [isDateRangeValid, setIsDateRangeValid] = useState(true);
+  const [isDateRangeValid] = useState(true);
   const [isGiftDropdownOpen, setIsGiftDropdownOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [showInventoryModal, setShowInventoryModal] = useState(false);

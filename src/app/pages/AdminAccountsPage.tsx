@@ -87,7 +87,7 @@ export function AdminAccountsPage() {
   const [revenueTypeFilter, setRevenueTypeFilter] = useState<
     "all" | "충전" | "출금"
   >("all");
-  const [isRevenueDateRangeValid, setIsRevenueDateRangeValid] = useState(true);
+  const [, setIsRevenueDateRangeValid] = useState(true);
   const [memberSortFilter, setMemberSortFilter] = useState<"date" | "revenue">(
     "date",
   );
@@ -126,10 +126,11 @@ export function AdminAccountsPage() {
     "detach" | "deactivate"
   >("detach");
 
-  const validateDateRange = (start: string, end: string) => {
+  const _validateDateRange = (start: string, end: string) => {
     if (start && end) return start <= end;
     return true;
   };
+  void _validateDateRange;
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "-";

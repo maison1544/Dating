@@ -145,7 +145,7 @@ export function useGameRounds(gameType: "powerball" | "ladder") {
       .select("*")
       .eq("game_type", gameType)
       .in("status", ["betting", "playing"])
-      .order("round_number", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(1)
       .single();
 
@@ -162,7 +162,7 @@ export function useGameRounds(gameType: "powerball" | "ladder") {
       .select("*")
       .eq("game_type", gameType)
       .in("status", ["completed", "settled"])
-      .order("round_number", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(20);
 
     if (error) {
@@ -226,7 +226,7 @@ export function useGameHistory(gameType: "powerball" | "ladder") {
       .select("*")
       .eq("game_type", gameType)
       .in("status", ["completed", "settled"])
-      .order("round_number", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(20);
 
     if (error) {
@@ -2063,7 +2063,7 @@ export function useAllNotices() {
     setIsLoading(true);
     const { data, error } = await supabase
       .from("notices")
-      .select("*")
+      .select("*, admins:author_id(username)")
       .order("is_pinned", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -4293,7 +4293,7 @@ export function useGameRoundsEdge(gameType?: string) {
       let query = supabase
         .from("game_rounds")
         .select("*")
-        .order("round_number", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(20);
 
       if (gameType) {
@@ -4370,7 +4370,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         .from("game_rounds_secure")
         .select("*")
         .eq("game_type", gameType)
-        .order("round_number", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -4379,7 +4379,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         .select("*")
         .eq("game_type", gameType)
         .in("status", ["completed", "settled"])
-        .order("round_number", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -4776,6 +4776,67 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
     return () => clearInterval(timer);
   }, []); // 의존성 배열 비움 - 마운트 시 1회 설정
 
+  // 활성 라운드가 없을 때 새 라운드 생성 트리거
+  const noActiveRoundTriggerRef = useRef(false);
+  const lastNoActiveRoundTriggerRef = useRef(0);
+
+  useEffect(() => {
+    // 로딩 중이면 무시
+    if (isLoading) return;
+
+    // 이미 트리거 진행 중이면 무시
+    if (triggerProcessingRef.current || noActiveRoundTriggerRef.current) return;
+
+    // 활성 라운드가 없는 경우: round가 null이거나 status가 completed/settled
+    const noActiveRound =
+      !round || round.status === "completed" || round.status === "settled";
+
+    if (noActiveRound) {
+      const now = Date.now();
+      // 5초 이내 중복 호출 방지
+      if (now - lastNoActiveRoundTriggerRef.current < 5000) return;
+
+      noActiveRoundTriggerRef.current = true;
+      lastNoActiveRoundTriggerRef.current = now;
+
+      console.log(
+        `[GameTick] No active round detected, calling game_tick_client to create new round`,
+      );
+
+      const createNewRound = async () => {
+        try {
+          const result = await supabase.rpc("game_tick_client", {
+            p_game_type: gameType,
+          });
+
+          if (result.error) {
+            console.error(
+              "game_tick_client error (no active round):",
+              result.error,
+            );
+          } else {
+            const data = result.data as {
+              created?: any[];
+            } | null;
+
+            if (data?.created && data.created.length > 0) {
+              console.log(`[GameTick] New round created:`, data.created);
+            }
+
+            // 새 라운드 데이터 fetch
+            fetchCurrentRound();
+          }
+        } catch (e) {
+          console.error("game_tick_client exception (no active round):", e);
+        } finally {
+          noActiveRoundTriggerRef.current = false;
+        }
+      };
+
+      createNewRound();
+    }
+  }, [isLoading, round, gameType, fetchCurrentRound]);
+
   return {
     round,
     completedRound,
@@ -4804,7 +4865,7 @@ export function useBettingRoundBetCount(gameType: "powerball" | "ladder") {
         .eq("game_type", gameType)
         .eq("status", "betting")
         .gte("betting_end_time", new Date().toISOString())
-        .order("round_number", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -5091,7 +5152,7 @@ export function useCreateRound() {
         .select("*")
         .eq("game_type", gameType)
         .eq("status", "betting")
-        .order("round_number", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 

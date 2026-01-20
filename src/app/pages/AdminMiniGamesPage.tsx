@@ -398,14 +398,15 @@ export function AdminMiniGamesPage() {
     };
   }, [selectedBetOption, selectedRoundDetail, isResultAdjustmentOpen]);
   const [, setIsTimeRangeValid] = useState(true);
-  const [isDateRangeValid, setIsDateRangeValid] = useState(true);
+  const [, setIsDateRangeValid] = useState(true);
 
-  const validateDateRange = (start: string, end: string) => {
+  const _validateDateRange = (start: string, end: string) => {
     if (start && end) {
       return new Date(start) <= new Date(end);
     }
     return true;
   };
+  void _validateDateRange;
 
   const validateTimeRange = (
     startTime: string,

@@ -34,7 +34,7 @@ export function Header() {
     if (path === "/") return routerLocation.pathname === "/";
 
     const aliasGroups: Record<string, string[]> = {
-      "/ranking": ["/ranking", "/accommodation"],
+      "/ranking": ["/ranking"],
       "/minigame": [
         "/minigame",
         "/mini-game",

@@ -53,7 +53,8 @@ export function AgentMembersPage() {
   // 가입 기간 필터 state 추가
   const [joinStartDate, setJoinStartDate] = useState("");
   const [joinEndDate, setJoinEndDate] = useState("");
-  const [isJoinDateRangeValid, setIsJoinDateRangeValid] = useState(true);
+  const [_isJoinDateRangeValid] = useState(true);
+  void _isJoinDateRangeValid;
 
   // Supabase hooks
   const {
