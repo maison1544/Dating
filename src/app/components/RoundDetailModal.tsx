@@ -4,6 +4,7 @@ import { useAllGameBets } from "../hooks/useSupabase";
 import { supabase } from "../../lib/supabase";
 import { UserDetailModal } from "./UserDetailModal";
 import { formatKST } from "../../lib/dateUtils";
+import { GameResultDisplay } from "./GameResultDisplay";
 
 interface GameRound {
   id: number;
@@ -13,12 +14,13 @@ interface GameRound {
   roundNumber: number;
   result: string;
   detailedResult?: string;
+  reservedResult?: string;
   totalBets: number;
   totalAmount: number;
 
   startTime: string;
   endTime: string;
-  status: "진행중" | "완료" | "대기";
+  status: "진행중" | "완료" | "완료(예약)" | "대기";
   participants: number;
   date: string;
   betDistribution?: {
@@ -201,7 +203,7 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
     if (status === "active") return "활성";
     if (status === "suspended") return "정지";
     if (status === "pending") return "대기";
-    if (status === "deleted") return "삭제";
+    if (status === "rejected") return "승인거절";
     return status || "-";
   };
 
@@ -269,21 +271,19 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
                 <h2 className="text-white text-2xl font-semibold">
                   #{round.roundNumber} 회차 상세
                 </h2>
-                {round.status === "완료" && round.detailedResult && (
-                  <div className="flex items-center gap-2 ml-2">
-                    <span className="text-gray-500">|</span>
-                    <div className="flex items-center gap-2">
-                      {round.detailedResult.split("\n").map((line, idx) => (
-                        <span
-                          key={idx}
-                          className="text-yellow-400 font-semibold text-lg"
-                        >
-                          {line}
-                        </span>
-                      ))}
+                {(round.status === "완료" || round.status === "완료(예약)") &&
+                  (round.detailedResult || round.result) && (
+                    <div className="flex items-center gap-2 ml-2">
+                      <span className="text-gray-500">|</span>
+                      <GameResultDisplay
+                        status={round.status}
+                        result={round.result}
+                        detailedResult={round.detailedResult}
+                        reservedResult={round.reservedResult}
+                        variant="header"
+                      />
                     </div>
-                  </div>
-                )}
+                  )}
               </div>
               <button
                 onClick={onClose}

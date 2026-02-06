@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { getTodayKST } from "../../lib/dateUtils";
 
 interface DateRangePickerProps {
   startDate: string;
@@ -6,6 +7,8 @@ interface DateRangePickerProps {
   onStartDateChange: (date: string) => void;
   onEndDateChange: (date: string) => void;
   className?: string;
+  /** 미래 날짜 선택 허용 여부 (기본값: false) */
+  allowFuture?: boolean;
 }
 
 export function DateRangePicker({
@@ -14,12 +17,16 @@ export function DateRangePicker({
   onStartDateChange,
   onEndDateChange,
   className = "",
+  allowFuture = false,
 }: DateRangePickerProps) {
   const [isDateRangeValid, setIsDateRangeValid] = useState(true);
 
+  // KST 기준 오늘 날짜 (컴포넌트 마운트 시점 기준)
+  const todayKST = useMemo(() => getTodayKST(), []);
+
   const validateDateRange = (start: string, end: string) => {
     if (start && end) {
-      return new Date(start) <= new Date(end);
+      return start <= end; // 문자열 비교로 충분 (YYYY-MM-DD 형식)
     }
     return true;
   };
@@ -40,13 +47,18 @@ export function DateRangePicker({
     setIsDateRangeValid(isValid);
   };
 
+  // 미래 날짜 제한을 위한 max 값 (KST 기준)
+  const maxDate = allowFuture ? undefined : todayKST;
+
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
       <div className="flex items-center gap-2">
         <input
           type="date"
           value={startDate}
+          max={maxDate}
           onChange={(e) => handleStartDateChange(e.target.value)}
+          onInput={(e) => handleStartDateChange(e.currentTarget.value)}
           className={`flex-1 bg-gray-800 border rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 ${
             !isDateRangeValid ? "border-red-500" : "border-gray-700"
           }`}
@@ -56,7 +68,9 @@ export function DateRangePicker({
           type="date"
           value={endDate}
           min={startDate}
+          max={maxDate}
           onChange={(e) => handleEndDateChange(e.target.value)}
+          onInput={(e) => handleEndDateChange(e.currentTarget.value)}
           className={`flex-1 bg-gray-800 border rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 ${
             !isDateRangeValid ? "border-red-500" : "border-gray-700"
           }`}

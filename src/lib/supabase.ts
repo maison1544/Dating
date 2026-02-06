@@ -29,10 +29,5 @@ export const supabaseAdmin = createClient<Database>(
       detectSessionInUrl: false,
       storageKey: "sb-admin-auth-token",
     },
-  }
+  },
 );
-
-// Helper function for realtime subscriptions
-export function subscribeToChannel(channelName: string) {
-  return supabase.channel(channelName);
-}

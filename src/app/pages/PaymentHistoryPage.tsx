@@ -8,7 +8,7 @@ import {
   useGiftTransactions,
   useWithdrawalRequests,
 } from "../hooks/useSupabase";
-import { formatKST } from "../../lib/dateUtils";
+import { formatDatetime } from "../../lib/dateUtils";
 
 export function PaymentHistoryPage() {
   const navigate = useNavigate();
@@ -18,7 +18,7 @@ export function PaymentHistoryPage() {
   const { requests: withdrawalRequests, isLoading: withdrawalsLoading } =
     useWithdrawalRequests(profile?.id);
   const { giftTransactions, isLoading: giftsLoading } = useGiftTransactions(
-    profile?.id
+    profile?.id,
   );
 
   useEffect(() => {
@@ -31,16 +31,13 @@ export function PaymentHistoryPage() {
   }, [authLoading, user, navigate]);
 
   const [activeTab, setActiveTab] = useState<"charge" | "withdraw" | "gift">(
-    "charge"
+    "charge",
   );
 
   const chargeHistory = depositRequests;
   const withdrawHistory = withdrawalRequests;
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return formatKST(dateString, "datetime") || "-";
-  };
+  const formatDate = formatDatetime;
 
   const getDepositStatusText = (status: string | null | undefined) => {
     switch (status) {
@@ -290,8 +287,8 @@ export function PaymentHistoryPage() {
                                 (item as any).status === "approved"
                                   ? "bg-green-500/20 text-green-500"
                                   : (item as any).status === "rejected"
-                                  ? "bg-red-500/20 text-red-500"
-                                  : "bg-yellow-500/20 text-yellow-500"
+                                    ? "bg-red-500/20 text-red-500"
+                                    : "bg-yellow-500/20 text-yellow-500"
                               }`}
                             >
                               {getDepositStatusText((item as any).status)}
@@ -341,8 +338,8 @@ export function PaymentHistoryPage() {
                                 (item as any).status === "approved"
                                   ? "bg-green-500/20 text-green-500"
                                   : (item as any).status === "rejected"
-                                  ? "bg-red-500/20 text-red-500"
-                                  : "bg-yellow-500/20 text-yellow-500"
+                                    ? "bg-red-500/20 text-red-500"
+                                    : "bg-yellow-500/20 text-yellow-500"
                               }`}
                             >
                               {getWithdrawalStatusText((item as any).status)}
@@ -395,8 +392,8 @@ export function PaymentHistoryPage() {
                                 item.type === "선물"
                                   ? "bg-pink-500/20 text-pink-500"
                                   : item.type === "구매"
-                                  ? "bg-blue-500/20 text-blue-500"
-                                  : "bg-green-500/20 text-green-500"
+                                    ? "bg-blue-500/20 text-blue-500"
+                                    : "bg-green-500/20 text-green-500"
                               }`}
                             >
                               {item.type}
@@ -414,8 +411,8 @@ export function PaymentHistoryPage() {
                                 item.amount > 0
                                   ? "text-green-500"
                                   : item.amount < 0
-                                  ? "text-red-500"
-                                  : "text-gray-400"
+                                    ? "text-red-500"
+                                    : "text-gray-400"
                               }
                             >
                               {item.amount > 0 ? "+" : ""}

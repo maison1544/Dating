@@ -2,7 +2,7 @@ import { Bell, Pin, Calendar, ChevronRight, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNotices } from "../hooks/useSupabase";
 import { useAuth } from "../contexts/AuthContext";
-import { formatKST } from "../../lib/dateUtils";
+import { formatDateOnly } from "../../lib/dateUtils";
 import { supabase } from "../../lib/supabase";
 
 export function NoticePage() {
@@ -15,11 +15,7 @@ export function NoticePage() {
   const pinnedNotices = notices.filter((n) => n.is_pinned);
   const regularNotices = notices.filter((n) => !n.is_pinned);
 
-  // 날짜 포맷 함수
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "";
-    return formatKST(dateString, "date");
-  };
+  const formatDate = formatDateOnly;
 
   const incrementNoticeView = useCallback(
     async (noticeId: string) => {

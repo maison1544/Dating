@@ -51,3 +51,4 @@ coverage
 *.crt
 secrets.*
 credentials.*
+node_modules

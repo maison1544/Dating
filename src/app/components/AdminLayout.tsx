@@ -13,10 +13,17 @@ import {
   ChevronLeft,
   ChevronRight,
   UserCog,
+  Loader2,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Logo from "../../imports/Logo";
 import { useAuth } from "../contexts/AuthContext";
+import { NotificationSettingsDropdown } from "./NotificationSettingsDropdown";
+import { useAdminNotifications } from "../hooks/useAdminNotifications";
+import { useAgentChatProfiles } from "../hooks/useSupabase";
+import { useAgentChatNotifications } from "../hooks/useAgentChatNotifications";
+import { useNotification } from "../contexts/NotificationContext";
+import { ChatNotificationRenderer } from "./ChatNotificationRenderer";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -26,6 +33,32 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const routerLocation = useLocation();
   const navigate = useNavigate();
   const { user, adminAccount, isAgent, signOut, isLoading } = useAuth();
+  const { activeChatId } = useNotification();
+
+  // 관리자 알림 훅 (입금/출금/가입 신청) - returns local notifications state
+  const { notifications, dismissNotification } = useAdminNotifications();
+  const { profiles: assignedDbProfiles } = useAgentChatProfiles(
+    isAgent ? adminAccount?.id : undefined,
+  );
+  const assignedProfileIds = useMemo(() => {
+    const fromProfiles = (assignedDbProfiles || [])
+      .map((profile: { id?: string }) => profile.id)
+      .filter(Boolean) as string[];
+    const fromAccount = Array.isArray(adminAccount?.assigned_profile_ids)
+      ? (adminAccount?.assigned_profile_ids as string[])
+      : [];
+    return Array.from(new Set([...fromAccount, ...fromProfiles])).filter(
+      Boolean,
+    );
+  }, [assignedDbProfiles, adminAccount?.assigned_profile_ids]);
+  const {
+    notifications: chatNotifications,
+    dismissNotification: dismissChatNotification,
+  } = useAgentChatNotifications(
+    assignedProfileIds,
+    isAgent ? activeChatId : null,
+  );
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem("adminSidebarCollapsed");
@@ -43,7 +76,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       navigate(
         routerLocation.pathname.startsWith("/agent")
           ? "/agent/login"
-          : "/admin/login"
+          : "/admin/login",
       );
       return;
     }
@@ -74,7 +107,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     localStorage.setItem(
       "adminSidebarCollapsed",
-      isSidebarCollapsed.toString()
+      isSidebarCollapsed.toString(),
     );
   }, [isSidebarCollapsed]);
 
@@ -139,6 +172,18 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   const currentMenuItems = isAgent ? agentMenuItems : menuItems;
 
+  // 로딩 중일 때 통일된 로딩 UI 표시
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+          <p className="text-gray-400 text-sm">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-950">
       {/* Header */}
@@ -158,7 +203,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <div className="flex items-center gap-4">
             <span className="text-gray-400 text-sm hidden sm:block">
               {isAgent ? "에이전트 모드" : "관리자 모드"}
+              {adminAccount && (
+                <span className="ml-1 text-indigo-400">
+                  ({adminAccount.username}
+                  {adminAccount.name && ` / ${adminAccount.name}`})
+                </span>
+              )}
             </span>
+            <NotificationSettingsDropdown
+              variant={isAgent ? "agent" : "admin"}
+            />
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 text-gray-200 hover:text-indigo-400 transition-colors"
@@ -262,6 +316,18 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </main>
       </div>
+
+      <ChatNotificationRenderer
+        notifications={notifications}
+        onDismiss={dismissNotification}
+      />
+
+      {isAgent && (
+        <ChatNotificationRenderer
+          notifications={chatNotifications}
+          onDismiss={dismissChatNotification}
+        />
+      )}
     </div>
   );
 }

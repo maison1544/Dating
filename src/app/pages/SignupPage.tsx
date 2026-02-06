@@ -27,6 +27,18 @@ export function SignupPage() {
     referralCode: "",
     agree: false,
   });
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    nickname?: string;
+    email?: string;
+    phone?: string;
+    password?: string;
+    confirmPassword?: string;
+    bank?: string;
+    accountNumber?: string;
+    accountHolder?: string;
+    agree?: string;
+  }>({});
 
   // Supabase hooks
   const { validateCode, isValidating } = useReferralCodeValidation();
@@ -74,68 +86,45 @@ export function SignupPage() {
         }
       }, 350);
     },
-    [validateCode]
+    [validateCode],
   );
 
   const validateStep1 = () => {
     const trimmedName = formData.name.trim();
     const trimmedNickname = formData.nickname.trim();
     const trimmedEmail = formData.email.trim();
+    const errors: typeof fieldErrors = {};
 
     const nameRegex = /^[가-힣]{2,10}$|^[a-zA-Z\s]{2,20}$/;
     if (!nameRegex.test(trimmedName)) {
-      showAlert({
-        title: "입력 오류",
-        message: "이름은 한글 2-10자 또는 영문 2-20자로 입력해주세요.",
-        type: "warning",
-      });
-      return false;
+      errors.name = "이름은 한글 2-10자 또는 영문 2-20자로 입력해주세요.";
     }
 
     const nicknameRegex = /^[가-힣a-zA-Z0-9]{2,10}$/;
     if (!nicknameRegex.test(trimmedNickname)) {
-      showAlert({
-        title: "입력 오류",
-        message: "닉네임은 한글/영문/숫자 2-10자로 입력해주세요.",
-        type: "warning",
-      });
-      return false;
+      errors.nickname = "닉네임은 한글/영문/숫자 2-10자로 입력해주세요.";
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
-      showAlert({
-        title: "입력 오류",
-        message: "올바른 이메일 형식을 입력해주세요.",
-        type: "warning",
-      });
-      return false;
+      errors.email = "올바른 이메일 형식을 입력해주세요.";
     }
 
     const phoneRegex = /^010-\d{4}-\d{4}$/;
     if (!phoneRegex.test(formData.phone)) {
-      showAlert({
-        title: "입력 오류",
-        message: "전화번호는 010-1234-5678 형식으로 입력해주세요.",
-        type: "warning",
-      });
-      return false;
+      errors.phone = "전화번호는 010-1234-5678 형식으로 입력해주세요.";
+    }
+
+    if (formData.password.length < 6) {
+      errors.password = "비밀번호는 6자 이상이어야 합니다.";
     }
 
     if (formData.password !== formData.confirmPassword) {
-      showAlert({
-        title: "입력 오류",
-        message: "비밀번호가 일치하지 않습니다.",
-        type: "warning",
-      });
-      return false;
+      errors.confirmPassword = "비밀번호가 일치하지 않습니다.";
     }
-    if (formData.password.length < 6) {
-      showAlert({
-        title: "입력 오류",
-        message: "비밀번호는 6자 이상이어야 합니다.",
-        type: "warning",
-      });
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors((prev) => ({ ...prev, ...errors }));
       return false;
     }
 
@@ -145,49 +134,35 @@ export function SignupPage() {
   const validateStep2 = () => {
     const nameRegex = /^[가-힣]{2,10}$|^[a-zA-Z\s]{2,20}$/;
     const accountRegex = /^\d{10,20}$/;
+    const errors: typeof fieldErrors = {};
 
     if (!formData.bank) {
-      showAlert({
-        title: "입력 오류",
-        message: "은행을 선택해주세요.",
-        type: "warning",
-      });
-      return false;
+      errors.bank = "은행을 선택해주세요.";
     }
 
     const normalizedAccountNumber = formData.accountNumber.replace(/-/g, "");
     if (!accountRegex.test(normalizedAccountNumber)) {
-      showAlert({
-        title: "입력 오류",
-        message: "계좌번호는 10-20자리 숫자로 입력해주세요.",
-        type: "warning",
-      });
-      return false;
+      errors.accountNumber = "계좌번호는 10-20자리 숫자로 입력해주세요.";
     }
 
     if (!nameRegex.test(formData.accountHolder.trim())) {
-      showAlert({
-        title: "입력 오류",
-        message: "예금주는 한글 2-10자 또는 영문 2-20자로 입력해주세요.",
-        type: "warning",
-      });
-      return false;
+      errors.accountHolder =
+        "예금주는 한글 2-10자 또는 영문 2-20자로 입력해주세요.";
     }
 
     if (!formData.agree) {
-      showAlert({
-        title: "입력 오류",
-        message: "약관에 동의해주세요.",
-        type: "warning",
-      });
-      return false;
+      errors.agree = "약관에 동의해주세요.";
     }
+
     if (formData.referralCode && !referralCodeValid) {
-      showAlert({
-        title: "입력 오류",
-        message: "유효하지 않은 추천코드입니다.",
-        type: "warning",
-      });
+      setReferralCodeError("유효하지 않은 추천코드입니다.");
+    }
+
+    if (
+      Object.keys(errors).length > 0 ||
+      (formData.referralCode && !referralCodeValid)
+    ) {
+      setFieldErrors((prev) => ({ ...prev, ...errors }));
       return false;
     }
 
@@ -213,16 +188,17 @@ export function SignupPage() {
       formattedValue = `${value.slice(0, 3)}-${value.slice(3)}`;
     } else if (value.length <= 11) {
       formattedValue = `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(
-        7
+        7,
       )}`;
     } else {
       formattedValue = `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(
         7,
-        11
+        11,
       )}`;
     }
 
-    setFormData({ ...formData, phone: formattedValue });
+    setFormData((prev) => ({ ...prev, phone: formattedValue }));
+    setFieldErrors((prev) => (prev.phone ? { ...prev, phone: "" } : prev));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -235,6 +211,8 @@ export function SignupPage() {
 
     if (!validateStep1()) return;
     if (!validateStep2()) return;
+
+    setFieldErrors({});
 
     const normalizedAccountNumber = formData.accountNumber.replace(/-/g, "");
 
@@ -260,9 +238,25 @@ export function SignupPage() {
       });
       navigate("/login");
     } else {
+      const errorMessage = result.error || "회원가입 중 오류가 발생했습니다.";
+      const isPhoneDuplicate = /휴대폰/.test(errorMessage);
+      const isEmailDuplicate =
+        /user already registered/i.test(errorMessage) ||
+        /이메일/.test(errorMessage) ||
+        /email.*(already|exist|registered)/i.test(errorMessage);
+
+      if (isPhoneDuplicate || isEmailDuplicate) {
+        setFieldErrors({
+          email: isEmailDuplicate ? "이미 사용된 이메일 주소 입니다." : "",
+          phone: isPhoneDuplicate ? "이미 가입된 휴대폰번호 입니다." : "",
+        });
+        setStep(1);
+        return;
+      }
+
       showAlert({
         title: "오류",
-        message: result.error || "회원가입 중 오류가 발생했습니다.",
+        message: errorMessage,
         type: "error",
       });
     }
@@ -300,14 +294,26 @@ export function SignupPage() {
                     <input
                       type="text"
                       value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
+                      onChange={(e) => {
+                        setFormData({ ...formData, name: e.target.value });
+                        setFieldErrors((prev) =>
+                          prev.name ? { ...prev, name: "" } : prev,
+                        );
+                      }}
                       placeholder="이름을 입력하세요"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                      className={`w-full bg-gray-800 border rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none ${
+                        fieldErrors.name
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-700 focus:border-pink-500"
+                      }`}
                       required
                     />
                   </div>
+                  {fieldErrors.name && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.name}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -322,14 +328,26 @@ export function SignupPage() {
                     <input
                       type="text"
                       value={formData.nickname}
-                      onChange={(e) =>
-                        setFormData({ ...formData, nickname: e.target.value })
-                      }
+                      onChange={(e) => {
+                        setFormData({ ...formData, nickname: e.target.value });
+                        setFieldErrors((prev) =>
+                          prev.nickname ? { ...prev, nickname: "" } : prev,
+                        );
+                      }}
                       placeholder="닉네임을 입력하세요"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                      className={`w-full bg-gray-800 border rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none ${
+                        fieldErrors.nickname
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-700 focus:border-pink-500"
+                      }`}
                       required
                     />
                   </div>
+                  {fieldErrors.nickname && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.nickname}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -344,14 +362,27 @@ export function SignupPage() {
                     <input
                       type="email"
                       value={formData.email}
-                      onChange={(e) =>
-                        setFormData({ ...formData, email: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const nextEmail = e.target.value;
+                        setFormData({ ...formData, email: nextEmail });
+                        setFieldErrors((prev) =>
+                          prev.email ? { ...prev, email: "" } : prev,
+                        );
+                      }}
                       placeholder="이메일을 입력하세요"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                      className={`w-full bg-gray-800 border rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none ${
+                        fieldErrors.email
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-700 focus:border-pink-500"
+                      }`}
                       required
                     />
                   </div>
+                  {fieldErrors.email && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.email}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -368,10 +399,19 @@ export function SignupPage() {
                       value={formData.phone}
                       onChange={handlePhoneChange}
                       placeholder="'-' 없이 입력하세요"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                      className={`w-full bg-gray-800 border rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none ${
+                        fieldErrors.phone
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-700 focus:border-pink-500"
+                      }`}
                       required
                     />
                   </div>
+                  {fieldErrors.phone && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.phone}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -386,11 +426,18 @@ export function SignupPage() {
                     <input
                       type={showPassword ? "text" : "password"}
                       value={formData.password}
-                      onChange={(e) =>
-                        setFormData({ ...formData, password: e.target.value })
-                      }
+                      onChange={(e) => {
+                        setFormData({ ...formData, password: e.target.value });
+                        setFieldErrors((prev) =>
+                          prev.password ? { ...prev, password: "" } : prev,
+                        );
+                      }}
                       placeholder="비밀번호를 입력하세요"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-12 py-3 text-white focus:outline-none focus:border-pink-500"
+                      className={`w-full bg-gray-800 border rounded-lg pl-10 pr-12 py-3 text-white focus:outline-none ${
+                        fieldErrors.password
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-700 focus:border-pink-500"
+                      }`}
                       required
                     />
                     <button
@@ -401,6 +448,11 @@ export function SignupPage() {
                       {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
                   </div>
+                  {fieldErrors.password && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.password}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -415,14 +467,23 @@ export function SignupPage() {
                     <input
                       type={showConfirmPassword ? "text" : "password"}
                       value={formData.confirmPassword}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         setFormData({
                           ...formData,
                           confirmPassword: e.target.value,
-                        })
-                      }
+                        });
+                        setFieldErrors((prev) =>
+                          prev.confirmPassword
+                            ? { ...prev, confirmPassword: "" }
+                            : prev,
+                        );
+                      }}
                       placeholder="비밀번호를 다시 입력하세요"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-12 py-3 text-white focus:outline-none focus:border-pink-500"
+                      className={`w-full bg-gray-800 border rounded-lg pl-10 pr-12 py-3 text-white focus:outline-none ${
+                        fieldErrors.confirmPassword
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-700 focus:border-pink-500"
+                      }`}
                       required
                     />
                     <button
@@ -439,6 +500,11 @@ export function SignupPage() {
                       )}
                     </button>
                   </div>
+                  {fieldErrors.confirmPassword && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.confirmPassword}
+                    </p>
+                  )}
                 </div>
 
                 <button
@@ -459,20 +525,45 @@ export function SignupPage() {
                   </label>
                   <select
                     value={formData.bank}
-                    onChange={(e) =>
-                      setFormData({ ...formData, bank: e.target.value })
-                    }
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                    onChange={(e) => {
+                      setFormData({ ...formData, bank: e.target.value });
+                      setFieldErrors((prev) =>
+                        prev.bank ? { ...prev, bank: "" } : prev,
+                      );
+                    }}
+                    className={`w-full bg-gray-800 border rounded-lg px-4 py-3 text-white focus:outline-none ${
+                      fieldErrors.bank
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-700 focus:border-pink-500"
+                    }`}
                     required
                   >
                     <option value="">은행 선택</option>
-                    <option value="국민은행">국민은행</option>
-                    <option value="신한은행">신한은행</option>
+                    <option value="KB국민은행">KB국민은행</option>
+                    <option value="신협은행">신협은행</option>
+                    <option value="새마을금고">새마을금고</option>
                     <option value="우리은행">우리은행</option>
+                    <option value="SC제일은행">SC제일은행</option>
                     <option value="하나은행">하나은행</option>
-                    <option value="농협은행">농협은행</option>
+                    <option value="신한은행">신한은행</option>
+                    <option value="케이뱅크">케이뱅크</option>
+                    <option value="카카오뱅크">카카오뱅크</option>
+                    <option value="토스뱅크">토스뱅크</option>
                     <option value="기업은행">기업은행</option>
+                    <option value="수협은행">수협은행</option>
+                    <option value="NH농협은행">NH농협은행</option>
+                    <option value="부산은행">부산은행</option>
+                    <option value="경남은행">경남은행</option>
+                    <option value="광주은행">광주은행</option>
+                    <option value="대구은행">대구은행</option>
+                    <option value="전북은행">전북은행</option>
+                    <option value="제주은행">제주은행</option>
                   </select>
+                  {fieldErrors.bank && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.bank}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -482,16 +573,30 @@ export function SignupPage() {
                   <input
                     type="text"
                     value={formData.accountNumber}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setFormData({
                         ...formData,
                         accountNumber: e.target.value,
-                      })
-                    }
+                      });
+                      setFieldErrors((prev) =>
+                        prev.accountNumber
+                          ? { ...prev, accountNumber: "" }
+                          : prev,
+                      );
+                    }}
                     placeholder="'-' 없이 입력하세요"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                    className={`w-full bg-gray-800 border rounded-lg px-4 py-3 text-white focus:outline-none ${
+                      fieldErrors.accountNumber
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-700 focus:border-pink-500"
+                    }`}
                     required
                   />
+                  {fieldErrors.accountNumber && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.accountNumber}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -501,16 +606,30 @@ export function SignupPage() {
                   <input
                     type="text"
                     value={formData.accountHolder}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setFormData({
                         ...formData,
                         accountHolder: e.target.value,
-                      })
-                    }
+                      });
+                      setFieldErrors((prev) =>
+                        prev.accountHolder
+                          ? { ...prev, accountHolder: "" }
+                          : prev,
+                      );
+                    }}
                     placeholder="예금주 이름을 입력하세요"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                    className={`w-full bg-gray-800 border rounded-lg px-4 py-3 text-white focus:outline-none ${
+                      fieldErrors.accountHolder
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-700 focus:border-pink-500"
+                    }`}
                     required
                   />
+                  {fieldErrors.accountHolder && (
+                    <p className="text-red-400 text-xs mt-1.5">
+                      {fieldErrors.accountHolder}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -533,8 +652,8 @@ export function SignupPage() {
                       referralCodeError
                         ? "border-red-500 focus:border-red-500"
                         : formData.referralCode && !referralCodeError
-                        ? "border-green-500 focus:border-green-500"
-                        : "border-gray-700 focus:border-pink-500"
+                          ? "border-green-500 focus:border-green-500"
+                          : "border-gray-700 focus:border-pink-500"
                     }`}
                   />
                   {isValidating && (
@@ -562,9 +681,12 @@ export function SignupPage() {
                     <input
                       type="checkbox"
                       checked={formData.agree}
-                      onChange={(e) =>
-                        setFormData({ ...formData, agree: e.target.checked })
-                      }
+                      onChange={(e) => {
+                        setFormData({ ...formData, agree: e.target.checked });
+                        setFieldErrors((prev) =>
+                          prev.agree ? { ...prev, agree: "" } : prev,
+                        );
+                      }}
                       className="accent-pink-500 mt-1"
                     />
                     <span className="text-sm">
@@ -572,6 +694,9 @@ export function SignupPage() {
                       이상이며, 이용약관 및 개인정보처리방침에 동의합니다.
                     </span>
                   </label>
+                  {fieldErrors.agree && (
+                    <p className="text-red-400 text-xs">{fieldErrors.agree}</p>
+                  )}
                 </div>
 
                 <div className="flex gap-3">

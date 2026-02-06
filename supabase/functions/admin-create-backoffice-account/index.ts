@@ -85,7 +85,7 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !serviceRoleKey) {
       return jsonResponse(
         { error: "Missing Supabase environment variables" },
-        500
+        500,
       );
     }
 
@@ -132,8 +132,8 @@ Deno.serve(async (req: Request) => {
     }
     if (typeof password !== "string" || password.length < 6) {
       return jsonResponse(
-        { error: "Password must be at least 6 characters" },
-        400
+        { error: "비밀번호를 6자리 이상 입력해야 합니다." },
+        400,
       );
     }
 
@@ -163,7 +163,7 @@ Deno.serve(async (req: Request) => {
       if (authCreateErr || !createdAuth.user) {
         return jsonResponse(
           { error: authCreateErr?.message || "Failed to create auth user" },
-          400
+          400,
         );
       }
 
@@ -217,7 +217,7 @@ Deno.serve(async (req: Request) => {
     if (authCreateErr || !createdAuth.user) {
       return jsonResponse(
         { error: authCreateErr?.message || "Failed to create auth user" },
-        400
+        400,
       );
     }
 

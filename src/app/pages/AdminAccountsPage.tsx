@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useDebounce } from "../hooks/useDebounce";
 import {
   Ban,
   Calendar,
@@ -8,6 +9,7 @@ import {
   Loader2,
   MessageCircle,
   MoreVertical,
+  Package,
   Search,
   Shield,
   Trash2,
@@ -17,24 +19,73 @@ import {
   Users,
 } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { GiftHistoryTable } from "../components/GiftHistoryTable";
+import { GiftInventoryManager } from "../components/GiftInventoryManager";
 import { AdminLayout } from "../components/AdminLayout";
+import { AdminPageLoader } from "../components/common/AdminPageLoader";
 import { useAuth } from "../contexts/AuthContext";
 import { useAlert } from "../contexts/AlertContext";
-import { formatKST } from "../../lib/dateUtils";
-import { supabase } from "../../lib/supabase";
+import { formatDatetime, formatKST, getTodayKST } from "../../lib/dateUtils";
+import { supabase, supabaseAdmin } from "../../lib/supabase";
+import { CsvDownloadButton } from "../components/CsvDownloadButton";
 import { UserDetailModal } from "../components/UserDetailModal";
+import { AdminPagination } from "../components/common/AdminPagination";
+import { SuspendConfirmModal } from "../components/SuspendConfirmModal";
 import {
   useAdminAccounts,
+  useAgentGiftTransactions,
   useAgentDashboardStats,
   useAgents,
   useBackofficeAccountActions,
-  useChatProfiles as useAllChatProfiles,
+  useAdminChatProfiles,
 } from "../hooks/useSupabase";
+
+// Component to display correct total revenue for an agent using the same logic as detail modal
+function AgentTotalRevenue({
+  agentId,
+  formatRevenue,
+}: {
+  agentId: string;
+  formatRevenue: (value: number | undefined | null) => string;
+}) {
+  const { revenueRecords, isLoading } = useAgentDashboardStats(agentId);
+
+  if (isLoading) {
+    return <span className="text-gray-400">...</span>;
+  }
+
+  // Calculate netSum using the same logic as detail modal
+  const normalizedRecords = (revenueRecords || []).map((r: any) => {
+    const typeLabel = r.type === "charge" ? "충전" : "출금";
+    return { ...r, typeLabel };
+  });
+
+  const depositSum = normalizedRecords
+    .filter((r: any) => r.typeLabel === "충전")
+    .reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+
+  const withdrawSum = normalizedRecords
+    .filter((r: any) => r.typeLabel === "출금")
+    .reduce((sum: number, r: any) => sum + Math.abs(Number(r.amount || 0)), 0);
+
+  const netSum = depositSum - withdrawSum;
+
+  return (
+    <p
+      className={`font-semibold ${
+        netSum < 0 ? "text-red-400" : "text-yellow-400"
+      }`}
+    >
+      {formatRevenue(netSum)}
+    </p>
+  );
+}
 
 export function AdminAccountsPage() {
   const { adminAccount, isAdmin } = useAuth();
   const { showAlert } = useAlert();
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "agent">(
     "all",
@@ -46,6 +97,7 @@ export function AdminAccountsPage() {
     isLoading: isAdminsLoading,
     error: adminsError,
     refetch: refetchAdmins,
+    updateAccount: updateAdminAccount,
   } = useAdminAccounts();
 
   const {
@@ -64,8 +116,11 @@ export function AdminAccountsPage() {
     isLoading: isActionLoading,
   } = useBackofficeAccountActions(adminAccount?.id);
 
-  const { profiles: allChatProfiles, isLoading: isChatProfilesLoading } =
-    useAllChatProfiles();
+  const {
+    profiles: allChatProfiles,
+    isLoading: isChatProfilesLoading,
+    refetch: refetchChatProfiles,
+  } = useAdminChatProfiles();
 
   const [assignTarget, setAssignTarget] = useState<{
     id: string;
@@ -80,7 +135,7 @@ export function AdminAccountsPage() {
     referralCode?: string;
   } | null>(null);
   const [detailActiveTab, setDetailActiveTab] = useState<
-    "revenue" | "members" | "profiles"
+    "revenue" | "members" | "profiles" | "gifts"
   >("revenue");
   const [revenueStartDate, setRevenueStartDate] = useState("");
   const [revenueEndDate, setRevenueEndDate] = useState("");
@@ -100,14 +155,18 @@ export function AdminAccountsPage() {
     isLoading: isAgentStatsLoading,
   } = useAgentDashboardStats(detailTarget?.id);
 
+  const {
+    transactions: agentGiftTransactions,
+    isLoading: isAgentGiftHistoryLoading,
+    error: agentGiftHistoryError,
+  } = useAgentGiftTransactions(detailTarget?.id);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createType, setCreateType] = useState<"admin" | "agent">("admin");
   const [createUsername, setCreateUsername] = useState("");
   const [createName, setCreateName] = useState("");
   const [createPassword, setCreatePassword] = useState("");
-  const [createRole, setCreateRole] = useState<"super_admin" | "admin">(
-    "admin",
-  );
+  const [createRole] = useState<"admin">("admin");
   const [createReferralCode, setCreateReferralCode] = useState("");
 
   const [passwordTarget, setPasswordTarget] = useState<{
@@ -126,19 +185,59 @@ export function AdminAccountsPage() {
     "detach" | "deactivate"
   >("detach");
 
+  const [suspendTarget, setSuspendTarget] = useState<{
+    id: string;
+    label: string;
+    isActive: boolean;
+    accountType: "admin" | "agent";
+  } | null>(null);
+  const [isSuspending, setIsSuspending] = useState(false);
+
   const _validateDateRange = (start: string, end: string) => {
     if (start && end) return start <= end;
     return true;
   };
   void _validateDateRange;
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return formatKST(dateString, "datetime") || "-";
-  };
+  const formatDate = formatDatetime;
+
+  const agentGiftHistoryRows = useMemo(() => {
+    if (!detailTarget?.id) return [];
+
+    return (agentGiftTransactions || []).map((item: any) => {
+      const userLabel = item.users?.nickname || item.users?.name || "회원";
+      const profileLabel = item.profileName || "프로필";
+      const isProfileSender = item.sender_type === "profile";
+      const isProfileReceiver = item.receiver_type === "profile";
+      const amount = Math.abs(Number(item.points_amount || 0));
+
+      let description = "기프트 거래";
+      if (isProfileSender) {
+        description = `${profileLabel} → ${userLabel}에게 보냄`;
+      } else if (isProfileReceiver) {
+        description = `${userLabel} → ${profileLabel}에게서 받음`;
+      }
+
+      const signedAmount = isProfileReceiver
+        ? amount
+        : isProfileSender
+          ? -amount
+          : amount;
+
+      return {
+        id: item.id,
+        createdAt: item.created_at,
+        giftName: item.gifts?.name || "선물",
+        giftEmoji: item.gifts?.emoji || "🎁",
+        quantity: Number(item.quantity ?? 1),
+        description,
+        pointsAmount: signedAmount,
+      };
+    });
+  }, [agentGiftTransactions, detailTarget?.id]);
 
   const filteredAdmins = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = debouncedSearchTerm.trim().toLowerCase();
     return adminAccounts
       .filter(() => roleFilter === "all" || roleFilter === "admin")
       .filter((a) => {
@@ -148,10 +247,10 @@ export function AdminAccountsPage() {
           (a.name || "").toLowerCase().includes(q)
         );
       });
-  }, [adminAccounts, searchTerm]);
+  }, [adminAccounts, debouncedSearchTerm, roleFilter]);
 
   const filteredAgents = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = debouncedSearchTerm.trim().toLowerCase();
     return agents
       .filter(() => roleFilter === "all" || roleFilter === "agent")
       .filter((a) => {
@@ -162,7 +261,11 @@ export function AdminAccountsPage() {
           (a.referral_code || "").toLowerCase().includes(q)
         );
       });
-  }, [agents, searchTerm]);
+  }, [agents, debouncedSearchTerm, roleFilter]);
+
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const combinedAccounts = useMemo(() => {
     const adminRows = filteredAdmins.map((a) => ({
@@ -197,6 +300,18 @@ export function AdminAccountsPage() {
     });
   }, [filteredAdmins, filteredAgents]);
 
+  // 페이지네이션 계산
+  const totalPages = Math.ceil(combinedAccounts.length / itemsPerPage);
+  const paginatedAccounts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return combinedAccounts.slice(startIndex, startIndex + itemsPerPage);
+  }, [combinedAccounts, currentPage, itemsPerPage]);
+
+  // 필터 변경 시 페이지 초기화
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm, roleFilter]);
+
   const totalCount = adminAccounts.length + agents.length;
   const adminCount = adminAccounts.length;
   const agentCount = agents.length;
@@ -211,18 +326,9 @@ export function AdminAccountsPage() {
       );
     }
 
-    if (account.role === "super_admin") {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded-full border border-purple-500/30">
-          <Shield size={12} />
-          최고관리자
-        </span>
-      );
-    }
-
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded-full border border-blue-500/30">
-        <Users size={12} />
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded-full border border-purple-500/30">
+        <Shield size={12} />
         관리자
       </span>
     );
@@ -266,15 +372,44 @@ export function AdminAccountsPage() {
               개
             </p>
           </div>
-          <button
-            onClick={() => {
-              setCreateType(roleFilter === "agent" ? "agent" : "admin");
-              setShowCreateModal(true);
-            }}
-            className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
-          >
-            <UserPlus size={20} />새 계정 생성
-          </button>
+          <div className="flex items-center gap-2">
+            <CsvDownloadButton
+              data={combinedAccounts.map((a) => ({
+                id: a.id,
+                type: a.kind === "admin" ? "관리자" : "에이전트",
+                username: a.username,
+                name: a.name,
+                createdAt: a.created_at
+                  ? formatKST(a.created_at, "datetime")
+                  : "-",
+                lastLogin: a.last_login_at
+                  ? formatKST(a.last_login_at, "datetime")
+                  : "-",
+                status: a.is_active ? "활성" : "비활성",
+                referralCode: a.referral_code || "-",
+              }))}
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "type", label: "유형" },
+                { key: "username", label: "계정명" },
+                { key: "name", label: "이름" },
+                { key: "createdAt", label: "생성일" },
+                { key: "lastLogin", label: "최근로그인" },
+                { key: "status", label: "상태" },
+                { key: "referralCode", label: "추천코드" },
+              ]}
+              filename={`관리자계정_${getTodayKST()}.csv`}
+            />
+            <button
+              onClick={() => {
+                setCreateType(roleFilter === "agent" ? "agent" : "admin");
+                setShowCreateModal(true);
+              }}
+              className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
+            >
+              <UserPlus size={20} />새 계정 생성
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
@@ -320,9 +455,7 @@ export function AdminAccountsPage() {
         )}
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-          </div>
+          <AdminPageLoader />
         ) : (
           <div className="space-y-3">
             {combinedAccounts.length === 0 ? (
@@ -330,7 +463,7 @@ export function AdminAccountsPage() {
                 계정이 없습니다.
               </div>
             ) : (
-              combinedAccounts.map((account: any) => (
+              paginatedAccounts.map((account: any) => (
                 <div
                   key={`${account.kind}-${account.id}`}
                   className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-indigo-500/50 transition-all"
@@ -353,7 +486,7 @@ export function AdminAccountsPage() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
                         <div>
                           <p className="text-gray-500 text-xs">생성일</p>
                           <p className="text-gray-300">
@@ -376,14 +509,17 @@ export function AdminAccountsPage() {
                             </div>
                             <div>
                               <p className="text-gray-500 text-xs">총 매출</p>
-                              <p
-                                className={`font-semibold ${
-                                  Number(account.total_revenue) < 0
-                                    ? "text-red-400"
-                                    : "text-yellow-400"
-                                }`}
-                              >
-                                {formatRevenue(account.total_revenue)}
+                              <AgentTotalRevenue
+                                agentId={account.id}
+                                formatRevenue={formatRevenue}
+                              />
+                            </div>
+                            <div>
+                              <p className="text-gray-500 text-xs">
+                                마지막 로그인
+                              </p>
+                              <p className="text-gray-300">
+                                {formatDate(account.last_login_at)}
                               </p>
                             </div>
                           </>
@@ -459,11 +595,17 @@ export function AdminAccountsPage() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  const currentlyAssigned = allChatProfiles
+                                    .filter(
+                                      (p: any) =>
+                                        p.assigned_agent_id === account.id,
+                                    )
+                                    .map((p: any) => p.id);
                                   setAssignTarget({
                                     id: account.id,
                                     label: `${account.username} (${account.name})`,
                                   });
-                                  setSelectedProfileIds([]);
+                                  setSelectedProfileIds(currentlyAssigned);
                                   setOpenDropdownId(null);
                                 }}
                                 className="w-full bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 transition-colors flex items-center gap-2 text-sm border-b border-gray-700"
@@ -474,44 +616,12 @@ export function AdminAccountsPage() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (!isAdmin) {
-                                    showAlert({
-                                      title: "권한 오류",
-                                      message: "관리자 권한이 필요합니다.",
-                                      type: "warning",
-                                    });
-                                    return;
-                                  }
-                                  void (async () => {
-                                    try {
-                                      const nextIsActive = !account.is_active;
-                                      await updateAgent(account.id, {
-                                        is_active: nextIsActive,
-                                      });
-
-                                      if (!nextIsActive) {
-                                        await supabase.functions.invoke(
-                                          "admin-force-logout",
-                                          {
-                                            body: {
-                                              userId: account.id,
-                                              reason: "agent_suspended",
-                                            },
-                                          },
-                                        );
-                                      }
-                                    } catch (err) {
-                                      const msg =
-                                        err instanceof Error
-                                          ? err.message
-                                          : "상태 변경에 실패했습니다.";
-                                      showAlert({
-                                        title: "오류",
-                                        message: msg,
-                                        type: "error",
-                                      });
-                                    }
-                                  })();
+                                  setSuspendTarget({
+                                    id: account.id,
+                                    label: `${account.username} (${account.name})`,
+                                    isActive: account.is_active ?? true,
+                                    accountType: "agent",
+                                  });
                                   setOpenDropdownId(null);
                                 }}
                                 className="w-full bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 transition-colors flex items-center gap-2 text-sm border-b border-gray-700"
@@ -539,30 +649,27 @@ export function AdminAccountsPage() {
                             비밀번호 변경
                           </button>
 
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (account.kind === "agent") {
-                                setDeleteMemberHandling("detach");
-                              }
-                              setDeleteTarget({
-                                accountType: account.kind,
-                                id: account.id,
-                                label: `${account.username} (${
-                                  account.name || ""
-                                })`,
-                              });
-                              setOpenDropdownId(null);
-                            }}
-                            className="w-full bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 transition-colors flex items-center gap-2 text-sm"
-                            disabled={
-                              account.kind === "admin" &&
-                              account.id === adminAccount?.id
-                            }
-                          >
-                            <Trash2 size={14} className="text-red-400" />
-                            삭제
-                          </button>
+                          {account.kind === "admin" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSuspendTarget({
+                                  id: account.id,
+                                  label: `${account.username} (${
+                                    account.name || ""
+                                  })`,
+                                  isActive: account.is_active,
+                                  accountType: "admin",
+                                });
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 transition-colors flex items-center gap-2 text-sm"
+                              disabled={account.id === adminAccount?.id}
+                            >
+                              <Ban size={14} className="text-red-400" />
+                              {account.is_active ? "정지" : "활성화"}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -570,6 +677,12 @@ export function AdminAccountsPage() {
                 </div>
               ))
             )}
+            {/* 페이지네이션 */}
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </div>
@@ -654,16 +767,9 @@ export function AdminAccountsPage() {
                   <label className="block text-gray-400 text-sm mb-1">
                     역할
                   </label>
-                  <select
-                    value={createRole}
-                    onChange={(e) =>
-                      setCreateRole(e.target.value as "super_admin" | "admin")
-                    }
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="admin">관리자</option>
-                    <option value="super_admin">슈퍼관리자</option>
-                  </select>
+                  <div className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                    관리자
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -779,7 +885,7 @@ export function AdminAccountsPage() {
               </div>
               <div>
                 <label className="block text-gray-400 text-sm mb-1">
-                  새 비밀번호
+                  새 비밀번호 (6자리 이상)
                 </label>
                 <input
                   type="password"
@@ -980,9 +1086,106 @@ export function AdminAccountsPage() {
         </div>
       )}
 
+      {/* Admin Suspend Confirm */}
+      <SuspendConfirmModal
+        isOpen={!!suspendTarget}
+        title={suspendTarget?.isActive ? "계정 정지" : "계정 활성화"}
+        message={
+          <p className="text-gray-300">
+            <span className="text-white font-semibold">
+              {suspendTarget?.label}
+            </span>{" "}
+            계정을 {suspendTarget?.isActive ? "정지" : "활성화"}하시겠습니까?
+          </p>
+        }
+        isSuspending={suspendTarget?.isActive ?? false}
+        hideReasonInput={true}
+        confirmLabel={
+          isSuspending
+            ? "처리중..."
+            : suspendTarget?.isActive
+              ? "정지"
+              : "활성화"
+        }
+        confirmClassName={
+          suspendTarget?.isActive
+            ? "bg-red-500 hover:bg-red-600"
+            : "bg-green-500 hover:bg-green-600"
+        }
+        zIndexClassName="z-[60]"
+        onCancel={() => setSuspendTarget(null)}
+        onConfirm={() => {
+          if (isSuspending || !suspendTarget) return;
+          void (async () => {
+            setIsSuspending(true);
+            try {
+              if (!isAdmin) {
+                showAlert({
+                  title: "권한 오류",
+                  message: "관리자 권한이 필요합니다.",
+                  type: "warning",
+                });
+                return;
+              }
+              const nextIsActive = !suspendTarget.isActive;
+
+              if (suspendTarget.accountType === "admin") {
+                const { error: updateErr } = await updateAdminAccount(
+                  suspendTarget.id,
+                  { is_active: nextIsActive },
+                );
+                if (updateErr) {
+                  throw new Error(
+                    updateErr.message || "상태 변경에 실패했습니다",
+                  );
+                }
+              } else {
+                await updateAgent(suspendTarget.id, {
+                  is_active: nextIsActive,
+                });
+              }
+
+              if (!nextIsActive) {
+                await supabaseAdmin.functions.invoke("admin-force-logout", {
+                  body: {
+                    userId: suspendTarget.id,
+                    reason:
+                      suspendTarget.accountType === "admin"
+                        ? "admin_suspended"
+                        : "agent_suspended",
+                  },
+                });
+              }
+
+              if (suspendTarget.accountType === "admin") {
+                await refetchAdmins();
+              } else {
+                await refetchAgents();
+              }
+              setSuspendTarget(null);
+              showAlert({
+                title: "완료",
+                message: `계정이 ${nextIsActive ? "활성화" : "정지"}되었습니다.`,
+                type: "success",
+              });
+            } catch (e) {
+              const msg =
+                e instanceof Error ? e.message : "상태 변경에 실패했습니다";
+              showAlert({
+                title: "오류",
+                message: msg,
+                type: "error",
+              });
+            } finally {
+              setIsSuspending(false);
+            }
+          })();
+        }}
+      />
+
       {/* Assign Profiles Modal */}
       {assignTarget && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-2xl">
             <div className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
               <h3 className="text-white text-lg">프로필 할당</h3>
@@ -1008,14 +1211,21 @@ export function AdminAccountsPage() {
                 </div>
               ) : (
                 (() => {
+                  // Show profiles that are either unassigned OR assigned to this agent
                   const available = allChatProfiles.filter(
-                    (p) => !p.assigned_agent_id,
+                    (p) =>
+                      !p.assigned_agent_id ||
+                      p.assigned_agent_id === assignTarget.id,
                   );
+                  const assignedCount = available.filter(
+                    (p) => p.assigned_agent_id === assignTarget.id,
+                  ).length;
 
                   return (
                     <div className="bg-gray-800/30 border border-gray-700 rounded-lg overflow-hidden">
                       <div className="px-4 py-3 bg-gray-800 border-b border-gray-700 text-gray-300 text-sm">
-                        사용 가능한 프로필 {available.length}개
+                        프로필 목록 ({assignedCount}개 할당됨 /{" "}
+                        {available.length}개)
                       </div>
                       <div className="max-h-[360px] overflow-y-auto">
                         {available.length === 0 ? (
@@ -1123,6 +1333,7 @@ export function AdminAccountsPage() {
                           profileIds: selectedProfileIds,
                         });
                         await refetchAgents();
+                        await refetchChatProfiles();
                         setAssignTarget(null);
                         setSelectedProfileIds([]);
                         showAlert({
@@ -1225,6 +1436,22 @@ export function AdminAccountsPage() {
                     <span>프로필 관리</span>
                   </div>
                   {detailActiveTab === "profiles" && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>
+                  )}
+                </button>
+                <button
+                  onClick={() => setDetailActiveTab("gifts")}
+                  className={`px-4 py-3 text-sm transition-colors relative ${
+                    detailActiveTab === "gifts"
+                      ? "text-indigo-400"
+                      : "text-gray-400 hover:text-gray-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Package size={16} />
+                    <span>선물 관리</span>
+                  </div>
+                  {detailActiveTab === "gifts" && (
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>
                   )}
                 </button>
@@ -1368,14 +1595,14 @@ export function AdminAccountsPage() {
                                 <span>
                                   전체 회원:{" "}
                                   <span className="font-semibold text-indigo-400">
-                                    {agentStats.totalMembers}명
+                                    {agentStats.currentMembers}명
                                   </span>
                                 </span>
                                 <span className="text-gray-600">|</span>
                                 <span>
                                   배정 프로필:{" "}
                                   <span className="font-semibold text-purple-400">
-                                    {assignedProfiles.length}개
+                                    {agentStats.assignedProfiles}개
                                   </span>
                                 </span>
                                 <span className="text-gray-600">|</span>
@@ -1531,7 +1758,12 @@ export function AdminAccountsPage() {
 
                   {detailActiveTab === "members" &&
                     (() => {
-                      const members = agentMembers || [];
+                      // Filter to only show currently assigned members (matching agent_id)
+                      // agentMembers includes historical members for revenue calculation
+                      const currentMembers = (agentMembers || []).filter(
+                        (m: any) => m.agent_id === detailTarget?.id,
+                      );
+                      const members = currentMembers;
                       const total = members.length;
                       const active = members.filter(
                         (m: any) => m.status === "active",
@@ -1709,8 +1941,11 @@ export function AdminAccountsPage() {
 
                   {detailActiveTab === "profiles" &&
                     (() => {
+                      // Filter by assigned_agent_id AND is_active to match agent dashboard
                       const assigned = allChatProfiles.filter(
-                        (p: any) => p.assigned_agent_id === detailTarget.id,
+                        (p: any) =>
+                          p.assigned_agent_id === detailTarget.id &&
+                          p.is_active === true,
                       );
 
                       return (
@@ -1722,11 +1957,17 @@ export function AdminAccountsPage() {
                             </h3>
                             <button
                               onClick={() => {
+                                const currentlyAssigned = allChatProfiles
+                                  .filter(
+                                    (p: any) =>
+                                      p.assigned_agent_id === detailTarget.id,
+                                  )
+                                  .map((p: any) => p.id);
                                 setAssignTarget({
                                   id: detailTarget.id,
                                   label: detailTarget.label,
                                 });
-                                setSelectedProfileIds([]);
+                                setSelectedProfileIds(currentlyAssigned);
                               }}
                               className="bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 px-3 py-1.5 rounded text-sm transition-colors flex items-center gap-1 border border-indigo-500/30"
                             >
@@ -1756,6 +1997,36 @@ export function AdminAccountsPage() {
                               </p>
                             )}
                           </div>
+                        </div>
+                      );
+                    })()}
+
+                  {detailActiveTab === "gifts" &&
+                    (() => {
+                      return (
+                        <div className="space-y-6">
+                          {/* Agent's own gift inventory */}
+                          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                            <GiftInventoryManager
+                              ownerId={detailTarget?.id}
+                              ownerType="agent"
+                              enabled={detailActiveTab === "gifts"}
+                              title="에이전트 보유 선물"
+                            />
+                          </div>
+
+                          {agentGiftHistoryError && (
+                            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-300 text-sm">
+                              {agentGiftHistoryError.message}
+                            </div>
+                          )}
+
+                          <GiftHistoryTable
+                            title="프로필별 선물 내역"
+                            rows={agentGiftHistoryRows}
+                            isLoading={isAgentGiftHistoryLoading}
+                            emptyMessage="선물 내역이 없습니다."
+                          />
                         </div>
                       );
                     })()}

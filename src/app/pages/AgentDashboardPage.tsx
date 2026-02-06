@@ -1,5 +1,5 @@
 import { AdminLayout } from "../components/AdminLayout";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { UserDetailModal } from "../components/UserDetailModal";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -9,6 +9,7 @@ import {
 import { DollarSign, Calendar } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatKST } from "../../lib/dateUtils";
+import { AdminPagination } from "../components/common/AdminPagination";
 
 interface AssignedProfile {
   id: string;
@@ -44,6 +45,7 @@ interface Member {
   bank?: string;
   accountNumber?: string;
   accountHolder?: string;
+  profileImage?: string;
 }
 
 // 매출 기록 인터페이스
@@ -80,6 +82,10 @@ export function AgentDashboardPage() {
   >("all");
   const [, setIsRevenueDateRangeValid] = useState(true);
 
+  // Pagination state for revenue records
+  const [revenueCurrentPage, setRevenueCurrentPage] = useState(1);
+  const REVENUE_PAGE_SIZE = 10;
+
   // 에이전트 정보 from Supabase
   const agentInfo = {
     username: adminAccount?.username || "agent",
@@ -88,7 +94,7 @@ export function AgentDashboardPage() {
     monthlyRevenue: stats.monthlyRevenue,
     weeklyRevenue: stats.weeklyRevenue,
     todayRevenue: stats.todayRevenue,
-    totalMembers: stats.totalMembers,
+    totalMembers: stats.currentMembers,
     activeMembers: stats.activeMembers,
     newMembersThisMonth: stats.newMembersThisMonth,
     assignedProfiles: stats.assignedProfiles,
@@ -130,6 +136,7 @@ export function AgentDashboardPage() {
     bank: m.bank || "",
     accountNumber: m.account_number || "",
     accountHolder: m.account_holder || "",
+    profileImage: m.profile_image || "",
     recentPurchases: [],
   }));
 
@@ -177,7 +184,7 @@ export function AgentDashboardPage() {
   };
 
   // 날짜 및 유형 필터링된 매출 목록
-  const getFilteredRevenueRecords = () => {
+  const filteredRevenueRecords = useMemo(() => {
     return revenueRecords
       .filter((record) => {
         // 날짜 필터
@@ -197,6 +204,25 @@ export function AgentDashboardPage() {
         return true;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [revenueRecords, revenueStartDate, revenueEndDate, revenueTypeFilter]);
+
+  // Paginated revenue records
+  const paginatedRevenueRecords = useMemo(() => {
+    const startIndex = (revenueCurrentPage - 1) * REVENUE_PAGE_SIZE;
+    return filteredRevenueRecords.slice(
+      startIndex,
+      startIndex + REVENUE_PAGE_SIZE,
+    );
+  }, [filteredRevenueRecords, revenueCurrentPage]);
+
+  const revenueTotalPages = Math.ceil(
+    filteredRevenueRecords.length / REVENUE_PAGE_SIZE,
+  );
+
+  // Reset page when filters change
+  const handleRevenueFilterChange = (filter: "all" | "충전" | "출금") => {
+    setRevenueTypeFilter(filter);
+    setRevenueCurrentPage(1);
   };
 
   return (
@@ -235,7 +261,7 @@ export function AgentDashboardPage() {
             <div className="flex items-center gap-1.5">
               <span className="text-gray-400">활성 회원</span>
               <span className="font-bold text-indigo-400">
-                {agentInfo.totalMembers}명
+                {agentInfo.activeMembers}명
               </span>
             </div>
             <span className="text-gray-600 hidden sm:inline">|</span>
@@ -363,7 +389,7 @@ export function AgentDashboardPage() {
               {/* 유형 필터 */}
               <div className="flex gap-2">
                 <button
-                  onClick={() => setRevenueTypeFilter("all")}
+                  onClick={() => handleRevenueFilterChange("all")}
                   className={`px-3 py-1 rounded text-xs transition-colors ${
                     revenueTypeFilter === "all"
                       ? "bg-indigo-500 text-white"
@@ -373,7 +399,7 @@ export function AgentDashboardPage() {
                   전체
                 </button>
                 <button
-                  onClick={() => setRevenueTypeFilter("충전")}
+                  onClick={() => handleRevenueFilterChange("충전")}
                   className={`px-3 py-1 rounded text-xs transition-colors ${
                     revenueTypeFilter === "충전"
                       ? "bg-green-500 text-white"
@@ -383,7 +409,7 @@ export function AgentDashboardPage() {
                   입금
                 </button>
                 <button
-                  onClick={() => setRevenueTypeFilter("출금")}
+                  onClick={() => handleRevenueFilterChange("출금")}
                   className={`px-3 py-1 rounded text-xs transition-colors ${
                     revenueTypeFilter === "출금"
                       ? "bg-red-500 text-white"
@@ -414,7 +440,7 @@ export function AgentDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-700">
-                    {getFilteredRevenueRecords().length === 0 ? (
+                    {filteredRevenueRecords.length === 0 ? (
                       <tr>
                         <td
                           colSpan={4}
@@ -424,7 +450,7 @@ export function AgentDashboardPage() {
                         </td>
                       </tr>
                     ) : (
-                      getFilteredRevenueRecords().map((record, idx) => (
+                      paginatedRevenueRecords.map((record, idx) => (
                         <tr
                           key={idx}
                           className="hover:bg-gray-800/50 transition-colors"
@@ -475,6 +501,14 @@ export function AgentDashboardPage() {
                   </tbody>
                 </table>
               </div>
+              {/* Pagination */}
+              {revenueTotalPages > 1 && (
+                <AdminPagination
+                  currentPage={revenueCurrentPage}
+                  totalPages={revenueTotalPages}
+                  onPageChange={setRevenueCurrentPage}
+                />
+              )}
             </div>
           </div>
         </div>

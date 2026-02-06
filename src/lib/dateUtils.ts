@@ -68,6 +68,24 @@ export function relativeTimeKST(date: Date | string | null): string {
   return formatKST(d, "date");
 }
 
+// 날짜+시간 포맷 헬퍼 (null-safe, 대시 fallback)
+export function formatDatetime(
+  value: Date | string | null | undefined,
+  fallback = "-",
+): string {
+  if (!value) return fallback;
+  return formatKST(value, "datetime") || fallback;
+}
+
+// 날짜만 포맷 헬퍼 (null-safe, 빈문자열 fallback)
+export function formatDateOnly(
+  value: Date | string | null | undefined,
+  fallback = "",
+): string {
+  if (!value) return fallback;
+  return formatKST(value, "date") || fallback;
+}
+
 // ISO 문자열을 KST 기준으로 생성 (DB 저장용)
 export function toISOStringKST(): string {
   return new Date().toISOString();
@@ -84,4 +102,27 @@ export function getDisplayRoundNumber(
     return parseInt(parts[1], 10) || 0;
   }
   return parseInt(str, 10) || 0;
+}
+
+// KST 기준 오늘 날짜 (YYYY-MM-DD 형식, input type="date"용)
+export function getTodayKST(): string {
+  return formatKST(new Date(), "date");
+}
+
+// KST 기준 특정 날짜의 시작 시간 (00:00:00 KST -> UTC ISO string)
+export function getStartOfDayKST(dateStr: string): string {
+  // dateStr은 YYYY-MM-DD 형식
+  // KST 00:00:00 = UTC 전날 15:00:00
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const kstDate = new Date(Date.UTC(year, month - 1, day, -9, 0, 0, 0));
+  return kstDate.toISOString();
+}
+
+// KST 기준 특정 날짜의 종료 시간 (23:59:59.999 KST -> UTC ISO string)
+export function getEndOfDayKST(dateStr: string): string {
+  // dateStr은 YYYY-MM-DD 형식
+  // KST 23:59:59.999 = UTC 당일 14:59:59.999
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const kstDate = new Date(Date.UTC(year, month - 1, day, 14, 59, 59, 999));
+  return kstDate.toISOString();
 }

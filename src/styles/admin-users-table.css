@@ -27,12 +27,18 @@
 /* First column (profile) specific styles */
 .admin-users-table tbody tr td:first-child {
   min-width: 280px !important;
+  text-align: left !important;
 }
 
 /* Profile avatar container - force consistent sizing */
 .admin-users-table tbody tr td:first-child > div {
-  justify-content: center !important;
-  gap: 0.75rem !important;
+  width: 100% !important;
+  display: grid !important;
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  align-items: center !important;
+  justify-content: start !important;
+  column-gap: 0.75rem !important;
+  padding-left: 0.5rem !important;
 }
 
 /* Profile avatar circle - force exact dimensions */

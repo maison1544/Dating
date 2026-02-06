@@ -14,7 +14,7 @@ export function RealtimeMatchingPage() {
   const { profile } = useAuth();
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<"realtime" | "chatlist">(
-    "realtime"
+    "realtime",
   );
   const {
     profiles,
@@ -29,10 +29,8 @@ export function RealtimeMatchingPage() {
     error: roomsError,
   } = useChatRoomsWithProfiles(profile?.id);
 
-  const onlineProfiles = useMemo(
-    () => profiles.filter((p) => p.online),
-    [profiles]
-  );
+  // 활성화된 모든 프로필 표시 (온라인 상태는 마크만 표시)
+  const activeProfiles = useMemo(() => profiles, [profiles]);
 
   // 채팅방 데이터를 UI 형식으로 변환
   const activeChats = useMemo(
@@ -52,7 +50,7 @@ export function RealtimeMatchingPage() {
             online: !!chatProfile?.is_online,
             imageUrl: getPublicUrlForPath(
               "chat-profile-images",
-              chatProfile?.image ?? null
+              chatProfile?.image ?? null,
             ),
             lastMessage: room.last_message || "새 대화를 시작해보세요!",
             time: lastMessageTime,
@@ -60,7 +58,7 @@ export function RealtimeMatchingPage() {
           };
         })
         .filter((row: any) => !!row.id),
-    [chatRooms]
+    [chatRooms],
   );
 
   const getInitial = (name: string) => {
@@ -132,15 +130,15 @@ export function RealtimeMatchingPage() {
                   프로필을 불러오는 데 실패했습니다.
                 </p>
               </div>
-            ) : onlineProfiles.length === 0 ? (
+            ) : activeProfiles.length === 0 ? (
               <div className="bg-gray-900 rounded-lg border border-gray-800 p-8 text-center">
                 <p className="text-gray-400">
-                  현재 접속 중인 프로필이 없습니다.
+                  현재 활성화된 프로필이 없습니다.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-                {onlineProfiles.map((p) => (
+                {activeProfiles.map((p) => (
                   <div
                     key={p.id}
                     onClick={() => setSelectedProfile(p)}

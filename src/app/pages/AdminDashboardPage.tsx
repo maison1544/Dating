@@ -1,5 +1,6 @@
 import { AdminLayout } from "../components/AdminLayout";
-import { useState } from "react";
+import { AdminPageLoader } from "../components/common/AdminPageLoader";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Calendar,
@@ -19,6 +20,22 @@ export function AdminDashboardPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  useEffect(() => {
+    if (period !== "custom") return;
+    if (startDate && endDate) return;
+
+    const now = new Date();
+    const fallbackStart = new Date();
+    fallbackStart.setMonth(fallbackStart.getMonth() - 1);
+    const startKey =
+      formatKST(fallbackStart, "date") ||
+      fallbackStart.toISOString().slice(0, 10);
+    const endKey = formatKST(now, "date") || now.toISOString().slice(0, 10);
+
+    if (!startDate) setStartDate(startKey);
+    if (!endDate) setEndDate(endKey);
+  }, [endDate, period, startDate]);
+
   // Supabase에서 통계 데이터 가져오기
   const { stats } = useDashboardStats(period, startDate, endDate);
   const {
@@ -32,20 +49,36 @@ export function AdminDashboardPage() {
     refetch,
   } = useAdminDashboardData(period, startDate, endDate);
 
-  // 날짜 표시 계산
-  const getDateDisplay = () => {
+  const periodLabel = useMemo(() => {
+    switch (period) {
+      case "today":
+        return "오늘";
+      case "week":
+        return "이번 주";
+      case "month":
+        return "이번 달";
+      case "custom":
+        return "선택 기간";
+      default:
+        return "오늘";
+    }
+  }, [period]);
+
+  const dateDisplay = useMemo(() => {
     const now = new Date();
     switch (period) {
       case "today":
         return formatKST(now, "date");
-      case "week":
+      case "week": {
         const weekAgo = new Date(now);
         weekAgo.setDate(weekAgo.getDate() - 7);
         return `${formatKST(weekAgo, "date")} ~ ${formatKST(now, "date")}`;
-      case "month":
+      }
+      case "month": {
         const monthAgo = new Date(now);
         monthAgo.setMonth(monthAgo.getMonth() - 1);
         return `${formatKST(monthAgo, "date")} ~ ${formatKST(now, "date")}`;
+      }
       case "custom":
         return startDate && endDate
           ? `${startDate} ~ ${endDate}`
@@ -53,59 +86,204 @@ export function AdminDashboardPage() {
       default:
         return formatKST(now, "date");
     }
-  };
+  }, [endDate, period, startDate]);
 
-  // 전체 매출 = 입금액 - 출금액
-  const totalRevenue = stats.deposits - stats.withdrawals;
+  const totalRevenue = useMemo(
+    () => stats.deposits - stats.withdrawals,
+    [stats.deposits, stats.withdrawals],
+  );
 
-  const formatMoney = (value: number) => {
+  const formatMoney = useCallback((value: number) => {
     const sign = value < 0 ? "-" : "";
     return `${sign}${Math.abs(Math.round(value)).toLocaleString()}원`;
-  };
+  }, []);
 
-  const formatCount = (value: number) =>
-    `${Math.round(value).toLocaleString()}명`;
+  const formatCount = useCallback(
+    (value: number) => `${Math.round(value).toLocaleString()}명`,
+    [],
+  );
 
-  const percentChange = (value: number, prev: number) => {
+  const percentChange = useCallback((value: number, prev: number) => {
     if (prev === 0) {
       if (value === 0) return 0;
       return 100;
     }
     return ((value - prev) / prev) * 100;
-  };
+  }, []);
 
-  const renderDelta = (value: number, prev: number) => {
-    const delta = value - prev;
-    const pct = percentChange(value, prev);
-    const isUp = delta >= 0;
-    const Icon = isUp ? TrendingUp : TrendingDown;
-    return (
-      <div
-        className={`inline-flex items-center gap-1 text-xs ${
-          isUp ? "text-emerald-300" : "text-rose-300"
-        }`}
-      >
-        <Icon size={14} />
-        <span>
-          {delta >= 0 ? "+" : "-"}
-          {Math.abs(Math.round(delta)).toLocaleString()} ({pct >= 0 ? "+" : ""}
-          {pct.toFixed(1)}%)
-        </span>
-      </div>
-    );
-  };
-
-  const maxTrend = Math.max(
-    1,
-    ...revenueTrend.map((d) => Math.max(d.deposits, d.withdrawals)),
+  const renderDelta = useCallback(
+    (value: number, prev: number) => {
+      const delta = value - prev;
+      const pct = percentChange(value, prev);
+      const isUp = delta >= 0;
+      const Icon = isUp ? TrendingUp : TrendingDown;
+      return (
+        <div
+          className={`inline-flex items-center gap-1 text-xs ${
+            isUp ? "text-emerald-300" : "text-rose-300"
+          }`}
+        >
+          <Icon size={14} />
+          <span>
+            {delta >= 0 ? "+" : "-"}
+            {Math.abs(Math.round(delta)).toLocaleString()} (
+            {pct >= 0 ? "+" : ""}
+            {pct.toFixed(1)}%)
+          </span>
+        </div>
+      );
+    },
+    [percentChange],
   );
-  const gameTotal = Math.max(1, gameBetting.powerball);
-  const memberTotal = Math.max(
-    1,
-    memberStatus.active +
-      memberStatus.pending +
-      memberStatus.suspended +
-      memberStatus.deleted,
+
+  const maxTrend = useMemo(
+    () =>
+      Math.max(
+        1,
+        ...revenueTrend.map((d) => Math.max(d.deposits, d.withdrawals)),
+      ),
+    [revenueTrend],
+  );
+  const gameTotal = useMemo(
+    () => Math.max(1, gameBetting.ladder + gameBetting.powerball),
+    [gameBetting.ladder, gameBetting.powerball],
+  );
+  const memberTotal = useMemo(
+    () =>
+      Math.max(
+        1,
+        memberStatus.active +
+          memberStatus.pending +
+          memberStatus.suspended +
+          memberStatus.rejected,
+      ),
+    [
+      memberStatus.active,
+      memberStatus.rejected,
+      memberStatus.pending,
+      memberStatus.suspended,
+    ],
+  );
+
+  const trendRows = useMemo(
+    () =>
+      revenueTrend.map((d) => ({
+        key: d.date,
+        dateLabel: d.date.slice(5),
+        depositWidth: `${(d.deposits / maxTrend) * 100}%`,
+        withdrawalWidth: `${(d.withdrawals / maxTrend) * 100}%`,
+        deposits: Math.round(d.deposits).toLocaleString(),
+        withdrawals: Math.round(d.withdrawals).toLocaleString(),
+      })),
+    [revenueTrend, maxTrend],
+  );
+
+  const gameRows = useMemo(
+    () =>
+      [
+        {
+          key: "ladder",
+          label: "사다리",
+          value: gameBetting.ladder,
+          barClass: "bg-pink-500/70",
+        },
+        {
+          key: "powerball",
+          label: "파워볼",
+          value: gameBetting.powerball,
+          barClass: "bg-violet-500/70",
+        },
+      ].map((row) => ({
+        ...row,
+        width: `${(row.value / gameTotal) * 100}%`,
+        display: Math.round(row.value).toLocaleString(),
+      })),
+    [gameBetting.ladder, gameBetting.powerball, gameTotal],
+  );
+
+  const memberRows = useMemo(
+    () =>
+      [
+        { key: "active", label: "활성", barClass: "bg-emerald-500/70" },
+        { key: "pending", label: "대기", barClass: "bg-amber-500/70" },
+        { key: "suspended", label: "정지", barClass: "bg-rose-500/70" },
+        { key: "rejected", label: "승인거절", barClass: "bg-orange-500/70" },
+      ].map((row) => {
+        const value = memberStatus[row.key as keyof typeof memberStatus];
+        return {
+          ...row,
+          value,
+          width: `${(value / memberTotal) * 100}%`,
+          display: Math.round(value).toLocaleString(),
+        };
+      }),
+    [memberStatus, memberTotal],
+  );
+
+  const activityRows = useMemo(
+    () =>
+      recentActivities.map((a) => {
+        const time = a.created_at ? formatKST(a.created_at, "datetime") : "-";
+        const amount =
+          typeof a.amount === "number" ? Math.round(a.amount) : null;
+        const amountDisplay =
+          amount === null
+            ? "-"
+            : a.type === "withdraw"
+              ? `-${Math.abs(amount).toLocaleString()}`
+              : a.type === "charge"
+                ? `+${Math.abs(amount).toLocaleString()}`
+                : amount.toLocaleString();
+        return { ...a, time, amountDisplay };
+      }),
+    [recentActivities],
+  );
+
+  const statsRows = useMemo(
+    () => [
+      { key: "date", label: "날짜", value: dateDisplay },
+      {
+        key: "newMembers",
+        label: "신규 회원",
+        value: `${stats.newMembers.toLocaleString()}명 (승인 ${stats.approvedMembers.toLocaleString()}명, 거절 ${stats.rejectedMembers.toLocaleString()}명)`,
+      },
+      {
+        key: "deposits",
+        label: "입금액",
+        value: `+${stats.deposits.toLocaleString()}원 (${stats.depositCount.toLocaleString()}건)`,
+      },
+      {
+        key: "withdrawals",
+        label: "출금액",
+        value: `-${stats.withdrawals.toLocaleString()}원 (${stats.withdrawalCount.toLocaleString()}건)`,
+      },
+      {
+        key: "totalRolling",
+        label: "미니게임 전체 롤링/매출",
+        value: `${stats.totalRolling.toLocaleString()}원 / ${stats.miniGameRevenue >= 0 ? "+" : ""}${stats.miniGameRevenue.toLocaleString()}원`,
+      },
+      {
+        key: "ladderRolling",
+        label: "사다리 롤링/매출",
+        value: `${stats.ladderRolling.toLocaleString()}원 / ${stats.ladderRevenue >= 0 ? "+" : ""}${stats.ladderRevenue.toLocaleString()}원`,
+      },
+      {
+        key: "powerballRolling",
+        label: "파워볼 롤링/매출",
+        value: `${stats.powerballRolling.toLocaleString()}원 / ${stats.powerballRevenue >= 0 ? "+" : ""}${stats.powerballRevenue.toLocaleString()}원`,
+      },
+      {
+        key: "itemPurchase",
+        label: "아이템 구매 금액",
+        value: `${stats.itemPurchase.toLocaleString()}원 (${stats.itemPurchaseCount.toLocaleString()}건)`,
+      },
+      {
+        key: "totalRevenue",
+        label: "전체 매출",
+        value: `${totalRevenue >= 0 ? "+" : ""}${totalRevenue.toLocaleString()}원`,
+      },
+    ],
+    [dateDisplay, stats, totalRevenue],
   );
 
   return (
@@ -277,18 +455,7 @@ export function AdminDashboardPage() {
             </div>
           )}
 
-          {isLoading && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 animate-pulse">
-                <div className="h-4 w-40 bg-gray-700/40 rounded" />
-                <div className="mt-4 h-40 bg-gray-700/20 rounded" />
-              </div>
-              <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 animate-pulse">
-                <div className="h-4 w-40 bg-gray-700/40 rounded" />
-                <div className="mt-4 h-40 bg-gray-700/20 rounded" />
-              </div>
-            </div>
-          )}
+          {isLoading && <AdminPageLoader />}
 
           {!isLoading && !error && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -296,22 +463,24 @@ export function AdminDashboardPage() {
               <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 shadow-xl">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="text-gray-100">최근 7일 입/출금 추이</div>
+                    <div className="text-gray-100">
+                      {periodLabel} 입/출금 추이
+                    </div>
                     <div className="text-xs text-gray-400">
                       입금(인디고) / 출금(로즈)
                     </div>
                   </div>
                 </div>
-                {revenueTrend.length === 0 ? (
+                {trendRows.length === 0 ? (
                   <div className="text-gray-400 text-sm py-12 text-center">
                     표시할 데이터가 없습니다
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {revenueTrend.map((d) => (
-                      <div key={d.date} className="flex items-center gap-3">
+                  <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                    {trendRows.map((d) => (
+                      <div key={d.key} className="flex items-center gap-3">
                         <div className="w-20 text-xs text-gray-400">
-                          {d.date.slice(5)}
+                          {d.dateLabel}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
@@ -319,12 +488,12 @@ export function AdminDashboardPage() {
                               <div
                                 className="h-2 bg-indigo-500/70"
                                 style={{
-                                  width: `${(d.deposits / maxTrend) * 100}%`,
+                                  width: d.depositWidth,
                                 }}
                               />
                             </div>
                             <div className="text-xs text-indigo-200 w-24 text-right">
-                              +{Math.round(d.deposits).toLocaleString()}
+                              +{d.deposits}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 mt-1">
@@ -332,12 +501,12 @@ export function AdminDashboardPage() {
                               <div
                                 className="h-2 bg-rose-500/70"
                                 style={{
-                                  width: `${(d.withdrawals / maxTrend) * 100}%`,
+                                  width: d.withdrawalWidth,
                                 }}
                               />
                             </div>
                             <div className="text-xs text-rose-200 w-24 text-right">
-                              -{Math.round(d.withdrawals).toLocaleString()}
+                              -{d.withdrawals}
                             </div>
                           </div>
                         </div>
@@ -349,61 +518,45 @@ export function AdminDashboardPage() {
 
               {/* Breakdown */}
               <div className="bg-gray-800/40 border border-gray-700/30 rounded-lg p-4 shadow-xl">
-                <div className="text-gray-100">오늘 게임 베팅 분포</div>
-                <div className="text-xs text-gray-400">파워볼</div>
+                <div className="text-gray-100">
+                  {periodLabel} 게임 베팅 분포
+                </div>
+                <div className="text-xs text-gray-400">사다리 / 파워볼</div>
 
                 <div className="mt-4 space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-300">파워볼</span>
-                      <span className="text-gray-100">
-                        {Math.round(gameBetting.powerball).toLocaleString()}원
-                      </span>
+                  {gameRows.map((row) => (
+                    <div key={row.key}>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-300">{row.label}</span>
+                        <span className="text-gray-100">{row.display}원</span>
+                      </div>
+                      <div className="h-2 bg-gray-900/40 rounded overflow-hidden mt-2">
+                        <div
+                          className={`h-2 ${row.barClass}`}
+                          style={{ width: row.width }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 bg-gray-900/40 rounded overflow-hidden mt-2">
-                      <div
-                        className="h-2 bg-violet-500/70"
-                        style={{
-                          width: `${
-                            (gameBetting.powerball / gameTotal) * 100
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
                 <div className="mt-6">
                   <div className="text-gray-100">회원 상태</div>
                   <div className="mt-3 space-y-2">
-                    {(
-                      [
-                        ["active", "활성", "bg-emerald-500/70"],
-                        ["pending", "대기", "bg-amber-500/70"],
-                        ["suspended", "정지", "bg-rose-500/70"],
-                        ["deleted", "삭제", "bg-gray-500/70"],
-                      ] as const
-                    ).map(([key, label, barClass]) => {
-                      const value = memberStatus[key];
-                      return (
-                        <div key={key}>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-300">{label}</span>
-                            <span className="text-gray-100">
-                              {Math.round(value).toLocaleString()}명
-                            </span>
-                          </div>
-                          <div className="h-2 bg-gray-900/40 rounded overflow-hidden mt-2">
-                            <div
-                              className={`h-2 ${barClass}`}
-                              style={{
-                                width: `${(value / memberTotal) * 100}%`,
-                              }}
-                            />
-                          </div>
+                    {memberRows.map((row) => (
+                      <div key={row.key}>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-300">{row.label}</span>
+                          <span className="text-gray-100">{row.display}명</span>
                         </div>
-                      );
-                    })}
+                        <div className="h-2 bg-gray-900/40 rounded overflow-hidden mt-2">
+                          <div
+                            className={`h-2 ${row.barClass}`}
+                            style={{ width: row.width }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -426,7 +579,7 @@ export function AdminDashboardPage() {
               </button>
             </div>
             {isLoading ? (
-              <div className="p-6 text-gray-400 text-sm">불러오는 중...</div>
+              <AdminPageLoader />
             ) : recentActivities.length === 0 ? (
               <div className="p-6 text-gray-400 text-sm">
                 표시할 최근 활동이 없습니다
@@ -448,49 +601,28 @@ export function AdminDashboardPage() {
                       <th className="px-4 py-3 text-right text-xs text-gray-400 whitespace-nowrap">
                         금액
                       </th>
-                      <th className="px-4 py-3 text-left text-xs text-gray-400 whitespace-nowrap">
-                        비고
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {recentActivities.map((a) => {
-                      const time = a.created_at
-                        ? formatKST(a.created_at, "datetime")
-                        : "-";
-                      const amount =
-                        typeof a.amount === "number"
-                          ? Math.round(a.amount)
-                          : null;
-                      return (
-                        <tr
-                          key={a.id}
-                          className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors"
-                        >
-                          <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                            {time}
-                          </td>
-                          <td className="px-4 py-3 text-gray-100 whitespace-nowrap">
-                            {a.meta || a.type}
-                          </td>
-                          <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                            {a.userName}
-                          </td>
-                          <td className="px-4 py-3 text-right text-gray-100 whitespace-nowrap">
-                            {amount === null
-                              ? "-"
-                              : a.type === "withdraw"
-                                ? `-${Math.abs(amount).toLocaleString()}`
-                                : a.type === "charge"
-                                  ? `+${Math.abs(amount).toLocaleString()}`
-                                  : amount.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-gray-400 whitespace-nowrap">
-                            {a.status || "-"}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {activityRows.map((a) => (
+                      <tr
+                        key={a.id}
+                        className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors"
+                      >
+                        <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                          {a.time}
+                        </td>
+                        <td className="px-4 py-3 text-gray-100 whitespace-nowrap">
+                          {a.meta || a.type}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                          {a.userName}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-100 whitespace-nowrap">
+                          {a.amountDisplay}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -512,84 +644,19 @@ export function AdminDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      날짜
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      {getDateDisplay()}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      신규 회원
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      {stats.newMembers.toLocaleString()}명 (승인{" "}
-                      {stats.approvedMembers.toLocaleString()}
-                      명, 거절 {stats.rejectedMembers.toLocaleString()}
-                      명)
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      입금액
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      +{stats.deposits.toLocaleString()}원 (
-                      {stats.depositCount.toLocaleString()}
-                      건)
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      출금액
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      -{stats.withdrawals.toLocaleString()}원 (
-                      {stats.withdrawalCount.toLocaleString()}
-                      건)
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      미니게임 전체 롤링/매출
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      {stats.totalRolling.toLocaleString()}원 /{" "}
-                      {stats.miniGameRevenue >= 0 ? "+" : ""}
-                      {stats.miniGameRevenue.toLocaleString()}원
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      파워볼 롤링/매출
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      {stats.powerballRolling.toLocaleString()}원 /{" "}
-                      {stats.powerballRevenue >= 0 ? "+" : ""}
-                      {stats.powerballRevenue.toLocaleString()}원
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      아이템 구매 금액
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      {stats.itemPurchase.toLocaleString()}원 (
-                      {stats.itemPurchaseCount.toLocaleString()}
-                      건)
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      전체 매출
-                    </td>
-                    <td className="px-4 py-3 text-gray-100">
-                      {totalRevenue >= 0 ? "+" : ""}
-                      {totalRevenue.toLocaleString()}원
-                    </td>
-                  </tr>
+                  {statsRows.map((row, index) => (
+                    <tr
+                      key={row.key}
+                      className={`border-b border-gray-700/20 hover:bg-gray-800/30 transition-colors ${
+                        index === statsRows.length - 1 ? "border-b-0" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                        {row.label}
+                      </td>
+                      <td className="px-4 py-3 text-gray-100">{row.value}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

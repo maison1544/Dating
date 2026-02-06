@@ -22,7 +22,7 @@ function jsonResponse(body: unknown, status = 200) {
 async function revokeUserSessions(
   supabaseUrl: string,
   serviceRoleKey: string,
-  userId: string
+  userId: string,
 ): Promise<{ success: boolean; error?: string }> {
   const endpoint = `${supabaseUrl}/auth/v1/admin/users/${userId}/logout?scope=global`;
 
@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !serviceRoleKey) {
       return jsonResponse(
         { error: "Missing Supabase environment variables" },
-        500
+        500,
       );
     }
 
@@ -113,8 +113,8 @@ Deno.serve(async (req: Request) => {
 
     if (typeof newPassword !== "string" || newPassword.length < 6) {
       return jsonResponse(
-        { error: "Password must be at least 6 characters" },
-        400
+        { error: "비밀번호를 6자리 이상 입력해야 합니다." },
+        400,
       );
     }
 
@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
       userId,
       {
         password: newPassword,
-      }
+      },
     );
 
     if (error) {
@@ -132,31 +132,25 @@ Deno.serve(async (req: Request) => {
     const revocation = await revokeUserSessions(
       supabaseUrl,
       serviceRoleKey,
-      userId
+      userId,
     );
 
-    const topic = `private:force-logout:${userId}`;
-    const payload = {
-      type: "forced_logout",
-      userId,
-      reason: "password_changed",
-      at: new Date().toISOString(),
-    };
-
-    const { error: sendErr } = await supabaseAdmin.rpc("realtime.send", {
-      topic,
+    // Realtime 브로드캐스트로 강제 로그아웃 알림
+    const channel = supabaseAdmin.channel(`force-logout:${userId}`);
+    await channel.send({
+      type: "broadcast",
       event: "forced_logout",
-      payload,
-      private: true,
+      payload: {
+        userId,
+        reason: "password_changed",
+        at: new Date().toISOString(),
+      },
     });
-
-    if (sendErr) {
-      return jsonResponse({ error: sendErr.message }, 400);
-    }
+    await supabaseAdmin.removeChannel(channel);
 
     return jsonResponse(
       { success: true, user: { id: data.user?.id }, revocation },
-      200
+      200,
     );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";

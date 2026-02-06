@@ -1,21 +1,38 @@
 import { AdminLayout } from "../components/AdminLayout";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Send, Image as ImageIcon, Gift, ChevronLeft } from "lucide-react";
+import { Send, Gift, ChevronLeft, List, Bell, BellOff } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import {
   useAgentChatProfiles,
   useAgentChatRooms,
-  useGiftItems,
+  useAgentGifts,
+  useAgentGiftTransactions,
   useRealtimeChat,
   useSendMessage,
   useMarkMessagesAsRead,
 } from "../hooks/useSupabase";
 import { useAlert } from "../contexts/AlertContext";
 import { getPublicUrlForPath } from "../../lib/storage";
-import { supabase } from "../../lib/supabase";
+import { supabaseAdmin } from "../../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { QuantityModal } from "../components/QuantityModal";
+import {
+  GiftSelectionModal,
+  InventoryGift,
+} from "../components/GiftSelectionModal";
+import { ChatImageUpload } from "../components/ChatImageUpload";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../components/ui/tooltip";
+import {
+  checkIsUserOnline,
+  OnlineStatusIndicator,
+  OnlineStatusText,
+} from "../components/OnlineStatus";
 import { formatKST } from "../../lib/dateUtils";
+import { useNotification } from "../contexts/NotificationContext";
 
 interface ChatMessage {
   id: string;
@@ -69,7 +86,7 @@ type RenderChatWindowFn = (
   onSend: () => void,
   onKeyPress: (e: React.KeyboardEvent) => void,
   onShowGift: () => void,
-  scrollRef?: React.RefObject<HTMLDivElement>
+  scrollRef?: React.RefObject<HTMLDivElement>,
 ) => JSX.Element;
 
 const getAvatarFallbackText = (name: string) => {
@@ -99,6 +116,65 @@ function NameAvatar({ name, src }: { name: string; src: string | null }) {
   );
 }
 
+function InfoCircleIcon({
+  className,
+  size = 14,
+}: {
+  className?: string;
+  size?: number;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="10" x2="12" y2="16"></line>
+      <circle cx="12" cy="7" r="1" fill="currentColor" stroke="none"></circle>
+    </svg>
+  );
+}
+
+function GiftRevenueInfoTooltip() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="text-gray-400 hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/70 rounded"
+          aria-label="기프트 수익 계산 규칙"
+        >
+          <InfoCircleIcon />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        className="bg-gray-900 text-gray-100 border border-gray-700 max-w-xs"
+      >
+        <div className="space-y-1">
+          <p className="text-xs text-gray-200">
+            기프트 수익 = 유저가 보낸 선물 금액 - 프로필이 보낸 선물 금액
+          </p>
+          <p className="text-xs text-gray-400">
+            괄호는 유저가 보낸 선물 개수입니다.
+          </p>
+          <p className="text-xs text-gray-300">
+            예: 하트(150P) 3개, 초콜릿(200P) 5개 → 기프트 수익 -550P(3개)
+          </p>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function RealtimeChatWindow({
   conversation,
   isBubbleMode,
@@ -120,7 +196,10 @@ function RealtimeChatWindow({
   onShowGift: () => void;
   renderChatWindow: RenderChatWindowFn;
 }) {
-  const { messages: dbMessages } = useRealtimeChat(conversation.id);
+  // Use admin mode to bypass RLS for agent chat
+  const { messages: dbMessages } = useRealtimeChat(conversation.id, {
+    useAdmin: true,
+  });
   const { markAsRead } = useMarkMessagesAsRead();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -139,23 +218,28 @@ function RealtimeChatWindow({
         ? formatKST(msg.created_at, "datetime")
         : "";
 
-      const giftLabel = msg.gift_items
-        ? `${msg.gift_items.emoji || "🎁"} ${msg.gift_items.name || ""}`.trim()
-        : (msg.content || msg.message || "").trim();
-      const giftQuantityText = msg.gift_quantity
-        ? ` x${msg.gift_quantity}`
-        : "";
+      // Gift message format: 🎁{emoji} {recipient}님에게 {giftName} {qty}개를 보냈습니다!
+      // isMe = true means profile (agent) sent to user, recipient = userName
+      // isMe = false means user sent to profile (agent), recipient = profileName
+      const giftEmoji = msg.gift_items?.emoji || "🎁";
+      const giftName = msg.gift_items?.name || "선물";
+      const giftQty = msg.gift_quantity || 1;
+      const recipient = isMe ? conversation.userName : conversation.profileName;
 
       const message =
         messageType === "gift"
-          ? `${giftLabel}${giftQuantityText}`.trim()
+          ? `${giftEmoji} ${recipient}님에게 ${giftName} ${giftQty}개를 보냈습니다!`
           : (msg.content || msg.message || "").trim();
 
       return {
         id: msg.id,
         senderId: msg.sender_id,
         senderName: isMe ? conversation.profileName : conversation.userName,
-        message,
+        message: messageType === "image" ? "[이미지]" : message,
+        imageUrl:
+          messageType === "image"
+            ? msg.content || msg.message || ""
+            : undefined,
         timestamp,
         isMe,
         type: messageType,
@@ -195,7 +279,7 @@ function RealtimeChatWindow({
     onSend,
     onKeyPress,
     onShowGift,
-    scrollRef
+    scrollRef,
   );
 }
 
@@ -204,43 +288,74 @@ function RealtimeChatWindow({
 export function AgentChatsPage() {
   const { adminAccount } = useAuth();
   const { showAlert } = useAlert();
+  const {
+    addOpenChatModal,
+    removeOpenChatModal,
+    toggleChatMute,
+    isChatMuted,
+    setActiveChatId,
+  } = useNotification();
   const [selectedChat, setSelectedChat] = useState<ChatConversation | null>(
-    null
+    null,
   );
   const [chatModals, setChatModals] = useState<ChatModal[]>([]);
   const [messageInputs, setMessageInputs] = useState<Record<string, string>>(
-    {}
+    {},
   );
   const [profileFilter, setProfileFilter] = useState<string>("all");
   const [showGiftModal, setShowGiftModal] = useState<string | null>(null);
   const [pendingGift, setPendingGift] = useState<{
     conversationId: string;
-    gift: { id: string; name: string; points: number; icon: string };
+    gift: InventoryGift;
   } | null>(null);
   const [activeModalId, setActiveModalId] = useState<string | null>(null);
   const [imagePreviewModal, setImagePreviewModal] = useState<string | null>(
-    null
+    null,
   );
+  const [mainChatBubbleMode, setMainChatBubbleMode] = useState(true);
+  const [totalRoomCountByUser, setTotalRoomCountByUser] = useState<
+    Map<string, number>
+  >(new Map());
 
   // Supabase hooks for real data
   const { rooms: dbChatRooms, isLoading: roomsLoading } = useAgentChatRooms(
-    adminAccount?.id
+    adminAccount?.id,
   );
   const { profiles: dbProfiles, updateProfileOnline } = useAgentChatProfiles(
-    adminAccount?.id
+    adminAccount?.id,
   );
-  const { gifts: dbGifts } = useGiftItems();
+  const { agentGifts, refetch: refetchAgentGifts } = useAgentGifts(
+    adminAccount?.id,
+  );
+  const { transactions: giftTransactions } = useAgentGiftTransactions(
+    adminAccount?.id,
+  );
   const { sendMessage, isLoading: sendingMessage } = useSendMessage();
 
   void roomsLoading;
 
-  // Transform gifts from Supabase
-  const giftsList = dbGifts.map((g: any) => ({
-    id: g.id,
-    name: g.name,
-    points: g.buy_price,
-    icon: g.emoji,
-  }));
+  const isSelectedChatMuted = selectedChat
+    ? isChatMuted(selectedChat.id, true)
+    : false;
+
+  // Transform agent's gift inventory to InventoryGift format
+  const myGifts: InventoryGift[] = useMemo(
+    () =>
+      (agentGifts || [])
+        .map((ag: any) => {
+          const gift = ag.gifts;
+          return {
+            id: ag.id,
+            gift_id: ag.gift_id,
+            name: gift?.name,
+            emoji: gift?.emoji,
+            buy_price: Number(gift?.buy_price ?? 0),
+            quantity: Number(ag.quantity ?? 0),
+          };
+        })
+        .filter((g: any) => !!g.gift_id && !!g.name && g.quantity > 0),
+    [agentGifts],
+  );
 
   // 채팅 스크롤을 위한 refs
   const chatScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -263,106 +378,129 @@ export function AgentChatsPage() {
         userName: room.users?.nickname || room.users?.name || "Unknown",
         userImage: getPublicUrlForPath(
           "profile-images",
-          room.users?.profile_image
+          room.users?.profile_image,
         ),
         profileName: room.chat_profiles?.name || "프로필",
         profileImage: getPublicUrlForPath(
           "chat-profile-images",
-          room.chat_profiles?.image
+          room.chat_profiles?.image,
         ),
         lastMessage: room.last_message || "",
         lastMessageTime: room.last_message_at
           ? formatKST(room.last_message_at, "datetime")
           : "",
-        unreadCount: room.unread_count || 0,
-        isOnline: !!room.chat_profiles?.is_online,
+        unreadCount: room.profile_unread_count || 0,
+        isOnline: checkIsUserOnline(room.users),
         messages: [],
       })),
-    [dbChatRooms]
+    [dbChatRooms],
   );
 
-  const profileStats = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayIso = todayStart.toISOString();
-
-    const roomCountByProfile = new Map<string, number>();
-    const activeRoomCountByProfile = new Map<string, number>();
-    (dbChatRooms || []).forEach((r: any) => {
-      const pid = r.profile_id as string | undefined;
-      if (!pid) return;
-      roomCountByProfile.set(pid, (roomCountByProfile.get(pid) || 0) + 1);
-      if (r.status === "active") {
-        activeRoomCountByProfile.set(
-          pid,
-          (activeRoomCountByProfile.get(pid) || 0) + 1
-        );
-      }
-    });
-
-    return {
-      todayIso,
-      roomCountByProfile,
-      activeRoomCountByProfile,
-    };
-  }, [dbChatRooms]);
-
-  const [todayGiftStats, setTodayGiftStats] = useState<
-    Record<string, { count: number; value: number }>
-  >({});
-
+  // Fetch total room counts for all users (across all profiles, not just agent's)
   useEffect(() => {
-    const fetchTodayGiftStats = async () => {
-      const profileIds = (dbProfiles || []).map((p: any) => p.id);
-      if (profileIds.length === 0) {
-        setTodayGiftStats({});
+    const userIds = [
+      ...new Set(
+        (dbChatRooms || []).map((r: any) => r.user_id).filter(Boolean),
+      ),
+    ];
+    if (userIds.length === 0) {
+      setTotalRoomCountByUser(new Map());
+      return;
+    }
+
+    const fetchTotalRoomCounts = async () => {
+      // Use RPC function to bypass RLS and get total room counts
+      const { data, error } = await supabaseAdmin.rpc(
+        "get_user_total_room_counts",
+        { user_ids: userIds },
+      );
+
+      if (error || !data) {
+        console.error("Failed to fetch total room counts:", error);
+        setTotalRoomCountByUser(new Map());
         return;
       }
 
-      const pageSize = 1000;
-      const maxRows = 20000;
-      const all: any[] = [];
-      for (let from = 0; from < maxRows; from += pageSize) {
-        const { data, error } = await supabase
-          .from("gift_transactions")
-          .select("receiver_id, quantity, points_amount, created_at")
-          .eq("receiver_type", "profile")
-          .eq("transaction_type", "send")
-          .in("receiver_id", profileIds)
-          .gte("created_at", profileStats.todayIso)
-          .order("created_at", { ascending: false })
-          .range(from, from + pageSize - 1);
-
-        if (error) {
-          setTodayGiftStats({});
-          showAlert({
-            title: "오류",
-            message: `오늘 선물 통계를 불러오지 못했습니다: ${error.message}`,
-            type: "error",
-          });
-          return;
+      const countMap = new Map<string, number>();
+      (data as { user_id: string; room_count: number }[]).forEach((row) => {
+        if (row.user_id) {
+          countMap.set(row.user_id, Number(row.room_count));
         }
-
-        const rows = data || [];
-        all.push(...rows);
-        if (rows.length < pageSize) break;
-      }
-
-      const map: Record<string, { count: number; value: number }> = {};
-      all.forEach((t: any) => {
-        const pid = t.receiver_id as string | undefined;
-        if (!pid) return;
-        const qty = Number(t.quantity ?? 1);
-        const amt = Number(t.points_amount ?? 0);
-        if (!map[pid]) map[pid] = { count: 0, value: 0 };
-        map[pid].count += qty;
-        map[pid].value += amt;
       });
-      setTodayGiftStats(map);
+      setTotalRoomCountByUser(countMap);
     };
 
-    void fetchTodayGiftStats();
-  }, [dbProfiles, profileStats.todayIso]);
+    void fetchTotalRoomCounts();
+  }, [dbChatRooms]);
+
+  const profileStats = useMemo(() => {
+    return { roomCountByUser: totalRoomCountByUser };
+  }, [totalRoomCountByUser]);
+
+  useEffect(() => {
+    setActiveChatId(selectedChat?.id || null);
+    return () => {
+      setActiveChatId(null);
+    };
+  }, [selectedChat?.id, setActiveChatId]);
+
+  // 채팅 모달 열림/닫힘 시 알림 컨텍스트에 반영
+  useEffect(() => {
+    chatModals.forEach((modal) => {
+      addOpenChatModal(modal.conversation.id);
+    });
+    return () => {
+      chatModals.forEach((modal) => {
+        removeOpenChatModal(modal.conversation.id);
+      });
+    };
+  }, [chatModals, addOpenChatModal, removeOpenChatModal]);
+
+  const giftRevenueStats = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        receivedCount: number;
+        receivedValue: number;
+        sentValue: number;
+        netProfit: number;
+      }
+    > = {};
+
+    (dbChatRooms || []).forEach((room: any) => {
+      if (!room?.id) return;
+      map[room.id] = {
+        receivedCount: 0,
+        receivedValue: 0,
+        sentValue: 0,
+        netProfit: 0,
+      };
+    });
+
+    if (!giftTransactions || giftTransactions.length === 0) {
+      return map;
+    }
+
+    giftTransactions.forEach((t: any) => {
+      const roomId = t.room_id as string | undefined;
+      if (!roomId || !map[roomId]) return;
+      const quantity = Number(t.quantity ?? 1);
+      const points = Number(t.points_amount ?? 0);
+      if (t.receiver_type === "profile" && t.transaction_type === "send") {
+        map[roomId].receivedCount += quantity;
+        map[roomId].receivedValue += points;
+      }
+      if (t.sender_type === "profile" && t.transaction_type === "send") {
+        map[roomId].sentValue += points;
+      }
+    });
+
+    Object.keys(map).forEach((roomId) => {
+      map[roomId].netProfit = map[roomId].receivedValue - map[roomId].sentValue;
+    });
+
+    return map;
+  }, [dbChatRooms, giftTransactions]);
 
   const profileList = useMemo(() => {
     return (dbProfiles || []).map((p: any) => ({
@@ -420,7 +558,7 @@ export function AgentChatsPage() {
 
   const updateModal = (modalId: string, updates: Partial<ChatModal>) => {
     setChatModals(
-      chatModals.map((m) => (m.id === modalId ? { ...m, ...updates } : m))
+      chatModals.map((m) => (m.id === modalId ? { ...m, ...updates } : m)),
     );
   };
 
@@ -451,11 +589,11 @@ export function AgentChatsPage() {
       if (modal.isResizing) {
         const newWidth = Math.max(
           400,
-          modal.resizeStart.width + (e.clientX - modal.resizeStart.x)
+          modal.resizeStart.width + (e.clientX - modal.resizeStart.x),
         );
         const newHeight = Math.max(
           500,
-          modal.resizeStart.height + (e.clientY - modal.resizeStart.y)
+          modal.resizeStart.height + (e.clientY - modal.resizeStart.y),
         );
         updateModal(modal.id, {
           size: { width: newWidth, height: newHeight },
@@ -509,7 +647,7 @@ export function AgentChatsPage() {
       conv.profileId,
       "profile",
       content,
-      "text"
+      "text",
     );
 
     if (result.error) {
@@ -521,10 +659,7 @@ export function AgentChatsPage() {
     }
   };
 
-  const handlePrepareGift = (
-    conversationId: string,
-    gift: { id: string; name: string; points: number; icon: string }
-  ) => {
+  const handlePrepareGift = (conversationId: string, gift: InventoryGift) => {
     setPendingGift({ conversationId, gift });
     setShowGiftModal(null);
   };
@@ -541,16 +676,20 @@ export function AgentChatsPage() {
     if (!giftQuantity || giftQuantity <= 0) return;
 
     try {
-      const { error: rpcError } = await supabase.rpc("chat_send_gift_profile", {
-        p_room_id: conversationId,
-        p_gift_id: gift.id,
-        p_quantity: giftQuantity,
-      });
+      const { error: rpcError } = await supabaseAdmin.rpc(
+        "chat_send_gift_profile",
+        {
+          p_room_id: conversationId,
+          p_gift_id: gift.gift_id,
+          p_quantity: giftQuantity,
+        },
+      );
 
       if (rpcError) throw rpcError;
 
       setPendingGift(null);
       setShowGiftModal(null);
+      refetchAgentGifts();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "선물 전송에 실패했습니다.";
@@ -572,7 +711,7 @@ export function AgentChatsPage() {
   function findConversation(conversationId: string) {
     if (selectedChat?.id === conversationId) return selectedChat;
     const modalConv = chatModals.find(
-      (m) => m.conversation.id === conversationId
+      (m) => m.conversation.id === conversationId,
     )?.conversation;
     if (modalConv) return modalConv;
     return conversations.find((c) => c.id === conversationId) || null;
@@ -634,7 +773,7 @@ export function AgentChatsPage() {
     onSend: () => void,
     onKeyPress: (e: React.KeyboardEvent) => void,
     onShowGift: () => void,
-    scrollRef?: React.RefObject<HTMLDivElement>
+    scrollRef?: React.RefObject<HTMLDivElement>,
   ) => {
     void onToggleMode;
 
@@ -713,9 +852,9 @@ export function AgentChatsPage() {
                           onClick={() =>
                             setImagePreviewModal(msg.imageUrl || null)
                           }
-                          className="text-purple-400 cursor-pointer hover:text-purple-300 transition-colors"
+                          className="text-purple-400 cursor-pointer hover:text-purple-300 underline transition-colors"
                         >
-                          {msg.message}
+                          [이미지]
                         </span>
                       </span>
                     ) : (
@@ -748,9 +887,16 @@ export function AgentChatsPage() {
             >
               <Gift size={18} />
             </button>
-            <button className="text-gray-400 hover:text-white transition-colors p-2 flex-shrink-0">
-              <ImageIcon size={18} />
-            </button>
+            <ChatImageUpload
+              roomId={conversation.id}
+              senderType="profile"
+              onImageSent={() => {}}
+              onError={(err) =>
+                showAlert({ title: "오류", message: err, type: "error" })
+              }
+              size={18}
+              className="text-gray-400 hover:text-white transition-colors p-2 flex-shrink-0"
+            />
             <input
               type="text"
               value={messageInput}
@@ -855,10 +1001,13 @@ export function AgentChatsPage() {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <NameAvatar
-                            name={conv.userName}
-                            src={conv.userImage}
-                          />
+                          <div className="relative">
+                            <NameAvatar
+                              name={conv.userName}
+                              src={conv.userImage}
+                            />
+                            <OnlineStatusIndicator isOnline={conv.isOnline} />
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-white text-sm font-medium truncate">
@@ -902,10 +1051,13 @@ export function AgentChatsPage() {
                     >
                       <ChevronLeft size={20} />
                     </button>
-                    <NameAvatar
-                      name={selectedChat.userName}
-                      src={selectedChat.userImage}
-                    />
+                    <div className="relative">
+                      <NameAvatar
+                        name={selectedChat.userName}
+                        src={selectedChat.userImage}
+                      />
+                      <OnlineStatusIndicator isOnline={selectedChat.isOnline} />
+                    </div>
                     <div>
                       <h3 className="text-white font-medium text-sm">
                         {selectedChat.userName}
@@ -920,47 +1072,85 @@ export function AgentChatsPage() {
                       <span>
                         활성방{" "}
                         {(
-                          profileStats.activeRoomCountByProfile.get(
-                            selectedChat.profileId
+                          profileStats.roomCountByUser.get(
+                            selectedChat.userId,
                           ) || 0
                         ).toLocaleString()}
                       </span>
                       <span className="text-gray-600">|</span>
-                      <span className="text-yellow-400">
-                        오늘 선물{" "}
+                      <span className="flex items-center gap-1 text-gray-200">
+                        기프트 수익
+                        <GiftRevenueInfoTooltip />
+                      </span>
+                      <span
+                        className={`font-medium ${
+                          (giftRevenueStats[selectedChat.id]?.netProfit || 0) >=
+                          0
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }`}
+                      >
+                        {(giftRevenueStats[selectedChat.id]?.netProfit || 0) >=
+                        0
+                          ? "+"
+                          : ""}
                         {(
-                          todayGiftStats[selectedChat.profileId]?.value || 0
+                          giftRevenueStats[selectedChat.id]?.netProfit || 0
                         ).toLocaleString()}
                         P(
                         {(
-                          todayGiftStats[selectedChat.profileId]?.count || 0
+                          giftRevenueStats[selectedChat.id]?.receivedCount || 0
                         ).toLocaleString()}
                         개)
                       </span>
                     </div>
                     <button
-                      onClick={async () => {
-                        const p = profilesById.get(selectedChat.profileId);
-                        if (!p) return;
-                        await updateProfileOnline(
-                          selectedChat.profileId,
-                          !(p.is_online ?? false)
-                        );
-                      }}
-                      className="text-xs px-3 py-1 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors"
+                      type="button"
+                      onClick={() =>
+                        selectedChat && toggleChatMute(selectedChat.id, true)
+                      }
+                      className={`flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
+                        isSelectedChatMuted
+                          ? "border-gray-700 text-gray-400 hover:text-gray-200"
+                          : "border-indigo-400/70 text-indigo-200 hover:text-indigo-100"
+                      }`}
+                      title={
+                        isSelectedChatMuted
+                          ? "채팅 알림 켜기"
+                          : "채팅 알림 끄기"
+                      }
                     >
-                      프로필{" "}
-                      {profilesById.get(selectedChat.profileId)?.is_online
-                        ? "온라인"
-                        : "오프라인"}
+                      {isSelectedChatMuted ? (
+                        <BellOff size={14} />
+                      ) : (
+                        <Bell size={14} />
+                      )}
+                      <span className="hidden sm:inline">
+                        {isSelectedChatMuted ? "알림 끔" : "알림 켬"}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setMainChatBubbleMode((prev) => !prev)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        mainChatBubbleMode
+                          ? "bg-gray-700 text-gray-400 hover:bg-gray-600"
+                          : "bg-indigo-500 text-white hover:bg-indigo-600"
+                      }`}
+                      title={
+                        mainChatBubbleMode
+                          ? "로그 모드로 전환"
+                          : "말풍선 모드로 전환"
+                      }
+                    >
+                      <List size={16} />
                     </button>
                   </div>
                 </div>
 
                 <RealtimeChatWindow
                   conversation={selectedChat}
-                  isBubbleMode={true}
-                  onToggleMode={() => void 0}
+                  isBubbleMode={mainChatBubbleMode}
+                  onToggleMode={() => setMainChatBubbleMode((prev) => !prev)}
                   messageInput={messageInputs[selectedChat.id] || ""}
                   onMessageChange={(value) =>
                     setMessageInputs((prev) => ({
@@ -1001,15 +1191,62 @@ export function AgentChatsPage() {
               className="bg-gray-800 border-b border-gray-700 p-2 flex items-center justify-between cursor-move"
               onMouseDown={(e) => handleMouseDown(modal.id, e)}
             >
-              <div className="text-white text-xs font-medium truncate">
-                {modal.conversation.userName} · {modal.conversation.profileName}
+              <div className="flex items-center gap-2 text-white text-xs font-medium truncate">
+                <OnlineStatusText
+                  isOnline={modal.conversation.isOnline}
+                  className="text-xs"
+                />
+                <span className="text-gray-500">|</span>
+                <span className="truncate">
+                  {modal.conversation.userName} ·{" "}
+                  {modal.conversation.profileName}
+                </span>
               </div>
-              <button
-                onClick={() => closeModal(modal.id)}
-                className="text-gray-400 hover:text-white transition-colors text-xs px-2"
-              >
-                닫기
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggleChatMute(modal.conversation.id, true)}
+                  className={`p-1.5 rounded-full border transition-colors ${
+                    isChatMuted(modal.conversation.id, true)
+                      ? "border-gray-700 text-gray-400 hover:text-gray-200"
+                      : "border-indigo-400/70 text-indigo-200 hover:text-indigo-100"
+                  }`}
+                  title={
+                    isChatMuted(modal.conversation.id, true)
+                      ? "채팅 알림 켜기"
+                      : "채팅 알림 끄기"
+                  }
+                >
+                  {isChatMuted(modal.conversation.id, true) ? (
+                    <BellOff size={14} />
+                  ) : (
+                    <Bell size={14} />
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    updateModal(modal.id, { isBubbleMode: !modal.isBubbleMode })
+                  }
+                  className={`p-1.5 rounded transition-colors ${
+                    modal.isBubbleMode
+                      ? "bg-gray-700 text-gray-400 hover:bg-gray-600"
+                      : "bg-indigo-500 text-white hover:bg-indigo-600"
+                  }`}
+                  title={
+                    modal.isBubbleMode
+                      ? "로그 모드로 전환"
+                      : "말풍선 모드로 전환"
+                  }
+                >
+                  <List size={14} />
+                </button>
+                <button
+                  onClick={() => closeModal(modal.id)}
+                  className="text-gray-400 hover:text-white transition-colors text-xs px-2"
+                >
+                  닫기
+                </button>
+              </div>
             </div>
 
             <RealtimeChatWindow
@@ -1039,47 +1276,17 @@ export function AgentChatsPage() {
         ))}
 
         {/* 선물 선택 모달 */}
-        {showGiftModal && giftConversation && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              onClick={() => setShowGiftModal(null)}
-            />
-            <div className="relative bg-gray-900 rounded-lg max-w-2xl w-full mx-4 border border-gray-800 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-white font-medium">선물 보내기</h3>
-                  <p className="text-gray-400 text-xs">
-                    {giftConversation.userName} · {giftConversation.profileName}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowGiftModal(null)}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  닫기
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
-                {giftsList.map((gift) => (
-                  <button
-                    key={gift.id}
-                    onClick={() => handlePrepareGift(giftConversation.id, gift)}
-                    className="bg-gray-800 rounded-lg p-3 hover:bg-gray-700 transition-colors text-left"
-                  >
-                    <div className="text-3xl mb-2">{gift.icon}</div>
-                    <p className="text-white text-sm font-medium mb-1">
-                      {gift.name}
-                    </p>
-                    <p className="text-yellow-400 text-xs">
-                      {gift.points.toLocaleString()}P
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+        {giftConversation && (
+          <GiftSelectionModal
+            isOpen={!!showGiftModal}
+            onClose={() => setShowGiftModal(null)}
+            gifts={myGifts}
+            onSelectGift={(gift) =>
+              handlePrepareGift(giftConversation.id, gift)
+            }
+            title="선물 보내기 💝"
+            subtitle={`${giftConversation.userName}님에게 보낼 선물을 선택해주세요`}
+          />
         )}
 
         {/* 이미지 미리보기 */}
@@ -1103,9 +1310,10 @@ export function AgentChatsPage() {
           isOpen={pendingGift !== null}
           title="선물 보내기"
           itemName={pendingGift?.gift.name || ""}
-          itemEmoji={pendingGift?.gift.icon || "🎁"}
-          price={pendingGift?.gift.points || 0}
-          maxQuantity={99}
+          itemEmoji={pendingGift?.gift.emoji || "🎁"}
+          price={pendingGift?.gift.buy_price || 0}
+          maxQuantity={pendingGift?.gift.quantity || 1}
+          ownedQuantity={pendingGift?.gift.quantity || 0}
           isSending={true}
           onConfirm={(qty) => void handleConfirmSendGift(qty)}
           onCancel={() => setPendingGift(null)}

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, MessageCircle, History, X } from "lucide-react";
+import { BetHistoryPanel } from "../components/BetHistoryPanel";
+import { QuickAmountButtons } from "../components/QuickAmountButtons";
 import {
   useCurrentRoundEdge,
   useGameSettings,
@@ -21,11 +23,12 @@ export function LadderGamePage() {
 
   const [showResultOverlay, setShowResultOverlay] = useState(false);
   const [overlayResult, setOverlayResult] = useState<{
+    roundNumber: number;
     start: string;
     end: string;
     lines: number;
   } | null>(null);
-  const lastShownRoundRef = useRef<number | null>(null);
+  const lastShownRoundRef = useRef<string | null>(null);
   const overlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const parseLadderResult = (result: unknown) => {
@@ -75,7 +78,7 @@ export function LadderGamePage() {
   const { messages: gameChatMessages, refetch: refetchGameChat } =
     useGameChat("ladder");
   const { sendMessage: sendGameMessage } = useSendGameChat();
-  const { bets: myBetsData } = useMyGameBets(profile?.id, "ladder");
+  const { bets: myBetsData, refetch: refetchBets } = useMyGameBets(profile?.id);
   const { history: gameHistoryData } = useGameHistory("ladder");
 
   const [betAmount, setBetAmount] = useState("");
@@ -206,14 +209,51 @@ export function LadderGamePage() {
     time: formatKST(msg.created_at, "time"),
   }));
 
+  // 사다리 및 파워볼 배팅 타입 한글 변환
+  const translateLadderBetType = (betType: string): string => {
+    const betTypeMap: Record<string, string> = {
+      // 사다리 배팅
+      leftStart: "좌출발",
+      rightStart: "우출발",
+      line3: "3줄",
+      line4: "4줄",
+      oddEnd: "홀",
+      evenEnd: "짝",
+      left3Even: "좌3짝",
+      left4Odd: "좌4홀",
+      right3Odd: "우3홀",
+      right4Even: "우4짝",
+      leftThreeEven: "좌3짝",
+      leftFourOdd: "좌4홀",
+      rightThreeOdd: "우3홀",
+      rightFourEven: "우4짝",
+      // 파워볼 배팅 (일반볼)
+      "normal-odd": "일반볼-홀",
+      "normal-even": "일반볼-짝",
+      "normal-under": "일반볼-언더",
+      "normal-over": "일반볼-오버",
+      // 파워볼 배팅 (파워볼)
+      "power-odd": "파워볼-홀",
+      "power-even": "파워볼-짝",
+      "power-under": "파워볼-언더",
+      "power-over": "파워볼-오버",
+      "powerball-odd": "파워볼-홀",
+      "powerball-even": "파워볼-짝",
+      "powerball-under": "파워볼-언더",
+      "powerball-over": "파워볼-오버",
+    };
+    return betTypeMap[betType] || betType;
+  };
+
   const myBets = myBetsData.map((bet: any) => ({
     id: bet.id,
-    type: bet.bet_type,
+    type: bet.bet_type || "",
     amount: bet.bet_amount,
     result: bet.status === "won" ? "승" : bet.status === "lost" ? "패" : "대기",
     round: getDisplayRoundNumber(bet.game_rounds?.round_number),
-    betTime: formatKST(bet.created_at, "time"),
+    betTime: formatKST(bet.created_at, "datetime"),
     winAmount: bet.win_amount || 0,
+    gameType: bet.game_rounds?.game_type || "",
   }));
 
   const gameResults = gameHistoryData.map((round: any) => {
@@ -264,8 +304,10 @@ export function LadderGamePage() {
 
   useEffect(() => {
     if (initializedRef.current) return;
-    if (completedRound?.round_number) {
-      lastShownRoundRef.current = completedRound.round_number;
+    const roundNoRaw = completedRound?.round_number;
+    if (roundNoRaw != null) {
+      // raw round_number 기준으로 초기값을 저장하여 초기 팝업 노출 방지
+      lastShownRoundRef.current = String(roundNoRaw);
       initializedRef.current = true;
     }
   }, [completedRound?.round_number]);
@@ -279,34 +321,33 @@ export function LadderGamePage() {
 
     if (!initializedRef.current) return;
     const roundNoRaw = completedRound?.round_number;
-    if (!roundNoRaw) return;
+    if (roundNoRaw == null) return;
+    const roundNoKey = String(roundNoRaw);
     if (!completedRound?.result) return;
     const roundNo = getDisplayRoundNumber(roundNoRaw);
 
-    // 결과 해시 생성 (동일 결과 중복 표시 방지)
-    const resultHash = `${roundNo}-${JSON.stringify(completedRound.result)}`;
+    // 결과 해시 생성 (동일 결과 중복 표시 방지) - roundNoRaw 사용
+    const resultHash = `${roundNoKey}-${JSON.stringify(completedRound.result)}`;
 
     // 이미 표시한 라운드이거나 동일 결과면 스킵
     if (
-      lastShownRoundRef.current === roundNo &&
+      lastShownRoundRef.current === roundNoKey &&
       resultHashRef.current === resultHash
     )
       return;
 
     // 새 라운드 결과인 경우만 표시
-    if (lastShownRoundRef.current !== roundNo) {
-      lastShownRoundRef.current = roundNo;
+    if (lastShownRoundRef.current !== roundNoKey) {
+      lastShownRoundRef.current = roundNoKey;
       resultHashRef.current = resultHash;
 
       const parsed = parseLadderResult(completedRound.result);
       if (!parsed) return;
 
-      console.log(
-        `[ResultOverlay] Showing ladder result for round ${roundNo}:`,
-        parsed,
-      );
-
-      setOverlayResult(parsed);
+      setOverlayResult({
+        roundNumber: roundNo,
+        ...parsed,
+      });
       setShowResultOverlay(true);
 
       if (overlayTimeoutRef.current) {
@@ -408,9 +449,11 @@ export function LadderGamePage() {
       currentRoundData.id,
       selectedBet.type,
       parseInt(betAmount),
+      profile.last_login_ip || undefined,
     );
 
     if (result.success) {
+      await refetchBets();
       showAlert({
         title: "배팅 완료",
         message: `${selectedBet.label}에 ${parseInt(
@@ -643,18 +686,13 @@ export function LadderGamePage() {
                   <div className="bg-gray-900 border border-pink-500/40 rounded-2xl px-6 py-5 w-[92%] max-w-md shadow-2xl shadow-pink-500/10 animate-pulse">
                     <div className="text-center">
                       <p className="text-gray-400 text-sm mb-1">사다리 결과</p>
+                      <p className="text-white text-sm font-semibold mb-3">
+                        {overlayResult.roundNumber}회차 결과
+                      </p>
                       <p className="text-white text-2xl font-bold mb-3">
                         {overlayResult.start}출발 / {overlayResult.lines}줄 /{" "}
                         {overlayResult.end}
                       </p>
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="text-gray-400 text-sm">
-                          다음 회차 시작까지
-                        </span>
-                        <span className="text-pink-400 text-sm font-semibold">
-                          잠시만요
-                        </span>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -725,38 +763,10 @@ export function LadderGamePage() {
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
                   />
                 </div>
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => handleQuickAmount(5000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    5천
-                  </button>
-                  <button
-                    onClick={() => handleQuickAmount(10000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    1만
-                  </button>
-                  <button
-                    onClick={() => handleQuickAmount(50000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    5만
-                  </button>
-                  <button
-                    onClick={() => handleQuickAmount(100000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    10만
-                  </button>
-                  <button
-                    onClick={() => setBetAmount(currentPoints.toString())}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    올인
-                  </button>
-                </div>
+                <QuickAmountButtons
+                  onAmountSelect={handleQuickAmount}
+                  currentPoints={currentPoints}
+                />
               </div>
 
               {/* 출발방향 배팅 */}
@@ -1145,75 +1155,12 @@ export function LadderGamePage() {
       )}
 
       {/* Bet History Modal */}
-      {showBetHistory && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-lg border border-gray-700 max-w-2xl w-full">
-            <div className="bg-blue-500/20 border-b border-blue-500/30 px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-blue-500">📊</span>
-                <span className="text-white">배팅 기록</span>
-              </div>
-              <button
-                onClick={() => setShowBetHistory(false)}
-                className="text-gray-400 hover:text-white"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-4">
-              <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                {myBets.map((bet) => (
-                  <div
-                    key={bet.id}
-                    className="bg-gray-800 rounded-lg p-4 border border-gray-700"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-white">{bet.type}</span>
-                      <span
-                        className={`px-2 py-1 rounded text-sm ${
-                          bet.result === "승"
-                            ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                            : "bg-red-500/20 text-red-400 border border-red-500/30"
-                        }`}
-                      >
-                        {bet.result}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-gray-400">회차: </span>
-                        <span className="text-white">#{bet.round}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">배팅시간: </span>
-                        <span className="text-white">{bet.betTime}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">배팅금액: </span>
-                        <span className="text-white">
-                          {bet.amount.toLocaleString()}P
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">당첨금액: </span>
-                        <span
-                          className={
-                            bet.winAmount > 0
-                              ? "text-green-400"
-                              : "text-gray-500"
-                          }
-                        >
-                          {bet.winAmount.toLocaleString()}P
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <BetHistoryPanel
+        isOpen={showBetHistory}
+        onClose={() => setShowBetHistory(false)}
+        bets={myBets}
+        title="배팅 기록"
+      />
     </div>
   );
 }

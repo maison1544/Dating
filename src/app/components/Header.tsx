@@ -9,10 +9,10 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const routerLocation = useLocation();
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, signOut, isLoading } = useAuth();
   const { showAlert } = useAlert();
 
-  // AuthContext로 로그인 상태 확인
+  // AuthContext로 로그인 상태 확인 (로딩 중에는 이전 상태 유지)
   const isLoggedIn = !!user;
 
   const handleLogout = async () => {
@@ -150,7 +150,9 @@ export function Header() {
 
           {/* Right side - Login/Logout */}
           <div className="hidden md:flex items-center gap-4">
-            {isLoggedIn ? (
+            {isLoading ? (
+              <div className="w-20 h-8" />
+            ) : isLoggedIn ? (
               <button
                 type="button"
                 onClick={(e) => {
@@ -273,7 +275,7 @@ export function Header() {
                   마이페이지
                 </Link>
               )}
-              {isLoggedIn ? (
+              {isLoading ? null : isLoggedIn ? (
                 <button
                   type="button"
                   onClick={(e) => {

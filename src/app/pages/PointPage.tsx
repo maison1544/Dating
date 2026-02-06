@@ -7,7 +7,7 @@ import {
   ShoppingBag,
   Loader2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -22,7 +22,7 @@ import {
   useWithdrawalRequests,
   usePointTransactions,
 } from "../hooks/useSupabase";
-import { formatKST } from "../../lib/dateUtils";
+import { formatDatetime } from "../../lib/dateUtils";
 
 export function PointPage() {
   const navigate = useNavigate();
@@ -64,47 +64,52 @@ export function PointPage() {
   }, [authLoading, user, navigate]);
 
   const [activeTab, setActiveTab] = useState<"charge" | "withdraw" | "gift">(
-    "charge"
+    "charge",
   );
 
   const currentPoints = profile?.points || 0;
 
-  // 은행 목록
-  const banks = [
-    "KB국민은행",
-    "신한은행",
-    "하나은행",
-    "우리은행",
-    "NH농협은행",
-    "한국산업은행",
-    "IBK기업은행",
-    "카카오뱅크",
-    "케이뱅크",
-    "토스뱅크",
-    "부산은행",
-    "경남은행",
-    "대구은행",
-    "광주은행",
-    "전북은행",
-    "제주은행",
-  ];
+  // 은행 목록 (메모이제이션)
+  const banks = useMemo(
+    () => [
+      "KB국민은행",
+      "신한은행",
+      "하나은행",
+      "우리은행",
+      "NH농협은행",
+      "한국산업은행",
+      "IBK기업은행",
+      "카카오뱅크",
+      "케이뱅크",
+      "토스뱅크",
+      "부산은행",
+      "경남은행",
+      "대구은행",
+      "광주은행",
+      "전북은행",
+      "제주은행",
+    ],
+    [],
+  );
 
-  const chargeHistory = depositRequests;
-  const withdrawHistory = withdrawalRequests;
-
-  const myGifts = userGifts
-    .map((ug: any) => {
-      const gift = ug.gifts;
-      return {
-        id: ug.id,
-        gift_id: ug.gift_id,
-        name: gift?.name,
-        quantity: ug.quantity || 0,
-        sellPrice: gift?.sell_price,
-        emoji: gift?.emoji,
-      };
-    })
-    .filter((g: any) => !!g.name);
+  // 기프트 데이터 메모이제이션
+  const myGifts = useMemo(
+    () =>
+      userGifts
+        .map((ug: any) => {
+          const gift = ug.gifts;
+          return {
+            id: ug.id,
+            gift_id: ug.gift_id,
+            name: gift?.name,
+            quantity: ug.quantity || 0,
+            sellPrice: gift?.sell_price,
+            emoji: gift?.emoji,
+          };
+        })
+        .filter((g: any) => !!g.name),
+    [userGifts],
+  );
 
   const { totalChargedPoints, totalUsedPoints } = useMemo(() => {
     const txs = (pointTransactions || []) as any[];
@@ -117,10 +122,7 @@ export function PointPage() {
     return { totalChargedPoints: charged, totalUsedPoints: used };
   }, [pointTransactions]);
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return formatKST(dateString, "datetime") || "-";
-  };
+  const formatDate = formatDatetime;
 
   const getDepositStatusText = (status: string | null | undefined) => {
     switch (status) {
@@ -201,7 +203,7 @@ export function PointPage() {
   };
 
   const handleCreateDeposit = async (
-    pkg: (typeof packages)[number]
+    pkg: (typeof packages)[number],
   ): Promise<void> => {
     if (isChargeProcessing) return;
     if (!profile?.id) {
@@ -300,12 +302,13 @@ export function PointPage() {
 
       setWithdrawAmount(0);
       setWithdrawAmountText("");
-      await refreshProfile();
       showAlert({
         title: "신청 완료",
         message: "출금 신청이 완료되었습니다. 관리자 승인 후 처리됩니다.",
         type: "success",
       });
+      // 프로필 새로고침은 백그라운드에서 실행 (팝업 표시 지연 방지)
+      refreshProfile();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "출금 신청에 실패했습니다.";
@@ -319,7 +322,7 @@ export function PointPage() {
     giftId: string,
     giftName: string,
     unitPrice: number,
-    quantity: number
+    quantity: number,
   ) => {
     if (isGiftProcessing) return;
     if (!profile?.id) {
@@ -380,7 +383,7 @@ export function PointPage() {
     giftId: string,
     giftName: string,
     unitPrice: number,
-    quantity: number
+    quantity: number,
   ) => {
     if (isGiftProcessing) return;
     if (!profile?.id) {
@@ -608,7 +611,7 @@ export function PointPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800">
-                    {chargeHistory.map((item) => (
+                    {depositRequests.map((item) => (
                       <tr key={item.id}>
                         <td className="px-3 py-2 text-xs text-gray-400">
                           {formatDate(item.created_at)}
@@ -622,8 +625,8 @@ export function PointPage() {
                               (item as any).status === "approved"
                                 ? "bg-green-500/20 text-green-500"
                                 : (item as any).status === "rejected"
-                                ? "bg-red-500/20 text-red-500"
-                                : "bg-yellow-500/20 text-yellow-500"
+                                  ? "bg-red-500/20 text-red-500"
+                                  : "bg-yellow-500/20 text-yellow-500"
                             }`}
                           >
                             {getDepositStatusText((item as any).status)}
@@ -761,7 +764,7 @@ export function PointPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800">
-                    {withdrawHistory.map((item) => (
+                    {withdrawalRequests.map((item) => (
                       <tr key={item.id}>
                         <td className="px-3 py-2 text-xs text-gray-400">
                           {formatDate(item.created_at)}
@@ -775,8 +778,8 @@ export function PointPage() {
                               (item as any).status === "approved"
                                 ? "bg-green-500/20 text-green-500"
                                 : (item as any).status === "rejected"
-                                ? "bg-red-500/20 text-red-500"
-                                : "bg-yellow-500/20 text-yellow-500"
+                                  ? "bg-red-500/20 text-red-500"
+                                  : "bg-yellow-500/20 text-yellow-500"
                             }`}
                           >
                             {getWithdrawalStatusText((item as any).status)}
@@ -848,7 +851,7 @@ export function PointPage() {
                                 item.id,
                                 item.name,
                                 item.buy_price,
-                                quantity
+                                quantity,
                               );
                             },
                           });
@@ -885,7 +888,7 @@ export function PointPage() {
                                 item.id,
                                 item.name,
                                 item.sell_price,
-                                quantity
+                                quantity,
                               );
                             },
                           });
@@ -915,7 +918,7 @@ export function PointPage() {
                       .reduce(
                         (total: number, item: any) =>
                           total + (item.sellPrice || 0) * (item.quantity || 0),
-                        0
+                        0,
                       )
                       .toLocaleString()}{" "}
                     P

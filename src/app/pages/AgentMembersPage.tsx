@@ -1,12 +1,14 @@
 import { AdminLayout } from "../components/AdminLayout";
+import { useDebounce } from "../hooks/useDebounce";
 import { UserDetailModal } from "../components/UserDetailModal";
 import { DateRangePicker } from "../components/DateRangePicker";
-import { useState } from "react";
-import { Search, Filter, MoreVertical } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Search, Filter } from "lucide-react";
 import { useAgentMembers } from "../hooks/useSupabase";
 import { useAuth } from "../contexts/AuthContext";
 import { getPublicUrlForPath } from "../../lib/storage";
 import { formatKST } from "../../lib/dateUtils";
+import { AdminPagination } from "../components/common/AdminPagination";
 
 interface Member {
   id: string;
@@ -36,6 +38,7 @@ interface Member {
   joinIp?: string;
   lastIp?: string;
   profileImage?: string;
+  referralCode?: string;
 }
 
 export function AgentMembersPage() {
@@ -43,6 +46,7 @@ export function AgentMembersPage() {
   const agentAccount =
     adminAccount && "referral_code" in adminAccount ? adminAccount : null;
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -55,6 +59,10 @@ export function AgentMembersPage() {
   const [joinEndDate, setJoinEndDate] = useState("");
   const [_isJoinDateRangeValid] = useState(true);
   void _isJoinDateRangeValid;
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // Supabase hooks
   const {
@@ -94,6 +102,7 @@ export function AgentMembersPage() {
     lastIp: m.last_login_ip || "",
     profileImage: getPublicUrlForPath("profile-images", m.profile_image) || "",
     recentPurchases: [],
+    referralCode: m.agents?.referral_code || "",
   }));
 
   const getStatusColor = (status: string) => {
@@ -107,32 +116,57 @@ export function AgentMembersPage() {
     }
   };
 
-  const filteredMembers = members.filter((member) => {
-    const matchesSearch =
-      member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.nickname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (member.joinIp && member.joinIp.includes(searchTerm)) ||
-      (member.lastIp && member.lastIp.includes(searchTerm));
+  const filteredMembers = useMemo(() => {
+    return members.filter((member) => {
+      const matchesSearch =
+        member.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        member.nickname
+          .toLowerCase()
+          .includes(debouncedSearchTerm.toLowerCase()) ||
+        member.email
+          .toLowerCase()
+          .includes(debouncedSearchTerm.toLowerCase()) ||
+        (member.joinIp && member.joinIp.includes(debouncedSearchTerm)) ||
+        (member.lastIp && member.lastIp.includes(debouncedSearchTerm));
 
-    const matchesStatus =
-      statusFilter === "all" || member.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" || member.status === statusFilter;
 
-    // 가입 날짜 필터링
-    let matchesJoinDateRange = true;
-    if (joinStartDate || joinEndDate) {
-      const memberJoinDate = (member.joinedAt || member.joined).split(" ")[0]; // "2024-03-15 09:30" -> "2024-03-15"
+      // 가입 날짜 필터링
+      let matchesJoinDateRange = true;
+      if (joinStartDate || joinEndDate) {
+        const memberJoinDate = (member.joinedAt || member.joined).split(" ")[0];
 
-      if (joinStartDate && memberJoinDate < joinStartDate) {
-        matchesJoinDateRange = false;
+        if (joinStartDate && memberJoinDate < joinStartDate) {
+          matchesJoinDateRange = false;
+        }
+        if (joinEndDate && memberJoinDate > joinEndDate) {
+          matchesJoinDateRange = false;
+        }
       }
-      if (joinEndDate && memberJoinDate > joinEndDate) {
-        matchesJoinDateRange = false;
-      }
-    }
 
-    return matchesSearch && matchesStatus && matchesJoinDateRange;
-  });
+      return matchesSearch && matchesStatus && matchesJoinDateRange;
+    });
+  }, [members, debouncedSearchTerm, statusFilter, joinStartDate, joinEndDate]);
+
+  // Paginated members
+  const paginatedMembers = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return filteredMembers.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredMembers, currentPage]);
+
+  const totalPages = Math.ceil(filteredMembers.length / PAGE_SIZE);
+
+  // Reset page when filters change
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
+  const handleStatusFilterChange = (value: string) => {
+    setStatusFilter(value);
+    setCurrentPage(1);
+  };
 
   return (
     <AdminLayout>
@@ -184,7 +218,7 @@ export function AgentMembersPage() {
                 type="text"
                 placeholder="회원 이름, 닉네임, 이메일, IP로 검색"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -194,7 +228,7 @@ export function AgentMembersPage() {
               <Filter className="text-gray-400" size={20} />
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => handleStatusFilterChange(e.target.value)}
                 className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
               >
                 <option value="all">전체 상태</option>
@@ -250,13 +284,10 @@ export function AgentMembersPage() {
                   <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
                     포인트
                   </th>
-                  <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                    작업
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {filteredMembers.map((member) => (
+                {paginatedMembers.map((member) => (
                   <tr
                     key={member.id}
                     className="hover:bg-gray-800/50 transition-colors"
@@ -300,10 +331,16 @@ export function AgentMembersPage() {
                             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-gray-900 rounded-full"></span>
                           )}
                         </div>
-                        <div className="text-left">
-                          <p className="text-white text-sm leading-tight">
+                        <div
+                          className="text-left cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => {
+                            setSelectedMember(member);
+                            setShowDetailsModal(true);
+                          }}
+                        >
+                          <p className="text-white text-sm leading-tight hover:text-indigo-400 transition-colors">
                             {member.nickname}{" "}
-                            <span className="text-white text-sm">
+                            <span className="text-white text-sm hover:text-indigo-400">
                               ({member.name})
                             </span>
                           </p>
@@ -371,25 +408,19 @@ export function AgentMembersPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-2 h-16">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => {
-                            setSelectedMember(member);
-                            setShowDetailsModal(true);
-                          }}
-                          className="p-2 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-white"
-                          title="더보기"
-                        >
-                          <MoreVertical size={16} />
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          )}
         </div>
       </div>
 
@@ -435,7 +466,7 @@ export function AgentMembersPage() {
           user={{
             ...selectedMember,
             status: selectedMember.status,
-            referralCode: agentInfo.referralCode,
+            referralCode: selectedMember.referralCode || agentInfo.referralCode,
           }}
           onClose={() => {
             setShowDetailsModal(false);

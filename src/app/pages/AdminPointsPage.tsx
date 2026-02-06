@@ -1,4 +1,5 @@
 import { AdminLayout } from "../components/AdminLayout";
+import { useDebounce } from "../hooks/useDebounce";
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   useAdminPaymentRequests,
@@ -20,10 +21,13 @@ import {
   X,
   Clock,
   AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { DateRangePicker } from "../components/DateRangePicker";
-import { formatKST } from "../../lib/dateUtils";
+import { CsvDownloadButton } from "../components/CsvDownloadButton";
+import { formatKST, getTodayKST } from "../../lib/dateUtils";
 
 interface WithdrawalRequest {
   id: string;
@@ -66,6 +70,7 @@ export function AdminPointsPage() {
   const { adminAccount } = useAuth();
   const { showAlert } = useAlert();
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [typeFilter, setTypeFilter] = useState<
     "all" | "deposit" | "withdrawal"
   >("all");
@@ -94,6 +99,24 @@ export function AdminPointsPage() {
     [],
   );
   const [rejectReasonInput, setRejectReasonInput] = useState("");
+  const [selectedRejectReason, setSelectedRejectReason] = useState("");
+
+  // 페이지네이션 상태
+  const [depositPage, setDepositPage] = useState(1);
+  const [withdrawalPage, setWithdrawalPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // 거절 사유 선택 옵션
+  const REJECT_REASONS = [
+    "입금자명 불일치",
+    "금액 불일치",
+    "입금 확인 불가",
+    "중복 신청",
+    "잔액 부족",
+    "출금 한도 초과",
+    "계좌 정보 오류",
+    "기타",
+  ];
 
   // 승인/거절 확인 팝업 상태
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -187,7 +210,7 @@ export function AdminPointsPage() {
 
   // 필터링된 입출금 신청
   const filteredRequests = () => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = debouncedSearchTerm.trim().toLowerCase();
 
     const matchesQuery = (req: {
       user: string;
@@ -246,24 +269,28 @@ export function AdminPointsPage() {
 
   const handleApproveDeposit = (id: string) => {
     setRejectReasonInput("");
+    setSelectedRejectReason("");
     setConfirmAction({ type: "deposit", action: "approve", ids: [id] });
     setShowConfirmModal(true);
   };
 
   const handleRejectDeposit = (id: string) => {
     setRejectReasonInput("");
+    setSelectedRejectReason("");
     setConfirmAction({ type: "deposit", action: "reject", ids: [id] });
     setShowConfirmModal(true);
   };
 
   const handleApproveWithdrawal = (id: string) => {
     setRejectReasonInput("");
+    setSelectedRejectReason("");
     setConfirmAction({ type: "withdrawal", action: "approve", ids: [id] });
     setShowConfirmModal(true);
   };
 
   const handleRejectWithdrawal = (id: string) => {
     setRejectReasonInput("");
+    setSelectedRejectReason("");
     setConfirmAction({ type: "withdrawal", action: "reject", ids: [id] });
     setShowConfirmModal(true);
   };
@@ -279,28 +306,30 @@ export function AdminPointsPage() {
 
     isProcessingRef.current = true;
     try {
-      for (const id of ids) {
-        let result: any;
+      // Promise.all로 병렬 처리하여 속도 최적화
+      const reason = rejectReasonInput.trim();
+      const promises = ids.map((id) => {
         if (type === "deposit") {
-          result =
-            action === "approve"
-              ? await approveDeposit(id)
-              : await rejectDeposit(id, rejectReasonInput.trim());
+          return action === "approve"
+            ? approveDeposit(id)
+            : rejectDeposit(id, reason);
         } else {
-          result =
-            action === "approve"
-              ? await approveWithdrawal(id)
-              : await rejectWithdrawal(id, rejectReasonInput.trim());
+          return action === "approve"
+            ? approveWithdrawal(id)
+            : rejectWithdrawal(id, reason);
         }
+      });
 
-        if (result?.error) {
-          showAlert({
-            title: "오류",
-            message: "처리에 실패했습니다.",
-            type: "error",
-          });
-          return;
-        }
+      const results = await Promise.all(promises);
+      const hasError = results.some((result) => result?.error);
+
+      if (hasError) {
+        showAlert({
+          title: "오류",
+          message: "일부 항목 처리에 실패했습니다.",
+          type: "error",
+        });
+        return;
       }
 
       showAlert({
@@ -313,6 +342,7 @@ export function AdminPointsPage() {
       setShowConfirmModal(false);
       setConfirmAction(null);
       setRejectReasonInput("");
+      setSelectedRejectReason("");
       setSelectedDepositIds([]);
       setSelectedWithdrawalIds([]);
     } finally {
@@ -437,6 +467,7 @@ export function AdminPointsPage() {
       return;
     }
     setRejectReasonInput("");
+    setSelectedRejectReason("");
     setConfirmAction({ type, action: "approve", ids });
     setShowConfirmModal(true);
   };
@@ -452,42 +483,34 @@ export function AdminPointsPage() {
       return;
     }
     setRejectReasonInput("");
+    setSelectedRejectReason("");
     setConfirmAction({ type, action: "reject", ids });
     setShowConfirmModal(true);
   };
 
-  const downloadCsv = (rows: Record<string, unknown>[], filename: string) => {
-    const headers = Array.from(
-      rows.reduce((set, row) => {
-        Object.keys(row).forEach((k) => set.add(k));
-        return set;
-      }, new Set<string>()),
-    );
-
-    const escape = (v: unknown) => {
-      const s = String(v ?? "");
-      const escaped = s.replace(/"/g, '""');
-      return `"${escaped}"`;
-    };
-
-    const lines = [headers.join(",")].concat(
-      rows.map((r) => headers.map((h) => escape(r[h])).join(",")),
-    );
-    const bom = "\uFEFF";
-    const blob = new Blob([bom + lines.join("\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
   const { deposits, withdrawals } = filteredRequests();
+
+  // 페이지네이션 계산
+  const depositTotalPages = Math.ceil(deposits.length / itemsPerPage);
+  const depositStartIndex = (depositPage - 1) * itemsPerPage;
+  const paginatedDeposits = deposits.slice(
+    depositStartIndex,
+    depositStartIndex + itemsPerPage,
+  );
+
+  const withdrawalTotalPages = Math.ceil(withdrawals.length / itemsPerPage);
+  const withdrawalStartIndex = (withdrawalPage - 1) * itemsPerPage;
+  const paginatedWithdrawals = withdrawals.slice(
+    withdrawalStartIndex,
+    withdrawalStartIndex + itemsPerPage,
+  );
+
+  // 필터 변경 시 페이지 초기화
+  useEffect(() => {
+    setDepositPage(1);
+    setWithdrawalPage(1);
+  }, [typeFilter, statusFilter, debouncedSearchTerm, startDate, endDate]);
+
   const pendingDeposits = depositRequests.filter(
     (r) => r.status === "대기",
   ).length;
@@ -616,439 +639,554 @@ export function AdminPointsPage() {
             </div>
 
             {/* Deposit Requests */}
-            {(typeFilter === "all" || typeFilter === "deposit") &&
-              deposits.length > 0 && (
-                <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-                  <div className="bg-gray-800 px-6 py-3 border-b border-gray-700">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <h3 className="text-white flex items-center gap-2">
-                        <TrendingUp className="text-green-500" size={20} />
-                        입금 신청 ({deposits.length})
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() =>
-                            downloadCsv(
-                              deposits.map((r) => ({
-                                id: r.id,
-                                name: r.user,
-                                nickname: r.nickname,
-                                email: r.email,
-                                amount: r.amount,
-                                depositorName: r.depositName,
-                                status: r.status,
-                                rejectReason: r.rejectReason || "",
-                                createdAt: r.createdAt,
-                              })),
-                              `deposit_requests_${new Date()
-                                .toISOString()
-                                .slice(0, 10)}.csv`,
-                            )
-                          }
-                          className="px-3 py-2 rounded bg-gray-900 hover:bg-gray-700 text-gray-200 text-xs transition-colors"
-                        >
-                          CSV 다운로드
-                        </button>
-                        <button
-                          onClick={() => handleBulkApprove("deposit")}
-                          className="px-3 py-2 rounded bg-green-600/80 hover:bg-green-600 text-white text-xs transition-colors"
-                        >
-                          일괄 승인
-                        </button>
-                        <button
-                          onClick={() => handleBulkReject("deposit")}
-                          className="px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-xs transition-colors"
-                        >
-                          일괄 거절
-                        </button>
-                      </div>
+            {(typeFilter === "all" || typeFilter === "deposit") && (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="bg-gray-800 px-6 py-3 border-b border-gray-700">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <h3 className="text-white flex items-center gap-2">
+                      <TrendingUp className="text-green-500" size={20} />
+                      입금 신청 ({deposits.length})
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      <CsvDownloadButton
+                        data={deposits.map((r) => ({
+                          id: r.id,
+                          name: r.user,
+                          nickname: r.nickname,
+                          email: r.email,
+                          amount: r.amount,
+                          depositorName: r.depositName,
+                          status: r.status,
+                          rejectReason: r.rejectReason || "",
+                          createdAt: r.createdAt,
+                        }))}
+                        columns={[
+                          { key: "id", label: "ID" },
+                          { key: "name", label: "이름" },
+                          { key: "nickname", label: "닉네임" },
+                          { key: "email", label: "이메일" },
+                          { key: "amount", label: "금액" },
+                          { key: "depositorName", label: "입금자명" },
+                          { key: "status", label: "상태" },
+                          { key: "rejectReason", label: "거절사유" },
+                          { key: "createdAt", label: "신청일시" },
+                        ]}
+                        filename={`입금신청_${getTodayKST()}.csv`}
+                      />
+                      {statusFilter === "pending" && (
+                        <>
+                          <button
+                            onClick={() => handleBulkApprove("deposit")}
+                            className="px-3 py-2 rounded bg-green-600/80 hover:bg-green-600 text-white text-xs transition-colors"
+                          >
+                            일괄 승인
+                          </button>
+                          <button
+                            onClick={() => handleBulkReject("deposit")}
+                            className="px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-xs transition-colors"
+                          >
+                            일괄 거절
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="w-full">
-                    <table className="w-full table-fixed">
-                      <thead className="bg-gray-800">
-                        <tr>
+                </div>
+                <div className="w-full">
+                  <table className="w-full table-fixed">
+                    <thead className="bg-gray-800">
+                      <tr>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          <input
+                            type="checkbox"
+                            checked={
+                              deposits.length > 0 &&
+                              deposits.every((r) =>
+                                selectedDepositIds.includes(r.id),
+                              )
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedDepositIds(
+                                  deposits.map((r) => r.id),
+                                );
+                              } else {
+                                setSelectedDepositIds([]);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          회원 정보
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          입금 금액
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          입금자명
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          신청 일시
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          상태
+                        </th>
+                        {statusFilter === "all" ||
+                        statusFilter === "pending" ? (
                           <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                            작업
+                          </th>
+                        ) : null}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {paginatedDeposits.map((request) => (
+                        <tr
+                          key={request.id}
+                          className="hover:bg-gray-800/50 transition-colors"
+                        >
+                          <td className="px-2 py-3 text-center">
                             <input
                               type="checkbox"
-                              checked={
-                                deposits.length > 0 &&
-                                deposits.every((r) =>
-                                  selectedDepositIds.includes(r.id),
-                                )
-                              }
+                              checked={selectedDepositIds.includes(request.id)}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedDepositIds(
-                                    deposits.map((r) => r.id),
+                                  setSelectedDepositIds((prev) =>
+                                    prev.includes(request.id)
+                                      ? prev
+                                      : [...prev, request.id],
                                   );
                                 } else {
-                                  setSelectedDepositIds([]);
+                                  setSelectedDepositIds((prev) =>
+                                    prev.filter((id) => id !== request.id),
+                                  );
                                 }
                               }}
                             />
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            회원 정보
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            입금 금액
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            입금자명
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            신청 일시
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            상태
-                          </th>
-                          {statusFilter === "all" ||
-                          statusFilter === "pending" ? (
-                            <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                              작업
-                            </th>
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            <div>
+                              <p className="text-white text-sm">
+                                {request.nickname}({request.user})
+                              </p>
+                              <p className="text-gray-400 text-xs">
+                                {request.email}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            <span className="text-green-500">
+                              +{request.amount.toLocaleString()}원
+                            </span>
+                          </td>
+                          <td className="px-2 py-3 text-center text-gray-300 text-sm">
+                            {request.depositName}
+                          </td>
+                          <td className="px-2 py-3 text-center text-gray-300 text-xs">
+                            <div className="flex items-center justify-center gap-1">
+                              <Clock size={12} />
+                              {request.requestDate}
+                            </div>
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  request.status === "대기"
+                                    ? "bg-yellow-500/20 text-yellow-300"
+                                    : request.status === "승인"
+                                      ? "bg-green-500/20 text-green-300"
+                                      : "bg-red-500/20 text-red-300"
+                                }`}
+                              >
+                                {request.status}
+                              </span>
+                              {request.status === "거절" &&
+                                request.rejectReason && (
+                                  <span
+                                    className="text-[10px] text-red-400 max-w-[120px] truncate"
+                                    title={request.rejectReason}
+                                  >
+                                    사유: {request.rejectReason}
+                                  </span>
+                                )}
+                            </div>
+                          </td>
+                          {request.status === "대기" ? (
+                            <td className="px-2 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() =>
+                                    handleApproveDeposit(request.id)
+                                  }
+                                  className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-green-600/80 hover:bg-green-600 text-white"
+                                >
+                                  <CheckCircle size={12} />
+                                  승인
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleRejectDeposit(request.id)
+                                  }
+                                  className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
+                                >
+                                  <XCircle size={12} />
+                                  거절
+                                </button>
+                              </div>
+                            </td>
+                          ) : statusFilter === "all" ||
+                            statusFilter === "pending" ? (
+                            <td className="px-2 py-3"></td>
                           ) : null}
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-800">
-                        {deposits.map((request) => (
-                          <tr
-                            key={request.id}
-                            className="hover:bg-gray-800/50 transition-colors"
-                          >
-                            <td className="px-2 py-3 text-center">
-                              <input
-                                type="checkbox"
-                                checked={selectedDepositIds.includes(
-                                  request.id,
-                                )}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedDepositIds((prev) =>
-                                      prev.includes(request.id)
-                                        ? prev
-                                        : [...prev, request.id],
-                                    );
-                                  } else {
-                                    setSelectedDepositIds((prev) =>
-                                      prev.filter((id) => id !== request.id),
-                                    );
-                                  }
-                                }}
-                              />
-                            </td>
-                            <td className="px-2 py-3 text-center">
-                              <div>
-                                <p className="text-white text-sm">
-                                  {request.nickname}({request.user})
-                                </p>
-                                <p className="text-gray-400 text-xs">
-                                  {request.email}
-                                </p>
-                              </div>
-                            </td>
-                            <td className="px-2 py-3 text-center">
-                              <span className="text-green-500">
-                                +{request.amount.toLocaleString()}원
-                              </span>
-                            </td>
-                            <td className="px-2 py-3 text-center text-gray-300 text-sm">
-                              {request.depositName}
-                            </td>
-                            <td className="px-2 py-3 text-center text-gray-300 text-xs">
-                              <div className="flex items-center justify-center gap-1">
-                                <Clock size={12} />
-                                {request.requestDate}
-                              </div>
-                            </td>
-                            <td className="px-2 py-3 text-center">
-                              <div className="flex flex-col items-center gap-1">
-                                <span
-                                  className={`px-2 py-1 rounded text-xs font-semibold ${
-                                    request.status === "대기"
-                                      ? "bg-yellow-500/20 text-yellow-300"
-                                      : request.status === "승인"
-                                        ? "bg-green-500/20 text-green-300"
-                                        : "bg-red-500/20 text-red-300"
-                                  }`}
-                                >
-                                  {request.status}
-                                </span>
-                                {request.status === "거절" &&
-                                  request.rejectReason && (
-                                    <span
-                                      className="text-[10px] text-red-400 max-w-[120px] truncate"
-                                      title={request.rejectReason}
-                                    >
-                                      사유: {request.rejectReason}
-                                    </span>
-                                  )}
-                              </div>
-                            </td>
-                            {request.status === "대기" ? (
-                              <td className="px-2 py-3">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    onClick={() =>
-                                      handleApproveDeposit(request.id)
-                                    }
-                                    className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-green-600/80 hover:bg-green-600 text-white"
-                                  >
-                                    <CheckCircle size={12} />
-                                    승인
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleRejectDeposit(request.id)
-                                    }
-                                    className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
-                                  >
-                                    <XCircle size={12} />
-                                    거절
-                                  </button>
-                                </div>
-                              </td>
-                            ) : statusFilter === "all" ||
-                              statusFilter === "pending" ? (
-                              <td className="px-2 py-3"></td>
-                            ) : null}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-            {/* Withdrawal Requests */}
-            {(typeFilter === "all" || typeFilter === "withdrawal") &&
-              withdrawals.length > 0 && (
-                <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-                  <div className="bg-gray-800 px-6 py-3 border-b border-gray-700">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <h3 className="text-white flex items-center gap-2">
-                        <TrendingDown className="text-red-500" size={20} />
-                        출금 신청 ({withdrawals.length})
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() =>
-                            downloadCsv(
-                              withdrawals.map((r) => ({
-                                id: r.id,
-                                name: r.user,
-                                nickname: r.nickname,
-                                email: r.email,
-                                amount: r.amount,
-                                bank: r.bankName,
-                                accountNumber: r.accountNumber,
-                                accountHolder: r.accountHolder,
-                                status: r.status,
-                                rejectReason: r.rejectReason || "",
-                                createdAt: r.createdAt,
-                              })),
-                              `withdrawal_requests_${new Date()
-                                .toISOString()
-                                .slice(0, 10)}.csv`,
-                            )
-                          }
-                          className="px-3 py-2 rounded bg-gray-900 hover:bg-gray-700 text-gray-200 text-xs transition-colors"
-                        >
-                          CSV 다운로드
-                        </button>
-                        <button
-                          onClick={() => handleBulkApprove("withdrawal")}
-                          className="px-3 py-2 rounded bg-green-600/80 hover:bg-green-600 text-white text-xs transition-colors"
-                        >
-                          일괄 승인
-                        </button>
-                        <button
-                          onClick={() => handleBulkReject("withdrawal")}
-                          className="px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-xs transition-colors"
-                        >
-                          일괄 거절
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="w-full">
-                    <table className="w-full table-fixed">
-                      <thead className="bg-gray-800">
+                      ))}
+                      {deposits.length === 0 && (
                         <tr>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            <input
-                              type="checkbox"
-                              checked={
-                                withdrawals.length > 0 &&
-                                withdrawals.every((r) =>
-                                  selectedWithdrawalIds.includes(r.id),
-                                )
-                              }
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedWithdrawalIds(
-                                    withdrawals.map((r) => r.id),
-                                  );
-                                } else {
-                                  setSelectedWithdrawalIds([]);
-                                }
-                              }}
-                            />
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            회원 정보
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            출금 금액
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            은행 정보
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            신청 일시
-                          </th>
-                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                            상태
-                          </th>
-                          {statusFilter === "all" ||
-                          statusFilter === "pending" ? (
-                            <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
-                              작업
-                            </th>
-                          ) : null}
+                          <td colSpan={6} className="px-4 py-8 text-center">
+                            <p className="text-gray-400">
+                              대기 중인 입금 신청이 없습니다
+                            </p>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-800">
-                        {withdrawals.map((request) => (
-                          <tr
-                            key={request.id}
-                            className="hover:bg-gray-800/50 transition-colors"
-                          >
-                            <td className="px-2 py-3 text-center">
-                              <input
-                                type="checkbox"
-                                checked={selectedWithdrawalIds.includes(
-                                  request.id,
-                                )}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedWithdrawalIds((prev) =>
-                                      prev.includes(request.id)
-                                        ? prev
-                                        : [...prev, request.id],
-                                    );
-                                  } else {
-                                    setSelectedWithdrawalIds((prev) =>
-                                      prev.filter((id) => id !== request.id),
-                                    );
-                                  }
-                                }}
-                              />
-                            </td>
-                            <td className="px-2 py-3 text-center">
-                              <div>
-                                <p className="text-white text-sm">
-                                  {request.nickname}({request.user})
-                                </p>
-                                <p className="text-gray-400 text-xs">
-                                  {request.email}
-                                </p>
-                              </div>
-                            </td>
-                            <td className="px-2 py-3 text-center">
-                              <span className="text-red-500">
-                                -{request.amount.toLocaleString()}원
-                              </span>
-                            </td>
-                            <td className="px-2 py-3 text-center">
-                              <div className="text-gray-300 text-xs">
-                                <p>{request.bankName}</p>
-                                <p className="text-gray-500">
-                                  {request.accountNumber}
-                                </p>
-                                <p className="text-gray-500">
-                                  {request.accountHolder}
-                                </p>
-                              </div>
-                            </td>
-                            <td className="px-2 py-3 text-center text-gray-300 text-xs">
-                              <div className="flex items-center justify-center gap-1">
-                                <Clock size={12} />
-                                {request.requestDate}
-                              </div>
-                            </td>
-                            <td className="px-2 py-3 text-center">
-                              <div className="flex flex-col items-center gap-1">
-                                <span
-                                  className={`px-2 py-1 rounded text-xs font-semibold ${
-                                    request.status === "대기"
-                                      ? "bg-yellow-500/20 text-yellow-300"
-                                      : request.status === "승인"
-                                        ? "bg-green-500/20 text-green-300"
-                                        : "bg-red-500/20 text-red-300"
-                                  }`}
-                                >
-                                  {request.status}
-                                </span>
-                                {request.status === "거절" &&
-                                  request.rejectReason && (
-                                    <span
-                                      className="text-[10px] text-red-400 max-w-[120px] truncate"
-                                      title={request.rejectReason}
-                                    >
-                                      사유: {request.rejectReason}
-                                    </span>
-                                  )}
-                              </div>
-                            </td>
-                            {request.status === "대기" ? (
-                              <td className="px-2 py-3">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    onClick={() =>
-                                      handleApproveWithdrawal(request.id)
-                                    }
-                                    className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-green-600/80 hover:bg-green-600 text-white"
-                                  >
-                                    <CheckCircle size={12} />
-                                    승인
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleRejectWithdrawal(request.id)
-                                    }
-                                    className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
-                                  >
-                                    <XCircle size={12} />
-                                    거절
-                                  </button>
-                                </div>
-                              </td>
-                            ) : statusFilter === "all" ||
-                              statusFilter === "pending" ? (
-                              <td className="px-2 py-3"></td>
-                            ) : null}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-
-            {/* Empty State */}
-            {deposits.length === 0 && withdrawals.length === 0 && (
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-12 text-center">
-                <AlertCircle className="mx-auto text-gray-600 mb-4" size={48} />
-                <p className="text-gray-400 text-lg">
-                  대기 중인 입출금 신청이 없습니다
-                </p>
-                <p className="text-gray-600 text-sm mt-2">
-                  새로운 신청이 들어오면 여기에 표시됩니다
-                </p>
+                {/* 입금 신청 페이지네이션 */}
+                {depositTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 py-4 border-t border-gray-800">
+                    <button
+                      onClick={() => setDepositPage((p) => Math.max(1, p - 1))}
+                      disabled={depositPage === 1}
+                      className="p-2 rounded hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {Array.from(
+                        { length: depositTotalPages },
+                        (_, i) => i + 1,
+                      ).map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => setDepositPage(page)}
+                          className={`min-w-[32px] h-8 rounded text-sm transition-colors ${
+                            depositPage === page
+                              ? "bg-indigo-500 text-white"
+                              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() =>
+                        setDepositPage((p) =>
+                          Math.min(depositTotalPages, p + 1),
+                        )
+                      }
+                      disabled={depositPage === depositTotalPages}
+                      className="p-2 rounded hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
+
+            {/* Withdrawal Requests */}
+            {(typeFilter === "all" || typeFilter === "withdrawal") && (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="bg-gray-800 px-6 py-3 border-b border-gray-700">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <h3 className="text-white flex items-center gap-2">
+                      <TrendingDown className="text-red-500" size={20} />
+                      출금 신청 ({withdrawals.length})
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      <CsvDownloadButton
+                        data={withdrawals.map((r) => ({
+                          id: r.id,
+                          name: r.user,
+                          nickname: r.nickname,
+                          email: r.email,
+                          amount: r.amount,
+                          bank: r.bankName,
+                          accountNumber: r.accountNumber,
+                          accountHolder: r.accountHolder,
+                          status: r.status,
+                          rejectReason: r.rejectReason || "",
+                          createdAt: r.createdAt,
+                        }))}
+                        columns={[
+                          { key: "id", label: "ID" },
+                          { key: "name", label: "이름" },
+                          { key: "nickname", label: "닉네임" },
+                          { key: "email", label: "이메일" },
+                          { key: "amount", label: "금액" },
+                          { key: "bank", label: "은행" },
+                          { key: "accountNumber", label: "계좌번호" },
+                          { key: "accountHolder", label: "예금주" },
+                          { key: "status", label: "상태" },
+                          { key: "rejectReason", label: "거절사유" },
+                          { key: "createdAt", label: "신청일시" },
+                        ]}
+                        filename={`출금신청_${getTodayKST()}.csv`}
+                      />
+                      {statusFilter === "pending" && (
+                        <>
+                          <button
+                            onClick={() => handleBulkApprove("withdrawal")}
+                            className="px-3 py-2 rounded bg-green-600/80 hover:bg-green-600 text-white text-xs transition-colors"
+                          >
+                            일괄 승인
+                          </button>
+                          <button
+                            onClick={() => handleBulkReject("withdrawal")}
+                            className="px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-xs transition-colors"
+                          >
+                            일괄 거절
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="w-full">
+                  <table className="w-full table-fixed">
+                    <thead className="bg-gray-800">
+                      <tr>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          <input
+                            type="checkbox"
+                            checked={
+                              withdrawals.length > 0 &&
+                              withdrawals.every((r) =>
+                                selectedWithdrawalIds.includes(r.id),
+                              )
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedWithdrawalIds(
+                                  withdrawals.map((r) => r.id),
+                                );
+                              } else {
+                                setSelectedWithdrawalIds([]);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          회원 정보
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          출금 금액
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          은행 정보
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          신청 일시
+                        </th>
+                        <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                          상태
+                        </th>
+                        {statusFilter === "all" ||
+                        statusFilter === "pending" ? (
+                          <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                            작업
+                          </th>
+                        ) : null}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {paginatedWithdrawals.map((request) => (
+                        <tr
+                          key={request.id}
+                          className="hover:bg-gray-800/50 transition-colors"
+                        >
+                          <td className="px-2 py-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedWithdrawalIds.includes(
+                                request.id,
+                              )}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedWithdrawalIds((prev) =>
+                                    prev.includes(request.id)
+                                      ? prev
+                                      : [...prev, request.id],
+                                  );
+                                } else {
+                                  setSelectedWithdrawalIds((prev) =>
+                                    prev.filter((id) => id !== request.id),
+                                  );
+                                }
+                              }}
+                            />
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            <div>
+                              <p className="text-white text-sm">
+                                {request.nickname}({request.user})
+                              </p>
+                              <p className="text-gray-400 text-xs">
+                                {request.email}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            <span className="text-red-500">
+                              -{request.amount.toLocaleString()}원
+                            </span>
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            <div className="text-gray-300 text-xs">
+                              <p>{request.bankName}</p>
+                              <p className="text-gray-500">
+                                {request.accountNumber}
+                              </p>
+                              <p className="text-gray-500">
+                                {request.accountHolder}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="px-2 py-3 text-center text-gray-300 text-xs">
+                            <div className="flex items-center justify-center gap-1">
+                              <Clock size={12} />
+                              {request.requestDate}
+                            </div>
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  request.status === "대기"
+                                    ? "bg-yellow-500/20 text-yellow-300"
+                                    : request.status === "승인"
+                                      ? "bg-green-500/20 text-green-300"
+                                      : "bg-red-500/20 text-red-300"
+                                }`}
+                              >
+                                {request.status}
+                              </span>
+                              {request.status === "거절" &&
+                                request.rejectReason && (
+                                  <span
+                                    className="text-[10px] text-red-400 max-w-[120px] truncate"
+                                    title={request.rejectReason}
+                                  >
+                                    사유: {request.rejectReason}
+                                  </span>
+                                )}
+                            </div>
+                          </td>
+                          {request.status === "대기" ? (
+                            <td className="px-2 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() =>
+                                    handleApproveWithdrawal(request.id)
+                                  }
+                                  className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-green-600/80 hover:bg-green-600 text-white"
+                                >
+                                  <CheckCircle size={12} />
+                                  승인
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleRejectWithdrawal(request.id)
+                                  }
+                                  className="px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
+                                >
+                                  <XCircle size={12} />
+                                  거절
+                                </button>
+                              </div>
+                            </td>
+                          ) : statusFilter === "all" ||
+                            statusFilter === "pending" ? (
+                            <td className="px-2 py-3"></td>
+                          ) : null}
+                        </tr>
+                      ))}
+                      {withdrawals.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center">
+                            <p className="text-gray-400">
+                              대기 중인 출금 신청이 없습니다
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {/* 출금 신청 페이지네이션 */}
+                {withdrawalTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 py-4 border-t border-gray-800">
+                    <button
+                      onClick={() =>
+                        setWithdrawalPage((p) => Math.max(1, p - 1))
+                      }
+                      disabled={withdrawalPage === 1}
+                      className="p-2 rounded hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {Array.from(
+                        { length: withdrawalTotalPages },
+                        (_, i) => i + 1,
+                      ).map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => setWithdrawalPage(page)}
+                          className={`min-w-[32px] h-8 rounded text-sm transition-colors ${
+                            withdrawalPage === page
+                              ? "bg-indigo-500 text-white"
+                              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() =>
+                        setWithdrawalPage((p) =>
+                          Math.min(withdrawalTotalPages, p + 1),
+                        )
+                      }
+                      disabled={withdrawalPage === withdrawalTotalPages}
+                      className="p-2 rounded hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Empty State - 입출금 신청 탭에서 필터가 선택되지 않았을 때만 표시 */}
+            {typeFilter !== "all" &&
+              typeFilter !== "deposit" &&
+              typeFilter !== "withdrawal" && (
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-12 text-center">
+                  <AlertCircle
+                    className="mx-auto text-gray-600 mb-4"
+                    size={48}
+                  />
+                  <p className="text-gray-400 text-lg">필터를 선택해주세요</p>
+                  <p className="text-gray-600 text-sm mt-2">
+                    입금 또는 출금 신청을 선택하세요
+                  </p>
+                </div>
+              )}
           </>
         ) : (
           <>
@@ -1263,6 +1401,7 @@ export function AdminPointsPage() {
                   setShowConfirmModal(false);
                   setConfirmAction(null);
                   setRejectReasonInput("");
+                  setSelectedRejectReason("");
                 }}
                 className="text-gray-400 hover:text-white transition-colors"
               >
@@ -1284,17 +1423,38 @@ export function AdminPointsPage() {
               </div>
 
               {confirmAction.action === "reject" && (
-                <div>
-                  <label className="block text-gray-400 text-sm mb-2">
+                <div className="space-y-2">
+                  <label className="block text-gray-400 text-sm">
                     거절 사유
                   </label>
-                  <textarea
-                    value={rejectReasonInput}
-                    onChange={(e) => setRejectReasonInput(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    rows={4}
-                    placeholder="거절 사유를 입력하세요"
-                  />
+                  <select
+                    value={selectedRejectReason}
+                    onChange={(e) => {
+                      setSelectedRejectReason(e.target.value);
+                      if (e.target.value !== "기타") {
+                        setRejectReasonInput(e.target.value);
+                      } else {
+                        setRejectReasonInput("");
+                      }
+                    }}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="">사유 선택</option>
+                    {REJECT_REASONS.map((reason) => (
+                      <option key={reason} value={reason}>
+                        {reason}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedRejectReason === "기타" && (
+                    <input
+                      type="text"
+                      value={rejectReasonInput}
+                      onChange={(e) => setRejectReasonInput(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                      placeholder="거절 사유를 직접 입력하세요"
+                    />
+                  )}
                 </div>
               )}
               <div className="flex gap-3 pt-4">
@@ -1311,6 +1471,7 @@ export function AdminPointsPage() {
                     setShowConfirmModal(false);
                     setConfirmAction(null);
                     setRejectReasonInput("");
+                    setSelectedRejectReason("");
                   }}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
                 >

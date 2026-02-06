@@ -591,22 +591,25 @@ export type Database = {
           acquired_at: string | null;
           gift_id: string;
           id: string;
+          owner_id: string;
+          owner_type: string;
           quantity: number;
-          user_id: string;
         };
         Insert: {
           acquired_at?: string | null;
           gift_id: string;
           id?: string;
+          owner_id: string;
+          owner_type?: string;
           quantity?: number;
-          user_id: string;
         };
         Update: {
           acquired_at?: string | null;
           gift_id?: string;
           id?: string;
+          owner_id?: string;
+          owner_type?: string;
           quantity?: number;
-          user_id?: string;
         };
         Relationships: [
           {
@@ -614,13 +617,6 @@ export type Database = {
             columns: ["gift_id"];
             isOneToOne: false;
             referencedRelation: "gifts";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "gift_inventory_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "user_profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -1097,17 +1093,21 @@ export type Database = {
       };
       admin_gift_grant: {
         Args: {
-          p_user_id: string;
+          p_owner_id: string;
           p_gift_id: string;
           p_quantity: number;
+          p_owner_type?: string;
+          p_admin_id?: string | null;
         };
         Returns: string;
       };
       admin_gift_revoke: {
         Args: {
-          p_user_id: string;
+          p_owner_id: string;
           p_gift_id: string;
           p_quantity: number;
+          p_owner_type?: string;
+          p_admin_id?: string | null;
         };
         Returns: string;
       };
@@ -1260,6 +1260,12 @@ export type Database = {
           p_gift_quantity: number | null;
         };
         Returns: string;
+      };
+      check_phone_duplicate: {
+        Args: {
+          p_phone: string;
+        };
+        Returns: boolean;
       };
       create_or_get_chat_room: {
         Args: {

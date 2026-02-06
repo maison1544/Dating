@@ -5,7 +5,7 @@ import {
   useEffect,
   ReactNode,
 } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase, supabaseAdmin } from "../../lib/supabase";
 import type { Tables } from "../../lib/database.types";
 
 type ChatProfileDB = Tables<"chat_profiles">;
@@ -59,7 +59,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const fetchProfiles = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
+    // Use supabaseAdmin to bypass RLS and fetch all active profiles for user display
+    const { data, error } = await supabaseAdmin
       .from("chat_profiles")
       .select("*")
       .eq("is_active", true)
@@ -88,7 +89,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         },
         () => {
           fetchProfiles();
-        }
+        },
       )
       .subscribe();
 

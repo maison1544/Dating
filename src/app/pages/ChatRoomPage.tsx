@@ -1,17 +1,15 @@
-import {
-  ArrowLeft,
-  Send,
-  Gift,
-  Image as ImageIcon,
-  X,
-  Loader2,
-} from "lucide-react";
+import { ArrowLeft, Send, Gift, X, Loader2, Bell, BellOff } from "lucide-react";
 import { useMemo, useRef, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { QuantityModal } from "../components/QuantityModal";
 import { ProfileDetailModal } from "../components/ProfileDetailModal";
+import {
+  ChatImageUpload,
+  ChatImageMessage,
+} from "../components/ChatImageUpload";
 import { useAuth } from "../contexts/AuthContext";
 import { useAlert } from "../contexts/AlertContext";
+import { useNotification } from "../contexts/NotificationContext";
 import {
   useRealtimeChat,
   useSendMessage,
@@ -43,6 +41,7 @@ export function ChatRoomPage() {
     isLoading: authLoading,
   } = useAuth();
   const { showAlert } = useAlert();
+  const { setActiveChatId, toggleChatMute, isChatMuted } = useNotification();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // UI State
@@ -80,7 +79,7 @@ export function ChatRoomPage() {
           };
         })
         .filter((g: any) => !!g.gift_id && !!g.name && g.quantity > 0),
-    [userGifts]
+    [userGifts],
   );
 
   const getInitial = (name: string) => {
@@ -96,6 +95,14 @@ export function ChatRoomPage() {
       return;
     }
   }, [authLoading, user, adminAccount, isAgent, navigate]);
+
+  useEffect(() => {
+    if (!chatId) return;
+    setActiveChatId(chatId);
+    return () => {
+      setActiveChatId(null);
+    };
+  }, [chatId, setActiveChatId]);
 
   // 채팅방 정보 및 상대방 프로필 로드
   useEffect(() => {
@@ -117,7 +124,7 @@ export function ChatRoomPage() {
           chat_profiles:profile_id (
             id, name, age, image, is_online, job, height, weight, interests, bio
           )
-        `
+        `,
         )
         .eq("id", chatId)
         .eq("user_id", profile.id)
@@ -324,8 +331,10 @@ export function ChatRoomPage() {
 
   const partnerImageUrl = getPublicUrlForPath(
     "chat-profile-images",
-    chatPartner.image
+    chatPartner.image,
   );
+
+  const isChatNotificationMuted = chatId ? isChatMuted(chatId) : false;
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col">
@@ -367,6 +376,29 @@ export function ChatRoomPage() {
                 {chatPartner.online ? "온라인" : "오프라인"}
               </p>
             </div>
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => chatId && toggleChatMute(chatId)}
+            className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-full border transition-colors ${
+              isChatNotificationMuted
+                ? "border-gray-700 text-gray-400 hover:text-gray-200"
+                : "border-pink-500/70 text-pink-300 hover:text-pink-200"
+            }`}
+            title={
+              isChatNotificationMuted ? "채팅 알림 켜기" : "채팅 알림 끄기"
+            }
+          >
+            {isChatNotificationMuted ? (
+              <BellOff size={14} />
+            ) : (
+              <Bell size={14} />
+            )}
+            <span className="hidden sm:inline">
+              {isChatNotificationMuted ? "알림 끔" : "알림 켬"}
+            </span>
           </button>
         </div>
       </div>
@@ -426,6 +458,11 @@ export function ChatRoomPage() {
                             : `${chatPartner.name}님이 ${message.giftName} ${message.giftQuantity}개를 보냈습니다!`}
                         </p>
                       </div>
+                    ) : message.type === "image" ? (
+                      <ChatImageMessage
+                        imageUrl={message.text}
+                        isMe={message.sender === "me"}
+                      />
                     ) : (
                       <div
                         className={`rounded-2xl px-4 py-2 ${
@@ -458,9 +495,16 @@ export function ChatRoomPage() {
           >
             <Gift size={24} />
           </button>
-          <button className="text-gray-400 hover:text-pink-500 transition-colors p-2 flex-shrink-0">
-            <ImageIcon size={24} />
-          </button>
+          <ChatImageUpload
+            roomId={chatId || ""}
+            senderType="user"
+            onImageSent={() => {}}
+            onError={(err) =>
+              showAlert({ title: "오류", message: err, type: "error" })
+            }
+            size={24}
+            className="text-gray-400 hover:text-pink-500 transition-colors p-2 flex-shrink-0"
+          />
           <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 focus-within:border-pink-500 transition-colors">
             <textarea
               value={messageInput}

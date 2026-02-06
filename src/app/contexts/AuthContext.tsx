@@ -50,12 +50,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const authSyncSeq = useRef(0);
   const adminAccountRef = useRef<AdminAccount | null>(null);
+  const initSessionCompleted = useRef(false);
   const { showAlert } = useAlert();
 
   const isAdmin = !!(
     adminAccount &&
     "role" in adminAccount &&
-    (adminAccount.role === "super_admin" || adminAccount.role === "admin")
+    (adminAccount.role === "admin" || adminAccount.role === "super_admin")
   );
   const isAgent = !!(adminAccount && "referral_code" in adminAccount);
 
@@ -109,7 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchAdminAccount = async (userId: string) => {
-    const { data: adminData, error: adminError } = await supabase
+    // Use supabaseAdmin to ensure we get the latest is_active value without RLS interference
+    const { data: adminData, error: adminError } = await supabaseAdmin
       .from("admins")
       .select("*")
       .eq("id", userId)
@@ -123,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return adminData;
     }
 
-    const { data: agentData, error: agentError } = await supabase
+    const { data: agentData, error: agentError } = await supabaseAdmin
       .from("agents")
       .select("*")
       .eq("id", userId)
@@ -205,6 +207,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const account = await fetchAdminAccount(authUser.id);
 
       if (account) {
+        // Check if account is suspended
+        if (account.is_active === false) {
+          // Sign out suspended account
+          await supabaseAdmin.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setAdminAccount(null);
+          setProfile(null);
+          setIsLoading(false);
+          return;
+        }
+
         setSession(nextSession);
         setUser(authUser);
         setAdminAccount(account);
@@ -215,21 +229,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 초기 세션 가져오기 - 먼저 관리자 세션 확인, 없으면 유저 세션 확인
     const initSession = async () => {
-      // 관리자 세션 확인
-      const {
-        data: { session: adminSession },
-      } = await supabaseAdmin.auth.getSession();
-      if (adminSession?.user) {
-        await syncAdminSession(adminSession);
-        return;
-      }
+      try {
+        // 관리자 세션 확인
+        const {
+          data: { session: adminSession },
+        } = await supabaseAdmin.auth.getSession();
+        if (adminSession?.user) {
+          await syncAdminSession(adminSession);
+          return;
+        }
 
-      // 유저 세션 확인
-      const {
-        data: { session: userSession },
-      } = await supabase.auth.getSession();
-      if (!cancelled) {
-        await syncUserSession(userSession);
+        // 유저 세션 확인
+        const {
+          data: { session: userSession },
+        } = await supabase.auth.getSession();
+        if (!cancelled) {
+          await syncUserSession(userSession);
+        }
+      } finally {
+        // 초기 세션 확인 완료 표시
+        initSessionCompleted.current = true;
       }
     };
 
@@ -240,6 +259,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription: userSubscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (cancelled) return;
+      // 초기 세션 확인이 완료되기 전에는 무시 (race condition 방지)
+      if (!initSessionCompleted.current) return;
       // 관리자 세션이 활성화되어 있으면 유저 세션 변경 무시
       if (adminAccountRef.current) return;
       void syncUserSession(session);
@@ -274,10 +295,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           table: "user_profiles",
           filter: `id=eq.${user.id}`,
         },
-        (payload) => {
+        async (payload) => {
           const next = (payload as any)?.new;
           if (next && typeof next === "object") {
-            setProfile(next as UserProfile);
+            const nextProfile = next as UserProfile;
+
+            // If user status changed to suspended or rejected, sign them out immediately
+            if (
+              nextProfile.status === "suspended" ||
+              nextProfile.status === "rejected"
+            ) {
+              showAlert({
+                title: "세션 종료",
+                message:
+                  nextProfile.status === "suspended"
+                    ? "계정이 정지되었습니다. 관리자에게 문의하세요."
+                    : "계정이 승인거절되었습니다. 관리자에게 문의하세요.",
+                type: "error",
+              });
+              await supabase.auth.signOut();
+              return;
+            }
+
+            setProfile(nextProfile);
           }
         },
       )
@@ -285,6 +325,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       supabase.removeChannel(channel);
+    };
+  }, [user?.id, adminAccount, showAlert]);
+
+  // Heartbeat: Update last_active_at every 2 minutes for online users
+  useEffect(() => {
+    if (!user?.id) return;
+    if (adminAccount) return; // Skip for admin/agent accounts
+
+    const updateLastActive = async () => {
+      try {
+        await supabase
+          .from("user_profiles")
+          .update({
+            last_active_at: new Date().toISOString(),
+            is_online: true,
+          })
+          .eq("id", user.id);
+      } catch {
+        // ignore heartbeat failures
+      }
+    };
+
+    // Update immediately on mount
+    updateLastActive();
+
+    // Then update every 2 minutes
+    const heartbeatInterval = setInterval(updateLastActive, 2 * 60 * 1000);
+
+    return () => {
+      clearInterval(heartbeatInterval);
     };
   }, [user?.id, adminAccount]);
 
@@ -331,7 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: new Error(message) };
     }
 
-    // Record user login (last_login_at, last_login_ip)
+    // Record user login (last_login_at, last_login_ip) and set is_online = true
     try {
       const token = data.session?.access_token;
       if (token) {
@@ -354,6 +424,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
         }
       }
+
+      // Set is_online = true and last_active_at on login
+      await supabase
+        .from("user_profiles")
+        .update({
+          is_online: true,
+          last_active_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", authUser.id);
     } catch {
       // ignore - login tracking failure should not block login
     }
@@ -388,6 +468,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.user) {
       const account = await fetchAdminAccount(data.user.id);
       if (account) {
+        // Check if account is suspended
+        if (account.is_active === false) {
+          // Sign out the user immediately
+          await supabaseAdmin.auth.signOut();
+          return {
+            error: new Error("계정이 정지되었습니다. 관리자에게 문의하세요."),
+          };
+        }
+
         setUser(data.user);
         setSession(data.session);
         setAdminAccount(account);
@@ -470,6 +559,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabaseAdmin.auth.signOut();
         localStorage.removeItem("sb-admin-auth-token");
       } else {
+        // Set is_online = false before logout (if user exists)
+        if (user?.id) {
+          try {
+            await supabase
+              .from("user_profiles")
+              .update({
+                is_online: false,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", user.id);
+          } catch {
+            // ignore - online status update failure should not block logout
+          }
+        }
+
         // 유저 로그아웃
         const { error } = await supabase.auth.signOut();
         if (error) {
@@ -492,17 +596,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAdminAccount(null);
       setIsLoading(false);
     }
-  }, [showAlert, adminAccount]);
+  }, [showAlert, adminAccount, user?.id]);
 
+  // 유저 계정 강제 로그아웃 구독
   useEffect(() => {
     if (!user?.id) return;
+    if (adminAccount) return; // 관리자/에이전트는 별도 처리
 
     const channel = supabase
-      .channel(`private:force-logout:${user.id}`, { config: { private: true } })
+      .channel(`force-logout:${user.id}`)
       .on("broadcast", { event: "forced_logout" }, () => {
         showAlert({
           title: "안내",
-          message: "세션이 종료되었습니다. 다시 로그인해주세요.",
+          message:
+            "비밀번호가 변경되어 세션이 종료되었습니다. 다시 로그인해주세요.",
           type: "info",
         });
 
@@ -513,7 +620,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [showAlert, signOut, user?.id]);
+  }, [showAlert, signOut, user?.id, adminAccount]);
+
+  // 관리자/에이전트 계정 강제 로그아웃 구독
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!adminAccount) return; // 유저는 위에서 처리
+
+    const channel = supabaseAdmin
+      .channel(`force-logout:${user.id}`)
+      .on("broadcast", { event: "forced_logout" }, () => {
+        showAlert({
+          title: "안내",
+          message:
+            "비밀번호가 변경되어 세션이 종료되었습니다. 다시 로그인해주세요.",
+          type: "info",
+        });
+
+        void signOut();
+      })
+      .subscribe();
+
+    return () => {
+      supabaseAdmin.removeChannel(channel);
+    };
+  }, [showAlert, signOut, user?.id, adminAccount]);
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!user) return { error: new Error("Not authenticated") };

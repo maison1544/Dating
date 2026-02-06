@@ -149,15 +149,6 @@ export function AdminLoginPage() {
               )}
             </button>
           </form>
-
-          <div className="mt-5 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-            <p className="text-yellow-400/90 text-xs text-center">
-              Supabase Dashboard에서 계정을 생성하세요
-            </p>
-            <p className="text-yellow-400/90 text-xs text-center mt-1">
-              SUPABASE_SETUP.md 파일 참고
-            </p>
-          </div>
         </div>
       </div>
     </div>

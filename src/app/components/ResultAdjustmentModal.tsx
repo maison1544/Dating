@@ -5,7 +5,7 @@ import {
   TrendingUp,
   Clock,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { CountdownTimer } from "./CountdownTimer";
 import { CustomAlert } from "./CustomAlert";
 
@@ -32,6 +32,7 @@ interface GameRound {
   date: string;
   betDistribution?: BetOption[];
   reservedResult?: string; // 예약된 결과
+  isReservationPending?: boolean;
 }
 
 // 개별 선택을 위한 인터페이스
@@ -48,11 +49,67 @@ interface LadderSelection {
   oddEven?: "홀" | "짝";
 }
 
+// 사다리 게임 유효 조합 규칙
+// 좌출발 + 3줄 = 짝, 좌출발 + 4줄 = 홀
+// 우출발 + 3줄 = 홀, 우출발 + 4줄 = 짝
+
+// 출발 + 줄 → 홀/짝 결정
+const getValidLadderOddEven = (
+  start?: "좌출발" | "우출발",
+  lines?: "3줄" | "4줄",
+): "홀" | "짝" | undefined => {
+  if (!start || !lines) return undefined;
+  if (start === "좌출발" && lines === "3줄") return "짝";
+  if (start === "좌출발" && lines === "4줄") return "홀";
+  if (start === "우출발" && lines === "3줄") return "홀";
+  if (start === "우출발" && lines === "4줄") return "짝";
+  return undefined;
+};
+
+// 줄 + 홀/짝 → 출발 결정
+const getValidLadderStart = (
+  lines?: "3줄" | "4줄",
+  oddEven?: "홀" | "짝",
+): "좌출발" | "우출발" | undefined => {
+  if (!lines || !oddEven) return undefined;
+  if (lines === "3줄" && oddEven === "짝") return "좌출발";
+  if (lines === "3줄" && oddEven === "홀") return "우출발";
+  if (lines === "4줄" && oddEven === "짝") return "우출발";
+  if (lines === "4줄" && oddEven === "홀") return "좌출발";
+  return undefined;
+};
+
+// 출발 + 홀/짝 → 줄 결정
+const getValidLadderLines = (
+  start?: "좌출발" | "우출발",
+  oddEven?: "홀" | "짝",
+): "3줄" | "4줄" | undefined => {
+  if (!start || !oddEven) return undefined;
+  if (start === "좌출발" && oddEven === "짝") return "3줄";
+  if (start === "좌출발" && oddEven === "홀") return "4줄";
+  if (start === "우출발" && oddEven === "짝") return "4줄";
+  if (start === "우출발" && oddEven === "홀") return "3줄";
+  return undefined;
+};
+
+// 사다리 조합이 유효한지 검증
+const isValidLadderCombination = (
+  start?: "좌출발" | "우출발",
+  lines?: "3줄" | "4줄",
+  oddEven?: "홀" | "짝",
+): boolean => {
+  if (!start || !lines || !oddEven) return true; // 일부만 선택된 경우 유효
+  const validOddEven = getValidLadderOddEven(start, lines);
+  return validOddEven === oddEven;
+};
+
 interface ResultAdjustmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   gameRounds: GameRound[];
   onUpdateReservedResult: (roundId: number, result: string | null) => void;
+  serverTimeOffset?: number; // 서버 시간 오프셋 (ms)
+  onTimerEnd?: (gameType: string) => void; // 타이머 종료 시 즉시 갱신 트리거
 }
 
 export function ResultAdjustmentModal({
@@ -60,6 +117,8 @@ export function ResultAdjustmentModal({
   onClose,
   gameRounds,
   onUpdateReservedResult,
+  serverTimeOffset = 0,
+  onTimerEnd,
 }: ResultAdjustmentModalProps) {
   const [selectedResults, setSelectedResults] = useState<{
     [key: number]: string;
@@ -82,13 +141,32 @@ export function ResultAdjustmentModal({
     type: "info" | "warning" | "error" | "success";
   }>({ isOpen: false, title: "", message: "", type: "info" });
 
-  // 진행중인 게임만 필터링
-  const activeRounds = gameRounds.filter((round) => round.status === "진행중");
+  // 진행중인 게임만 필터링 + 게임타입별 정렬 (파워볼 -> 사다리 순서 고정)
+  const activeRounds = useMemo(() => {
+    const filtered = gameRounds.filter((round) => round.status === "진행중");
+    // 게임타입 우선순위: 파워볼(0) -> 사다리(1), 같은 타입이면 회차번호 오름차순
+    return filtered.sort((a, b) => {
+      const typeOrder = (type: string) => (type === "파워볼" ? 0 : 1);
+      const typeCompare = typeOrder(a.gameType) - typeOrder(b.gameType);
+      if (typeCompare !== 0) return typeCompare;
+      return a.roundNumber - b.roundNumber;
+    });
+  }, [gameRounds]);
+
+  const isRoundReserved = (round: GameRound) =>
+    round.reservedResult !== undefined && round.reservedResult !== null;
+
+  const isRoundLocked = (round: GameRound) =>
+    isRoundReserved(round) || !!round.isReservationPending;
+
+  const hasPendingReservation = activeRounds.some(
+    (round) => round.isReservationPending,
+  );
 
   // 전체 예약 상태 확인
   const allReserved =
     activeRounds.length > 0 &&
-    activeRounds.every((round) => round.reservedResult);
+    activeRounds.every((round) => isRoundReserved(round));
 
   const isPowerballSelectionComplete = (selection?: PowerballSelection) => {
     // At least one option must be explicitly selected (not auto)
@@ -109,7 +187,7 @@ export function ResultAdjustmentModal({
   const allHaveSelection =
     activeRounds.length > 0 &&
     activeRounds.every((round) => {
-      if (round.reservedResult) return true;
+      if (isRoundLocked(round)) return true;
       if (round.gameType === "파워볼") {
         return isPowerballSelectionComplete(powerballSelections[round.id]);
       }
@@ -129,32 +207,52 @@ export function ResultAdjustmentModal({
       if (round.reservedResult) {
         reserved[round.id] = round.reservedResult;
 
-        // 예약된 결과를 개별 선택으로 파싱
+        // 예약된 결과를 개별 선택으로 파싱 ("자동" 값은 제외)
         if (round.gameType === "파워볼") {
           const match = round.reservedResult.match(
             /일반볼\s+(.+?)\s+파워볼\s+(.+)/,
           );
           const normalBall = match?.[1] || "";
           const powerBall = match?.[2] || "";
-          const normalParts = normalBall.split("/").map((v) => v.trim());
-          const powerParts = powerBall.split("/").map((v) => v.trim());
+          const normalParts = normalBall
+            .split("/")
+            .map((v: string) => v.trim());
+          const powerParts = powerBall.split("/").map((v: string) => v.trim());
 
           if (normalParts.length === 2 && powerParts.length === 2) {
-            powerball[round.id] = {
-              normalBallOddEven: normalParts[0] as "홀" | "짝",
-              normalBallOverUnder: normalParts[1] as "오버" | "언더",
-              powerBallOddEven: powerParts[0] as "홀" | "짝",
-              powerBallOverUnder: powerParts[1] as "오버" | "언더",
-            };
+            const selection: PowerballSelection = {};
+            if (normalParts[0] !== "자동") {
+              selection.normalBallOddEven = normalParts[0] as "홀" | "짝";
+            }
+            if (normalParts[1] !== "자동") {
+              selection.normalBallOverUnder = normalParts[1] as "오버" | "언더";
+            }
+            if (powerParts[0] !== "자동") {
+              selection.powerBallOddEven = powerParts[0] as "홀" | "짝";
+            }
+            if (powerParts[1] !== "자동") {
+              selection.powerBallOverUnder = powerParts[1] as "오버" | "언더";
+            }
+            if (Object.keys(selection).length > 0) {
+              powerball[round.id] = selection;
+            }
           }
         } else if (round.gameType === "사다리") {
           const parts = round.reservedResult.split("/");
           if (parts.length === 3) {
-            ladder[round.id] = {
-              start: parts[0] as "좌출발" | "우출발",
-              lines: parts[1] as "3줄" | "4줄",
-              oddEven: parts[2] as "홀" | "짝",
-            };
+            const selection: LadderSelection = {};
+            if (parts[0] !== "자동") {
+              selection.start = parts[0] as "좌출발" | "우출발";
+            }
+            if (parts[1] !== "자동") {
+              selection.lines = parts[1] as "3줄" | "4줄";
+            }
+            if (parts[2] !== "자동") {
+              selection.oddEven = parts[2] as "홀" | "짝";
+            }
+            if (Object.keys(selection).length > 0) {
+              ladder[round.id] = selection;
+            }
           }
         }
       }
@@ -164,6 +262,144 @@ export function ResultAdjustmentModal({
     setPowerballSelections(powerball);
     setLadderSelections(ladder);
   }, [isOpen]); // gameRounds 대신 isOpen으로 변경하여 모달이 열릴 때만 초기화
+
+  useEffect(() => {
+    if (!isOpen || activeRounds.length === 0) return;
+
+    setSelectedResults((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      activeRounds.forEach((round) => {
+        if (!isRoundLocked(round)) return;
+
+        if (round.reservedResult) {
+          if (next[round.id] !== round.reservedResult) {
+            next[round.id] = round.reservedResult;
+            changed = true;
+          }
+        } else if (Object.prototype.hasOwnProperty.call(next, round.id)) {
+          delete next[round.id];
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+
+    setPowerballSelections((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      activeRounds.forEach((round) => {
+        if (!isRoundLocked(round) || round.gameType !== "파워볼") return;
+
+        if (!round.reservedResult) {
+          if (Object.prototype.hasOwnProperty.call(next, round.id)) {
+            delete next[round.id];
+            changed = true;
+          }
+          return;
+        }
+
+        const match = round.reservedResult.match(
+          /일반볼\s+(.+?)\s+파워볼\s+(.+)/,
+        );
+        const normalBall = match?.[1] || "";
+        const powerBall = match?.[2] || "";
+        const normalParts = normalBall.split("/").map((v: string) => v.trim());
+        const powerParts = powerBall.split("/").map((v: string) => v.trim());
+
+        if (normalParts.length === 2 && powerParts.length === 2) {
+          // "자동" 값은 제외하고 실제 선택값만 설정
+          const nextSelection: PowerballSelection = {};
+          if (normalParts[0] !== "자동") {
+            nextSelection.normalBallOddEven = normalParts[0] as "홀" | "짝";
+          }
+          if (normalParts[1] !== "자동") {
+            nextSelection.normalBallOverUnder = normalParts[1] as
+              | "오버"
+              | "언더";
+          }
+          if (powerParts[0] !== "자동") {
+            nextSelection.powerBallOddEven = powerParts[0] as "홀" | "짝";
+          }
+          if (powerParts[1] !== "자동") {
+            nextSelection.powerBallOverUnder = powerParts[1] as "오버" | "언더";
+          }
+
+          const current = next[round.id];
+          const hasChanges =
+            !current ||
+            current.normalBallOddEven !== nextSelection.normalBallOddEven ||
+            current.normalBallOverUnder !== nextSelection.normalBallOverUnder ||
+            current.powerBallOddEven !== nextSelection.powerBallOddEven ||
+            current.powerBallOverUnder !== nextSelection.powerBallOverUnder;
+
+          if (hasChanges) {
+            if (Object.keys(nextSelection).length > 0) {
+              next[round.id] = nextSelection;
+            } else {
+              delete next[round.id];
+            }
+            changed = true;
+          }
+        }
+      });
+
+      return changed ? next : prev;
+    });
+
+    setLadderSelections((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      activeRounds.forEach((round) => {
+        if (!isRoundLocked(round) || round.gameType !== "사다리") return;
+
+        if (!round.reservedResult) {
+          if (Object.prototype.hasOwnProperty.call(next, round.id)) {
+            delete next[round.id];
+            changed = true;
+          }
+          return;
+        }
+
+        const parts = round.reservedResult.split("/");
+        if (parts.length === 3) {
+          // "자동" 값은 제외하고 실제 선택값만 설정
+          const nextSelection: LadderSelection = {};
+          if (parts[0] !== "자동") {
+            nextSelection.start = parts[0] as "좌출발" | "우출발";
+          }
+          if (parts[1] !== "자동") {
+            nextSelection.lines = parts[1] as "3줄" | "4줄";
+          }
+          if (parts[2] !== "자동") {
+            nextSelection.oddEven = parts[2] as "홀" | "짝";
+          }
+
+          const current = next[round.id];
+          const hasChanges =
+            !current ||
+            current.start !== nextSelection.start ||
+            current.lines !== nextSelection.lines ||
+            current.oddEven !== nextSelection.oddEven;
+
+          if (hasChanges) {
+            if (Object.keys(nextSelection).length > 0) {
+              next[round.id] = nextSelection;
+            } else {
+              delete next[round.id];
+            }
+            changed = true;
+          }
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [activeRounds, isOpen]);
 
   if (!isOpen) return null;
 
@@ -179,67 +415,135 @@ export function ResultAdjustmentModal({
     if (totalBetAmount === 0) return null;
 
     if (round.gameType === "파워볼") {
-      // 파워볼: 16가지 조합 중 최대값 (일반볼 + 파워볼 조합)
-      const normalBallOptions = [
-        { key: "홀/오버", indices: [0, 2] },
-        { key: "홀/언더", indices: [0, 3] },
-        { key: "짝/오버", indices: [1, 2] },
-        { key: "짝/언더", indices: [1, 3] },
-      ];
+      const distribution = round.betDistribution || [];
+      const pickPair = (
+        leftIndex: number,
+        rightIndex: number,
+        leftLabel: string,
+        rightLabel: string,
+      ) => {
+        const left = distribution[leftIndex];
+        const right = distribution[rightIndex];
+        const leftAmount = left?.amount || 0;
+        const rightAmount = right?.amount || 0;
+        const leftCount = left?.count || 0;
+        const rightCount = right?.count || 0;
 
-      const powerBallOptions = [
-        { key: "홀/오버", indices: [4, 6] },
-        { key: "홀/언더", indices: [4, 7] },
-        { key: "짝/오버", indices: [5, 6] },
-        { key: "짝/언더", indices: [5, 7] },
-      ];
+        if (leftAmount === 0 && rightAmount === 0) {
+          return { label: "자동", amount: 0 };
+        }
 
-      let maxAmount = 0;
-      let maxCombination = "";
-
-      normalBallOptions.forEach((normal) => {
-        powerBallOptions.forEach((power) => {
-          const amount = [...normal.indices, ...power.indices].reduce(
-            (sum, idx) => sum + (round.betDistribution![idx]?.amount || 0),
-            0,
-          );
-          if (amount > maxAmount) {
-            maxAmount = amount;
-            maxCombination = `일반볼 ${normal.key} 파워볼 ${power.key}`;
+        if (leftAmount === rightAmount) {
+          if (leftCount === rightCount) {
+            return { label: leftLabel, amount: leftAmount };
           }
-        });
-      });
+          return leftCount > rightCount
+            ? { label: leftLabel, amount: leftAmount }
+            : { label: rightLabel, amount: rightAmount };
+        }
 
-      // 최대 금액이 0이면 null 반환
-      if (maxAmount === 0) return null;
-      return { combination: maxCombination, amount: maxAmount };
+        return leftAmount > rightAmount
+          ? { label: leftLabel, amount: leftAmount }
+          : { label: rightLabel, amount: rightAmount };
+      };
+
+      const normalOddEven = pickPair(0, 1, "홀", "짝");
+      const normalUnderOver = pickPair(2, 3, "언더", "오버");
+      const powerOddEven = pickPair(4, 5, "홀", "짝");
+      const powerUnderOver = pickPair(6, 7, "언더", "오버");
+
+      const totalAmount =
+        normalOddEven.amount +
+        normalUnderOver.amount +
+        powerOddEven.amount +
+        powerUnderOver.amount;
+
+      if (totalAmount === 0) return null;
+
+      return {
+        combination: `일반볼 ${normalOddEven.label}/${normalUnderOver.label} 파워볼 ${powerOddEven.label}/${powerUnderOver.label}`,
+        amount: totalAmount,
+      };
     } else if (round.gameType === "사다리") {
-      // 사다리: 조합배팅 기준
-      const combinations = [
-        { key: "좌출발/3줄/홀", label: "좌3홀" },
-        { key: "좌출발/3줄/짝", label: "좌3짝" },
-        { key: "좌출발/4줄/홀", label: "좌4홀" },
-        { key: "좌출발/4줄/짝", label: "좌4짝" },
-        { key: "우출발/3줄/홀", label: "우3홀" },
-        { key: "우출발/3줄/짝", label: "우3짝" },
-        { key: "우출발/4줄/홀", label: "우4홀" },
-        { key: "우출발/4줄/짝", label: "우4짝" },
-      ];
+      // 사다리: 단일 배팅과 조합배팅 모두 처리
+      // betDistribution 순서: 0=좌출발, 1=우출발, 2=3줄, 3=4줄, 4=홀, 5=짝, 6=좌3짝, 7=좌4홀, 8=우3홀, 9=우4짝
+      const distribution = round.betDistribution || [];
 
-      if (round.betDistribution.length >= 10) {
-        // 조합배팅이 있는 경우
-        const comboBets = round.betDistribution.slice(6, 10);
+      // 파워볼과 동일한 방식으로 단일 배팅 쌍 비교
+      const pickPair = (
+        leftIndex: number,
+        rightIndex: number,
+        leftLabel: string,
+        rightLabel: string,
+      ) => {
+        const left = distribution[leftIndex];
+        const right = distribution[rightIndex];
+        const leftAmount = left?.amount || 0;
+        const rightAmount = right?.amount || 0;
+        const leftCount = left?.count || 0;
+        const rightCount = right?.count || 0;
+
+        if (leftAmount === 0 && rightAmount === 0) {
+          return { label: "자동", amount: 0 };
+        }
+
+        if (leftAmount === rightAmount) {
+          if (leftCount === rightCount) {
+            return { label: leftLabel, amount: leftAmount };
+          }
+          return leftCount > rightCount
+            ? { label: leftLabel, amount: leftAmount }
+            : { label: rightLabel, amount: rightAmount };
+        }
+
+        return leftAmount > rightAmount
+          ? { label: leftLabel, amount: leftAmount }
+          : { label: rightLabel, amount: rightAmount };
+      };
+
+      // 단일 배팅 쌍 비교: 좌/우, 3줄/4줄, 홀/짝
+      const startPos = pickPair(0, 1, "좌출발", "우출발");
+      const lineCount = pickPair(2, 3, "3줄", "4줄");
+      const oddEven = pickPair(4, 5, "홀", "짝");
+
+      const singleBetTotal =
+        startPos.amount + lineCount.amount + oddEven.amount;
+
+      // 조합배팅 확인 (index 6-9)
+      let comboBetMax = { key: "", amount: 0 };
+      if (distribution.length >= 10) {
+        const combinations = [
+          { key: "좌출발/3줄/짝", label: "좌3짝" },
+          { key: "좌출발/4줄/홀", label: "좌4홀" },
+          { key: "우출발/3줄/홀", label: "우3홀" },
+          { key: "우출발/4줄/짝", label: "우4짝" },
+        ];
+        const comboBets = distribution.slice(6, 10);
         const maxBet = comboBets.reduce(
           (max, bet) => (bet.amount > max.amount ? bet : max),
           comboBets[0],
         );
+        const comboIndex = distribution.indexOf(maxBet);
+        if (maxBet.amount > 0) {
+          comboBetMax = {
+            key: combinations[comboIndex - 6]?.key || "",
+            amount: maxBet.amount,
+          };
+        }
+      }
 
-        const comboIndex = round.betDistribution.indexOf(maxBet);
-        const comboKey = combinations[comboIndex - 6]?.key || "";
+      // 단일 배팅과 조합배팅 중 더 큰 금액 선택
+      if (singleBetTotal === 0 && comboBetMax.amount === 0) return null;
 
-        // 최대 금액이 0이면 null 반환
-        if (maxBet.amount === 0) return null;
-        return { combination: comboKey, amount: maxBet.amount };
+      if (comboBetMax.amount > singleBetTotal) {
+        // 조합배팅이 더 큼
+        return { combination: comboBetMax.key, amount: comboBetMax.amount };
+      } else {
+        // 단일 배팅이 더 크거나 같음 - 각 항목별로 표시
+        return {
+          combination: `${startPos.label}/${lineCount.label}/${oddEven.label}`,
+          amount: singleBetTotal,
+        };
       }
     }
 
@@ -282,18 +586,40 @@ export function ResultAdjustmentModal({
         return `일반볼 ${reverseNormal} 파워볼 ${reversePower}`;
       }
     } else if (round.gameType === "사다리") {
-      // 사다리: 각 요소의 반대로 설정
+      // 사다리: 출발과 줄을 반대로 설정하고, 홀/짝은 규칙에 따라 자동 결정
       const parts = mostBetted.combination.split("/");
-      const reversedParts = parts.map((part) => {
-        if (part === "좌출발") return "우출발";
-        if (part === "우출발") return "좌출발";
-        if (part === "3줄") return "4줄";
-        if (part === "4줄") return "3줄";
-        if (part === "홀") return "짝";
-        if (part === "짝") return "홀";
-        return part;
-      });
-      return reversedParts.join("/");
+      if (parts.length === 3) {
+        const startPart = parts[0];
+        const linesPart = parts[1];
+        const oddEvenPart = parts[2];
+
+        // 출발과 줄 반전
+        let newStart: "좌출발" | "우출발" | "자동" = "자동";
+        let newLines: "3줄" | "4줄" | "자동" = "자동";
+
+        if (startPart === "좌출발") newStart = "우출발";
+        else if (startPart === "우출발") newStart = "좌출발";
+        else newStart = "자동";
+
+        if (linesPart === "3줄") newLines = "4줄";
+        else if (linesPart === "4줄") newLines = "3줄";
+        else newLines = "자동";
+
+        // 홀/짝은 출발과 줄에 따라 자동 결정 (유효한 조합만 생성)
+        let newOddEven: "홀" | "짝" | "자동" = "자동";
+        if (newStart !== "자동" && newLines !== "자동") {
+          const validOddEven = getValidLadderOddEven(newStart, newLines);
+          if (validOddEven) {
+            newOddEven = validOddEven;
+          }
+        } else if (oddEvenPart === "홀") {
+          newOddEven = "짝";
+        } else if (oddEvenPart === "짝") {
+          newOddEven = "홀";
+        }
+
+        return `${newStart}/${newLines}/${newOddEven}`;
+      }
     }
 
     return null;
@@ -303,13 +629,20 @@ export function ResultAdjustmentModal({
   const handleReserveResult = (roundId: number) => {
     const result = selectedResults[roundId];
     const round = activeRounds.find((r) => r.id === roundId);
-    if (result && (!round?.reservedResult || round.reservedResult !== result)) {
+    if (!round || isRoundLocked(round)) {
+      return;
+    }
+    if (result) {
       onUpdateReservedResult(roundId, result);
     }
   };
 
   // 예약 취소
   const handleCancelReservation = (roundId: number) => {
+    const round = activeRounds.find((r) => r.id === roundId);
+    if (!round || round.isReservationPending || !isRoundReserved(round)) {
+      return;
+    }
     // state에서도 제거
     setSelectedResults((prev) => {
       const newResults = { ...prev };
@@ -335,10 +668,15 @@ export function ResultAdjustmentModal({
 
   // 전체 일괄 예약/취소 토글
   const handleReserveAll = () => {
+    if (hasPendingReservation) {
+      return;
+    }
     if (allReserved) {
       // 전체 취소
       activeRounds.forEach((round) => {
-        onUpdateReservedResult(round.id, null);
+        if (isRoundReserved(round)) {
+          onUpdateReservedResult(round.id, null);
+        }
       });
       setSelectedResults({});
       setPowerballSelections({});
@@ -346,8 +684,9 @@ export function ResultAdjustmentModal({
     } else {
       // 선택된 게임만 예약
       activeRounds.forEach((round) => {
+        if (isRoundLocked(round)) return;
         const selected = selectedResults[round.id];
-        if (selected && round.reservedResult !== selected) {
+        if (selected) {
           onUpdateReservedResult(round.id, selected);
         }
       });
@@ -356,6 +695,9 @@ export function ResultAdjustmentModal({
 
   // 추천 결과 일괄 적용
   const handleApplyRecommendedAll = () => {
+    if (hasPendingReservation) {
+      return;
+    }
     const newResults: { [key: number]: string } = {};
     const newPowerballSelections: {
       [key: number]: PowerballSelection;
@@ -365,6 +707,7 @@ export function ResultAdjustmentModal({
     } = {};
 
     activeRounds.forEach((round) => {
+      if (isRoundLocked(round)) return;
       const recommended = getRecommendedResult(round);
       if (recommended) {
         newResults[round.id] = recommended;
@@ -379,22 +722,58 @@ export function ResultAdjustmentModal({
             const powerParts = powerBall.split("/");
 
             if (normalParts.length === 2 && powerParts.length === 2) {
-              newPowerballSelections[round.id] = {
-                normalBallOddEven: normalParts[0] as "홀" | "짝",
-                normalBallOverUnder: normalParts[1] as "오버" | "언더",
-                powerBallOddEven: powerParts[0] as "홀" | "짝",
-                powerBallOverUnder: powerParts[1] as "오버" | "언더",
-              };
+              const normalOddEven =
+                normalParts[0] !== "자동"
+                  ? (normalParts[0] as "홀" | "짝")
+                  : undefined;
+              const normalUnderOver =
+                normalParts[1] !== "자동"
+                  ? (normalParts[1] as "오버" | "언더")
+                  : undefined;
+              const powerOddEven =
+                powerParts[0] !== "자동"
+                  ? (powerParts[0] as "홀" | "짝")
+                  : undefined;
+              const powerUnderOver =
+                powerParts[1] !== "자동"
+                  ? (powerParts[1] as "오버" | "언더")
+                  : undefined;
+
+              if (
+                normalOddEven ||
+                normalUnderOver ||
+                powerOddEven ||
+                powerUnderOver
+              ) {
+                newPowerballSelections[round.id] = {
+                  ...(normalOddEven
+                    ? { normalBallOddEven: normalOddEven }
+                    : {}),
+                  ...(normalUnderOver
+                    ? { normalBallOverUnder: normalUnderOver }
+                    : {}),
+                  ...(powerOddEven ? { powerBallOddEven: powerOddEven } : {}),
+                  ...(powerUnderOver
+                    ? { powerBallOverUnder: powerUnderOver }
+                    : {}),
+                };
+              }
             }
           }
         } else if (round.gameType === "사다리") {
           const parts = recommended.split("/");
           if (parts.length === 3) {
-            newLadderSelections[round.id] = {
-              start: parts[0] as "좌출발" | "우출발",
-              lines: parts[1] as "3줄" | "4줄",
-              oddEven: parts[2] as "홀" | "짝",
-            };
+            const start = parts[0] !== "자동" ? parts[0] : undefined;
+            const lines = parts[1] !== "자동" ? parts[1] : undefined;
+            const oddEven = parts[2] !== "자동" ? parts[2] : undefined;
+
+            if (start || lines || oddEven) {
+              newLadderSelections[round.id] = {
+                ...(start ? { start: start as "좌출발" | "우출발" } : {}),
+                ...(lines ? { lines: lines as "3줄" | "4줄" } : {}),
+                ...(oddEven ? { oddEven: oddEven as "홀" | "짝" } : {}),
+              };
+            }
           }
         }
       }
@@ -417,6 +796,10 @@ export function ResultAdjustmentModal({
     field: keyof PowerballSelection,
     value: string,
   ) => {
+    const round = activeRounds.find((r) => r.id === roundId);
+    if (!round || isRoundLocked(round)) {
+      return;
+    }
     // 현재 선택 상태 가져오기
     const current = powerballSelections[roundId] || {};
     const updated: PowerballSelection = { ...current };
@@ -460,6 +843,10 @@ export function ResultAdjustmentModal({
     field: keyof LadderSelection,
     value: string,
   ) => {
+    const round = activeRounds.find((r) => r.id === roundId);
+    if (!round || isRoundLocked(round)) {
+      return;
+    }
     // 현재 선택 상태 가져오기
     const current = ladderSelections[roundId] || {};
     const updated: LadderSelection = { ...current };
@@ -468,6 +855,32 @@ export function ResultAdjustmentModal({
       (updated as any)[field] = value;
     } else {
       delete (updated as any)[field];
+    }
+
+    // 사다리 게임 규칙에 따라 나머지 값 자동 결정
+    // 두 가지가 선택되면 나머지 하나를 자동으로 결정
+    const hasStart = !!updated.start;
+    const hasLines = !!updated.lines;
+    const hasOddEven = !!updated.oddEven;
+
+    if (hasStart && hasLines) {
+      // 출발 + 줄 → 홀/짝 자동 결정
+      const validOddEven = getValidLadderOddEven(updated.start, updated.lines);
+      if (validOddEven) {
+        updated.oddEven = validOddEven;
+      }
+    } else if (hasLines && hasOddEven) {
+      // 줄 + 홀/짝 → 출발 자동 결정
+      const validStart = getValidLadderStart(updated.lines, updated.oddEven);
+      if (validStart) {
+        updated.start = validStart;
+      }
+    } else if (hasStart && hasOddEven) {
+      // 출발 + 홀/짝 → 줄 자동 결정
+      const validLines = getValidLadderLines(updated.start, updated.oddEven);
+      if (validLines) {
+        updated.lines = validLines;
+      }
     }
 
     // 선택 상태 업데이트
@@ -549,19 +962,28 @@ export function ResultAdjustmentModal({
                 <div className="flex gap-2">
                   <button
                     onClick={handleApplyRecommendedAll}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-xs font-semibold"
+                    disabled={hasPendingReservation}
+                    className={`px-3 py-1.5 text-white rounded-lg transition-colors text-xs font-semibold ${
+                      hasPendingReservation
+                        ? "bg-gray-700 cursor-not-allowed opacity-50"
+                        : "bg-purple-600 hover:bg-purple-700"
+                    }`}
                   >
                     전체 추천 적용
                   </button>
                   <button
                     onClick={handleReserveAll}
-                    disabled={!allReserved && !allHaveSelection}
+                    disabled={
+                      hasPendingReservation ||
+                      (!allReserved && !allHaveSelection)
+                    }
                     className={`px-3 py-1.5 text-white rounded-lg transition-colors text-xs font-semibold ${
-                      allReserved
-                        ? "bg-red-600 hover:bg-red-700"
-                        : allHaveSelection
-                          ? "bg-indigo-600 hover:bg-indigo-700"
-                          : "bg-gray-700 cursor-not-allowed opacity-50"
+                      hasPendingReservation ||
+                      (!allReserved && !allHaveSelection)
+                        ? "bg-gray-700 cursor-not-allowed opacity-50"
+                        : allReserved
+                          ? "bg-red-600 hover:bg-red-700"
+                          : "bg-indigo-600 hover:bg-indigo-700"
                     }`}
                   >
                     {allReserved ? "전체 취소" : "전체 예약"}
@@ -574,22 +996,26 @@ export function ResultAdjustmentModal({
                 {activeRounds.map((round) => {
                   const mostBetted = getMostBettedCombination(round);
                   const recommended = getRecommendedResult(round);
-                  const isReserved =
-                    round.reservedResult !== undefined &&
-                    round.reservedResult !== null;
+                  const isPending = !!round.isReservationPending;
+                  const isReserved = isRoundReserved(round);
+                  const isLocked = isReserved || isPending;
                   const selected = selectedResults[round.id];
-                  const canReserve = !!(
-                    selected &&
-                    (!isReserved || selected !== round.reservedResult)
-                  );
+                  const canReserve = !!(selected && !isLocked);
+                  const reserveLabel = isPending
+                    ? "처리중"
+                    : isReserved
+                      ? "예약됨"
+                      : "결과 예약";
 
                   return (
                     <div
                       key={round.id}
                       className={`bg-gray-800 rounded-lg p-4 border transition-all flex flex-col ${
-                        isReserved
-                          ? "border-green-500/50 bg-green-500/5"
-                          : "border-gray-700"
+                        isPending
+                          ? "border-yellow-500/50 bg-yellow-500/5"
+                          : isReserved
+                            ? "border-green-500/50 bg-green-500/5"
+                            : "border-gray-700"
                       }`}
                     >
                       {/* 게임 정보 헤더 */}
@@ -611,16 +1037,27 @@ export function ResultAdjustmentModal({
                             <Clock className="w-3 h-3" />
                             <CountdownTimer
                               endTime={round.countdownEndTime || round.endTime}
+                              serverTimeOffset={serverTimeOffset}
+                              onEnd={() => onTimerEnd?.(round.gameType)}
                             />
                           </div>
                         </div>
-                        {isReserved && (
-                          <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 rounded-full">
-                            <CheckCircle2 className="w-3 h-3 text-green-400" />
-                            <span className="text-green-400 text-xs font-semibold">
-                              예약완료
+                        {isPending ? (
+                          <div className="flex items-center gap-1 px-2 py-0.5 bg-yellow-500/20 rounded-full">
+                            <Clock className="w-3 h-3 text-yellow-400" />
+                            <span className="text-yellow-400 text-xs font-semibold">
+                              처리중
                             </span>
                           </div>
+                        ) : (
+                          isReserved && (
+                            <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 rounded-full">
+                              <CheckCircle2 className="w-3 h-3 text-green-400" />
+                              <span className="text-green-400 text-xs font-semibold">
+                                예약완료
+                              </span>
+                            </div>
+                          )
                         )}
                       </div>
 
@@ -690,6 +1127,7 @@ export function ResultAdjustmentModal({
                             {recommended && (
                               <button
                                 onClick={() => {
+                                  if (isLocked) return;
                                   // 개별 선택도 함께 업데이트
                                   if (round.gameType === "파워볼") {
                                     // "일반볼 홀/언더 파워볼 짝/오버" 형식 파싱
@@ -748,7 +1186,12 @@ export function ResultAdjustmentModal({
                                     }
                                   }
                                 }}
-                                className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition-colors"
+                                disabled={isLocked}
+                                className={`px-2 py-1 text-white text-xs rounded transition-colors ${
+                                  isLocked
+                                    ? "bg-gray-700 cursor-not-allowed opacity-50"
+                                    : "bg-indigo-600 hover:bg-indigo-700"
+                                }`}
                               >
                                 적용
                               </button>
@@ -784,7 +1227,8 @@ export function ResultAdjustmentModal({
                                         e.target.value,
                                       )
                                     }
-                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+                                    disabled={isLocked}
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                   >
                                     <option value="">자동결과</option>
                                     <option value="홀">홀</option>
@@ -807,7 +1251,8 @@ export function ResultAdjustmentModal({
                                         e.target.value,
                                       )
                                     }
-                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+                                    disabled={isLocked}
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                   >
                                     <option value="">자동결과</option>
                                     <option value="오버">오버</option>
@@ -832,7 +1277,8 @@ export function ResultAdjustmentModal({
                                         e.target.value,
                                       )
                                     }
-                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+                                    disabled={isLocked}
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                   >
                                     <option value="">자동결과</option>
                                     <option value="홀">홀</option>
@@ -855,7 +1301,8 @@ export function ResultAdjustmentModal({
                                         e.target.value,
                                       )
                                     }
-                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+                                    disabled={isLocked}
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                   >
                                     <option value="">자동결과</option>
                                     <option value="오버">오버</option>
@@ -870,74 +1317,161 @@ export function ResultAdjustmentModal({
                         ) : (
                           <div className="space-y-2">
                             {/* 사다리 개별 선택 */}
-                            <div className="grid grid-cols-3 gap-2">
-                              <div>
-                                <div className="text-purple-400 text-xs mb-1">
-                                  출발
+                            {(() => {
+                              const sel = ladderSelections[round.id] || {};
+                              const hasStart = !!sel.start;
+                              const hasLines = !!sel.lines;
+                              const hasOddEven = !!sel.oddEven;
+
+                              // 자동 결정 여부 판단
+                              const isAutoStart =
+                                !hasStart && hasLines && hasOddEven;
+                              const isAutoLines =
+                                hasStart && !hasLines && hasOddEven;
+                              const isAutoOddEven = hasStart && hasLines;
+
+                              // 자동 결정 값
+                              const autoStart = isAutoStart
+                                ? getValidLadderStart(sel.lines, sel.oddEven)
+                                : undefined;
+                              const autoLines = isAutoLines
+                                ? getValidLadderLines(sel.start, sel.oddEven)
+                                : undefined;
+                              const autoOddEven = isAutoOddEven
+                                ? getValidLadderOddEven(sel.start, sel.lines)
+                                : undefined;
+
+                              return (
+                                <div className="grid grid-cols-3 gap-2">
+                                  {/* 출발 */}
+                                  <div>
+                                    <div className="text-purple-400 text-xs mb-1">
+                                      출발
+                                      {isAutoStart && autoStart && (
+                                        <span className="text-green-400 ml-1">
+                                          (자동)
+                                        </span>
+                                      )}
+                                    </div>
+                                    <select
+                                      value={autoStart || sel.start || ""}
+                                      onChange={(e) =>
+                                        updateLadderSelection(
+                                          round.id,
+                                          "start",
+                                          e.target.value,
+                                        )
+                                      }
+                                      disabled={
+                                        isLocked || (isAutoStart && !!autoStart)
+                                      }
+                                      className={`w-full bg-gray-900 border rounded px-2 py-1.5 text-white text-xs focus:outline-none transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                                        isAutoStart && autoStart
+                                          ? "border-green-500/50 bg-green-500/10"
+                                          : "border-gray-700 focus:border-indigo-500"
+                                      }`}
+                                    >
+                                      <option value="">자동결과</option>
+                                      {isAutoStart && autoStart ? (
+                                        <option value={autoStart}>
+                                          {autoStart === "좌출발" ? "좌" : "우"}
+                                        </option>
+                                      ) : (
+                                        <>
+                                          <option value="좌출발">좌</option>
+                                          <option value="우출발">우</option>
+                                        </>
+                                      )}
+                                    </select>
+                                  </div>
+
+                                  {/* 줄 */}
+                                  <div>
+                                    <div className="text-purple-400 text-xs mb-1">
+                                      줄
+                                      {isAutoLines && autoLines && (
+                                        <span className="text-green-400 ml-1">
+                                          (자동)
+                                        </span>
+                                      )}
+                                    </div>
+                                    <select
+                                      value={autoLines || sel.lines || ""}
+                                      onChange={(e) =>
+                                        updateLadderSelection(
+                                          round.id,
+                                          "lines",
+                                          e.target.value,
+                                        )
+                                      }
+                                      disabled={
+                                        isLocked || (isAutoLines && !!autoLines)
+                                      }
+                                      className={`w-full bg-gray-900 border rounded px-2 py-1.5 text-white text-xs focus:outline-none transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                                        isAutoLines && autoLines
+                                          ? "border-green-500/50 bg-green-500/10"
+                                          : "border-gray-700 focus:border-indigo-500"
+                                      }`}
+                                    >
+                                      <option value="">자동결과</option>
+                                      {isAutoLines && autoLines ? (
+                                        <option value={autoLines}>
+                                          {autoLines}
+                                        </option>
+                                      ) : (
+                                        <>
+                                          <option value="3줄">3줄</option>
+                                          <option value="4줄">4줄</option>
+                                        </>
+                                      )}
+                                    </select>
+                                  </div>
+
+                                  {/* 홀/짝 */}
+                                  <div>
+                                    <div className="text-purple-400 text-xs mb-1">
+                                      홀/짝
+                                      {isAutoOddEven && autoOddEven && (
+                                        <span className="text-green-400 ml-1">
+                                          (자동)
+                                        </span>
+                                      )}
+                                    </div>
+                                    <select
+                                      value={autoOddEven || sel.oddEven || ""}
+                                      onChange={(e) =>
+                                        updateLadderSelection(
+                                          round.id,
+                                          "oddEven",
+                                          e.target.value,
+                                        )
+                                      }
+                                      disabled={
+                                        isLocked ||
+                                        (isAutoOddEven && !!autoOddEven)
+                                      }
+                                      className={`w-full bg-gray-900 border rounded px-2 py-1.5 text-white text-xs focus:outline-none transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                                        isAutoOddEven && autoOddEven
+                                          ? "border-green-500/50 bg-green-500/10"
+                                          : "border-gray-700 focus:border-indigo-500"
+                                      }`}
+                                    >
+                                      <option value="">자동결과</option>
+                                      {isAutoOddEven && autoOddEven ? (
+                                        <option value={autoOddEven}>
+                                          {autoOddEven}
+                                        </option>
+                                      ) : (
+                                        <>
+                                          <option value="홀">홀</option>
+                                          <option value="짝">짝</option>
+                                        </>
+                                      )}
+                                    </select>
+                                  </div>
                                 </div>
-                                <select
-                                  value={
-                                    ladderSelections[round.id]?.start || ""
-                                  }
-                                  onChange={(e) =>
-                                    updateLadderSelection(
-                                      round.id,
-                                      "start",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
-                                >
-                                  <option value="">자동결과</option>
-                                  <option value="좌출발">좌</option>
-                                  <option value="우출발">우</option>
-                                </select>
-                              </div>
-                              <div>
-                                <div className="text-purple-400 text-xs mb-1">
-                                  줄
-                                </div>
-                                <select
-                                  value={
-                                    ladderSelections[round.id]?.lines || ""
-                                  }
-                                  onChange={(e) =>
-                                    updateLadderSelection(
-                                      round.id,
-                                      "lines",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
-                                >
-                                  <option value="">자동결과</option>
-                                  <option value="3줄">3줄</option>
-                                  <option value="4줄">4줄</option>
-                                </select>
-                              </div>
-                              <div>
-                                <div className="text-purple-400 text-xs mb-1">
-                                  홀/짝
-                                </div>
-                                <select
-                                  value={
-                                    ladderSelections[round.id]?.oddEven || ""
-                                  }
-                                  onChange={(e) =>
-                                    updateLadderSelection(
-                                      round.id,
-                                      "oddEven",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
-                                >
-                                  <option value="">자동결과</option>
-                                  <option value="홀">홀</option>
-                                  <option value="짝">짝</option>
-                                </select>
-                              </div>
-                            </div>
+                              );
+                            })()}
 
                             {/* 액션 버튼 - 별도 섹션 (하단 고정) */}
                           </div>
@@ -953,12 +1487,12 @@ export function ResultAdjustmentModal({
                             disabled={!canReserve}
                             className="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded transition-colors text-sm font-semibold"
                           >
-                            {isReserved ? "예약 변경" : "결과 예약"}
+                            {reserveLabel}
                           </button>
-                          {isReserved && (
+                          {isReserved && !isPending && (
                             <button
                               onClick={() => handleCancelReservation(round.id)}
-                              className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors text-sm font-semibold"
+                              className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors text-sm font-semibold disabled:bg-gray-700 disabled:cursor-not-allowed"
                             >
                               예약 취소
                             </button>

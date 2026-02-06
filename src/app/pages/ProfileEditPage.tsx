@@ -58,7 +58,7 @@ export function ProfileEditPage() {
   useEffect(() => {
     if (!profile) return;
     setProfileImage(
-      getPublicUrlForPath("profile-images", profile.profile_image)
+      getPublicUrlForPath("profile-images", profile.profile_image),
     );
   }, [profile]);
 
@@ -72,12 +72,12 @@ export function ProfileEditPage() {
       formattedValue = `${value.slice(0, 3)}-${value.slice(3)}`;
     } else if (value.length <= 11) {
       formattedValue = `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(
-        7
+        7,
       )}`;
     } else {
       formattedValue = `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(
         7,
-        11
+        11,
       )}`;
     }
 
@@ -147,86 +147,31 @@ export function ProfileEditPage() {
 
     setIsSaving(true);
     try {
-      const nameRegex = /^[가-힣]{2,10}$|^[a-zA-Z\s]{2,20}$/;
-      if (!nameRegex.test(formData.name.trim())) {
+      // 프로필 이미지만 변경 가능
+      if (!profileImageFile) {
         showAlert({
-          title: "입력 오류",
-          message: "이름은 한글 2-10자 또는 영문 2-20자로 입력해주세요.",
+          title: "변경 사항 없음",
+          message: "프로필 이미지를 선택해주세요.",
           type: "warning",
         });
         return;
       }
 
-      const nicknameRegex = /^[가-힣a-zA-Z0-9]{2,10}$/;
-      if (!nicknameRegex.test(formData.nickname.trim())) {
-        showAlert({
-          title: "입력 오류",
-          message: "닉네임은 한글/영문/숫자 2-10자로 입력해주세요.",
-          type: "warning",
-        });
-        return;
-      }
-
-      const phoneRegex = /^010-\d{4}-\d{4}$/;
-      if (formData.phone && !phoneRegex.test(formData.phone)) {
-        showAlert({
-          title: "입력 오류",
-          message: "전화번호는 010-1234-5678 형식으로 입력해주세요.",
-          type: "warning",
-        });
-        return;
-      }
-
-      const normalizedAccountNumber = formData.accountNumber.replace(/-/g, "");
-      const accountRegex = /^\d{10,20}$/;
-      if (
-        normalizedAccountNumber &&
-        !accountRegex.test(normalizedAccountNumber)
-      ) {
-        showAlert({
-          title: "입력 오류",
-          message: "계좌번호는 10-20자리 숫자로 입력해주세요.",
-          type: "warning",
-        });
-        return;
-      }
-
-      if (
-        formData.accountHolder &&
-        !nameRegex.test(formData.accountHolder.trim())
-      ) {
-        showAlert({
-          title: "입력 오류",
-          message: "예금주는 한글 2-10자 또는 영문 2-20자로 입력해주세요.",
-          type: "warning",
-        });
-        return;
-      }
-
-      let uploadedImagePath: string | null = null;
-      if (profileImageFile) {
-        uploadedImagePath = await uploadProfileImage(profileImageFile);
-      }
+      const uploadedImagePath = await uploadProfileImage(profileImageFile);
 
       const { error } = await updateProfile({
-        name: formData.name.trim(),
-        nickname: formData.nickname.trim(),
-        phone: formData.phone || null,
-        bank: formData.bank || null,
-        account_number: normalizedAccountNumber || null,
-        account_holder: formData.accountHolder.trim() || null,
-        ...(uploadedImagePath ? { profile_image: uploadedImagePath } : {}),
+        profile_image: uploadedImagePath,
       });
       if (error) {
         showAlert({
           title: "오류",
-          message: "프로필 수정에 실패했습니다.",
+          message: "프로필 이미지 수정에 실패했습니다.",
           type: "error",
         });
       } else {
         showAlert({
           title: "저장 완료",
-          message: "프로필이 수정되었습니다.",
+          message: "프로필 이미지가 수정되었습니다.",
           type: "success",
         });
         navigate("/mypage");
@@ -299,20 +244,20 @@ export function ProfileEditPage() {
 
           {/* Personal Info */}
           <div className="bg-gray-900 rounded-lg border border-gray-800 p-6 space-y-4">
-            <h3 className="text-white mb-4">기본 정보</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white">기본 정보</h3>
+              <span className="text-xs text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">
+                수정이 필요할 경우 관리자에게 문의하세요!
+              </span>
+            </div>
 
             <div>
               <label className="text-gray-400 text-sm mb-2 block">이름</label>
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    name: e.target.value,
-                  })
-                }
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                disabled
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-500 cursor-not-allowed"
               />
             </div>
 
@@ -321,13 +266,8 @@ export function ProfileEditPage() {
               <input
                 type="text"
                 value={formData.nickname}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    nickname: e.target.value,
-                  })
-                }
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                disabled
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-500 cursor-not-allowed"
               />
             </div>
 
@@ -348,47 +288,31 @@ export function ProfileEditPage() {
               <input
                 type="tel"
                 value={formData.phone}
-                onChange={handlePhoneChange}
+                disabled
                 placeholder="010-1234-5678"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-500 cursor-not-allowed"
               />
             </div>
           </div>
 
           {/* Bank Info */}
           <div className="bg-gray-900 rounded-lg border border-gray-800 p-6 space-y-4">
-            <h3 className="text-white mb-4">계좌 정보</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white">계좌 정보</h3>
+              <span className="text-xs text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">
+                수정이 필요할 경우 관리자에게 문의하세요!
+              </span>
+            </div>
 
             <div>
               <label className="text-gray-400 text-sm mb-2 block">은행</label>
-              <select
-                value={formData.bank}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    bank: e.target.value,
-                  })
-                }
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
-              >
-                <option value="">은행을 선택하세요</option>
-                <option value="KB국민은행">KB국민은행</option>
-                <option value="신한은행">신한은행</option>
-                <option value="하나은행">하나은행</option>
-                <option value="우리은행">우리은행</option>
-                <option value="NH농협은행">NH농협은행</option>
-                <option value="한국산업은행">한국산업은행</option>
-                <option value="IBK기업은행">IBK기업은행</option>
-                <option value="카카오뱅크">카카오뱅크</option>
-                <option value="케이뱅크">케이뱅크</option>
-                <option value="토스뱅크">토스뱅크</option>
-                <option value="부산은행">부산은행</option>
-                <option value="경남은행">경남은행</option>
-                <option value="대구은행">대구은행</option>
-                <option value="광주은행">광주은행</option>
-                <option value="전북은행">전북은행</option>
-                <option value="제주은행">제주은행</option>
-              </select>
+              <input
+                type="text"
+                value={formData.bank || ""}
+                disabled
+                placeholder="은행 정보 없음"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-500 cursor-not-allowed"
+              />
             </div>
 
             <div>
@@ -398,14 +322,9 @@ export function ProfileEditPage() {
               <input
                 type="text"
                 value={formData.accountNumber}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    accountNumber: e.target.value,
-                  })
-                }
-                placeholder="'-' 없이 입력하세요"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                disabled
+                placeholder="계좌번호 정보 없음"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-500 cursor-not-allowed"
               />
             </div>
 
@@ -414,13 +333,9 @@ export function ProfileEditPage() {
               <input
                 type="text"
                 value={formData.accountHolder}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    accountHolder: e.target.value,
-                  })
-                }
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                disabled
+                placeholder="예금주 정보 없음"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-500 cursor-not-allowed"
               />
             </div>
           </div>

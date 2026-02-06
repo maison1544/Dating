@@ -1,10 +1,12 @@
 import { AdminLayout } from "../components/AdminLayout";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { GiftInventoryManager } from "../components/GiftInventoryManager";
 import { useState, useMemo } from "react";
-import { ChevronDown, X, Package } from "lucide-react";
+import { ChevronDown, X, Package, Gift } from "lucide-react";
 import { useGiftItems, useAgentGiftTransactions } from "../hooks/useSupabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatKST } from "../../lib/dateUtils";
+import { AdminPagination } from "../components/common/AdminPagination";
 
 interface GiftRecord {
   id: string;
@@ -35,6 +37,10 @@ export function AgentGiftsPage() {
   const [isGiftDropdownOpen, setIsGiftDropdownOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // Supabase hooks for real data
   const {
@@ -149,6 +155,30 @@ export function AgentGiftsPage() {
     startDate,
   ]);
 
+  // Paginated gift records
+  const paginatedGiftRecords = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return filteredGiftRecords.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredGiftRecords, currentPage]);
+
+  const totalPages = Math.ceil(filteredGiftRecords.length / PAGE_SIZE);
+
+  // Reset page when filters change
+  const handleGiftTypeFilterChange = (filter: "all" | "received" | "sent") => {
+    setGiftTypeFilter(filter);
+    setCurrentPage(1);
+  };
+
+  const handleGiftIdChange = (id: string) => {
+    setSelectedGiftId(id);
+    setCurrentPage(1);
+  };
+
+  const handleProfileIdChange = (id: string) => {
+    setSelectedProfileId(id);
+    setCurrentPage(1);
+  };
+
   const profileList = useMemo(() => {
     const map = new Map<string, string>();
     giftRecords.forEach((r) => {
@@ -225,8 +255,22 @@ export function AgentGiftsPage() {
         <div>
           <h1 className="text-white text-2xl mb-2">기프트 관리</h1>
           <p className="text-gray-400 text-sm">
-            회원들이 보낸 기프트 내역을 확인하세요
+            에이전트 보유 선물과 프로필별 선물 내역을 관리하세요
           </p>
+        </div>
+
+        {/* 에이전트 보유 선물 */}
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Gift size={20} className="text-indigo-400" />
+            <h2 className="text-white text-lg font-medium">내 보유 선물</h2>
+          </div>
+          <GiftInventoryManager
+            ownerId={adminAccount?.id}
+            ownerType="agent"
+            enabled={true}
+            isReadOnly={true}
+          />
         </div>
 
         {error && (
@@ -299,7 +343,7 @@ export function AgentGiftsPage() {
             {/* 받은/보낸 기프트 필터 */}
             <div className="flex gap-2">
               <button
-                onClick={() => setGiftTypeFilter("all")}
+                onClick={() => handleGiftTypeFilterChange("all")}
                 className={`px-3 py-2 rounded-lg text-sm transition-colors ${
                   giftTypeFilter === "all"
                     ? "bg-indigo-500 text-white"
@@ -309,7 +353,7 @@ export function AgentGiftsPage() {
                 전체
               </button>
               <button
-                onClick={() => setGiftTypeFilter("received")}
+                onClick={() => handleGiftTypeFilterChange("received")}
                 className={`px-3 py-2 rounded-lg text-sm transition-colors ${
                   giftTypeFilter === "received"
                     ? "bg-green-500 text-white"
@@ -319,7 +363,7 @@ export function AgentGiftsPage() {
                 받은 기프트
               </button>
               <button
-                onClick={() => setGiftTypeFilter("sent")}
+                onClick={() => handleGiftTypeFilterChange("sent")}
                 className={`px-3 py-2 rounded-lg text-sm transition-colors ${
                   giftTypeFilter === "sent"
                     ? "bg-yellow-500 text-white"
@@ -343,7 +387,7 @@ export function AgentGiftsPage() {
                 <div className="absolute top-full mt-1 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 min-w-[150px]">
                   <button
                     onClick={() => {
-                      setSelectedGiftId("all");
+                      handleGiftIdChange("all");
                       setIsGiftDropdownOpen(false);
                     }}
                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors first:rounded-t-lg ${
@@ -358,7 +402,7 @@ export function AgentGiftsPage() {
                     <button
                       key={gift.id}
                       onClick={() => {
-                        setSelectedGiftId(gift.id);
+                        handleGiftIdChange(gift.id);
                         setIsGiftDropdownOpen(false);
                       }}
                       className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors last:rounded-b-lg ${
@@ -388,7 +432,7 @@ export function AgentGiftsPage() {
                 <div className="absolute top-full mt-1 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 min-w-[150px]">
                   <button
                     onClick={() => {
-                      setSelectedProfileId("all");
+                      handleProfileIdChange("all");
                       setIsProfileDropdownOpen(false);
                     }}
                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors first:rounded-t-lg ${
@@ -403,7 +447,7 @@ export function AgentGiftsPage() {
                     <button
                       key={p.id}
                       onClick={() => {
-                        setSelectedProfileId(p.id);
+                        handleProfileIdChange(p.id);
                         setIsProfileDropdownOpen(false);
                       }}
                       className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors last:rounded-b-lg ${
@@ -472,7 +516,7 @@ export function AgentGiftsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredGiftRecords.map((record) => (
+                  paginatedGiftRecords.map((record) => (
                     <tr
                       key={record.id}
                       className="hover:bg-gray-800/50 transition-colors"
@@ -522,6 +566,14 @@ export function AgentGiftsPage() {
               </tbody>
             </table>
           </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          )}
         </div>
       </div>
 

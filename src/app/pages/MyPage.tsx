@@ -1,5 +1,18 @@
-import { User, CreditCard, LogOut, Gift, Loader2, Coins } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  User,
+  CreditCard,
+  LogOut,
+  Gift,
+  Loader2,
+  Coins,
+  Camera,
+  Bell,
+  Volume2,
+  Check,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import { useEffect, useState, useRef } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { QuantityModal } from "../components/QuantityModal";
@@ -8,6 +21,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { useAlert } from "../contexts/AlertContext";
 import { useUserGifts } from "../hooks/useSupabase";
 import { getPublicUrlForPath } from "../../lib/storage";
+import {
+  useNotification,
+  NOTIFICATION_SOUNDS,
+} from "../contexts/NotificationContext";
 
 export function MyPage() {
   const navigate = useNavigate();
@@ -15,6 +32,8 @@ export function MyPage() {
     useAuth();
   const { showAlert } = useAlert();
   const { userGifts, refetch: refetchUserGifts } = useUserGifts(profile?.id);
+  const { settings, updateSettings, previewSound } = useNotification();
+  const [isNotificationExpanded, setIsNotificationExpanded] = useState(false);
 
   useEffect(() => {
     if (isLoading) return;
@@ -27,6 +46,8 @@ export function MyPage() {
 
   const [activeTab, setActiveTab] = useState<"menu" | "inventory">("menu");
   const [isGiftProcessing, setIsGiftProcessing] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: "",
@@ -72,7 +93,7 @@ export function MyPage() {
 
   const totalGiftCount = giftInventory.reduce(
     (sum: number, g: any) => sum + g.quantity,
-    0
+    0,
   );
 
   const handleLogout = async () => {
@@ -80,11 +101,71 @@ export function MyPage() {
     navigate("/");
   };
 
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile?.id) return;
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/jpg"];
+    if (!allowedTypes.includes(file.type)) {
+      showAlert({
+        title: "업로드 오류",
+        message: "JPG 또는 PNG 파일만 업로드할 수 있습니다.",
+        type: "warning",
+      });
+      return;
+    }
+
+    const maxBytes = 5 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      showAlert({
+        title: "업로드 오류",
+        message: "이미지 파일은 최대 5MB까지 업로드할 수 있습니다.",
+        type: "warning",
+      });
+      return;
+    }
+
+    setIsImageUploading(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const filePath = `${profile.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("profile-images")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from("user_profiles")
+        .update({ profile_image: filePath })
+        .eq("id", profile.id);
+
+      if (updateError) throw updateError;
+
+      await refreshProfile();
+      showAlert({
+        title: "업로드 완료",
+        message: "프로필 사진이 변경되었습니다.",
+        type: "success",
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "이미지 업로드에 실패했습니다.";
+      showAlert({ title: "오류", message, type: "error" });
+    } finally {
+      setIsImageUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   const handleSellGift = async (
     giftId: string,
     giftName: string,
     unitPrice: number,
-    quantity: number
+    quantity: number,
   ) => {
     if (isGiftProcessing) return;
     if (!profile?.id) {
@@ -139,7 +220,7 @@ export function MyPage() {
 
   const profileImageUrl = getPublicUrlForPath(
     "profile-images",
-    profile.profile_image
+    profile.profile_image,
   );
 
   return (
@@ -147,16 +228,36 @@ export function MyPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Profile Section */}
         <div className="bg-gray-900 rounded-lg border border-gray-800 p-6 mb-8 text-center">
-          <div className="w-24 h-24 rounded-full bg-pink-500/20 mx-auto mb-4 flex items-center justify-center overflow-hidden">
-            {profileImageUrl ? (
-              <img
-                src={profileImageUrl}
-                alt="프로필"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <User className="text-pink-500" size={40} />
-            )}
+          <div className="relative w-24 h-24 mx-auto mb-4">
+            <div
+              className="w-24 h-24 rounded-full bg-pink-500/20 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isImageUploading ? (
+                <Loader2 className="w-8 h-8 text-pink-500 animate-spin" />
+              ) : profileImageUrl ? (
+                <img
+                  src={profileImageUrl}
+                  alt="프로필"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <User className="text-pink-500" size={40} />
+              )}
+            </div>
+            <div
+              className="absolute bottom-0 right-0 bg-pink-500 p-2 rounded-full cursor-pointer hover:bg-pink-600 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Camera size={14} className="text-white" />
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/jpg"
+              onChange={handleImageChange}
+              className="hidden"
+            />
           </div>
           <h2 className="text-white text-2xl mb-2">
             {profile?.name || profile?.nickname || "회원님"}
@@ -243,6 +344,83 @@ export function MyPage() {
               <span className="text-gray-400">›</span>
             </button>
 
+            {/* 알림 설정 섹션 */}
+            <div className="border-b border-gray-800">
+              <button
+                onClick={() =>
+                  setIsNotificationExpanded(!isNotificationExpanded)
+                }
+                className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-800 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Bell className="text-gray-400" size={20} />
+                  <span className="text-white">알림 설정</span>
+                </div>
+                {isNotificationExpanded ? (
+                  <ChevronUp className="text-gray-400" size={20} />
+                ) : (
+                  <ChevronDown className="text-gray-400" size={20} />
+                )}
+              </button>
+
+              {isNotificationExpanded && (
+                <div className="px-6 pb-4 space-y-4">
+                  {/* 전체 알림 ON/OFF */}
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-gray-300 text-sm">전체 알림</span>
+                    <button
+                      onClick={() =>
+                        updateSettings({
+                          globalEnabled: !settings.globalEnabled,
+                        })
+                      }
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        settings.globalEnabled ? "bg-pink-500" : "bg-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                          settings.globalEnabled ? "right-1" : "left-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* 알림음 선택 */}
+                  <div className="pt-2 border-t border-gray-700">
+                    <span className="text-gray-300 text-sm block mb-3">
+                      알림음 선택
+                    </span>
+                    <div className="space-y-1">
+                      {NOTIFICATION_SOUNDS.map((sound) => (
+                        <button
+                          key={sound.id}
+                          onClick={() => {
+                            updateSettings({ selectedSoundId: sound.id });
+                            previewSound(sound.id);
+                          }}
+                          disabled={!settings.globalEnabled}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
+                            settings.selectedSoundId === sound.id
+                              ? "bg-pink-500/20 text-pink-400"
+                              : "hover:bg-gray-800 text-gray-300"
+                          } ${!settings.globalEnabled ? "opacity-50" : ""}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Volume2 size={14} />
+                            <span className="text-sm">{sound.name}</span>
+                          </div>
+                          {settings.selectedSoundId === sound.id && (
+                            <Check size={14} className="text-pink-400" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={handleLogout}
               className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-800 transition-colors"
@@ -326,7 +504,7 @@ export function MyPage() {
                                 item.gift_id,
                                 item.name,
                                 item.sellPrice,
-                                quantity
+                                quantity,
                               );
                             },
                           });
@@ -349,7 +527,7 @@ export function MyPage() {
                         .reduce(
                           (total, item) =>
                             total + (item.sellPrice || 0) * item.quantity,
-                          0
+                          0,
                         )
                         .toLocaleString()}{" "}
                       P

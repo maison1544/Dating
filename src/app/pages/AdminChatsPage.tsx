@@ -1,25 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDebounce } from "../hooks/useDebounce";
 import {
   Edit,
   Image as ImageIcon,
   Loader2,
   Plus,
+  Power,
   Search,
-  Trash2,
   Upload,
   X,
 } from "lucide-react";
 import { AdminLayout } from "../components/AdminLayout";
+import { AdminPagination } from "../components/common/AdminPagination";
+import { AdminPageLoader } from "../components/common/AdminPageLoader";
 import { useAdminChatProfiles, useAgents } from "../hooks/useSupabase";
 import { useAuth } from "../contexts/AuthContext";
 import { supabaseAdmin } from "../../lib/supabase";
+import { CsvDownloadButton } from "../components/CsvDownloadButton";
+import { getTodayKST } from "../../lib/dateUtils";
 import { ImageWithFallback } from "../components/common/ImageWithFallback";
 import { getPublicUrlForPath } from "../../lib/storage";
+import { ConfirmModal } from "../components/ConfirmModal";
 
 type OnlineFilter = "all" | "online" | "offline";
 
 export function AdminChatsPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [onlineFilter, setOnlineFilter] = useState<OnlineFilter>("all");
 
   const [imagePreviewModal, setImagePreviewModal] = useState<string | null>(
@@ -32,8 +39,8 @@ export function AdminChatsPage() {
   const [originalImage, setOriginalImage] = useState("");
   const [interestInput, setInterestInput] = useState("");
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [showToggleModal, setShowToggleModal] = useState(false);
+  const [toggleTargetId, setToggleTargetId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
 
@@ -54,19 +61,13 @@ export function AdminChatsPage() {
 
   const { adminAccount } = useAuth();
 
-  const {
-    profiles,
-    isLoading,
-    error,
-    createProfile,
-    updateProfile,
-    deleteProfile,
-  } = useAdminChatProfiles();
+  const { profiles, isLoading, error, createProfile, updateProfile } =
+    useAdminChatProfiles();
 
   const { agents } = useAgents();
 
   const filteredProfiles = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
+    const term = debouncedSearchTerm.trim().toLowerCase();
 
     // Include all profiles (active and inactive), sort inactive to end
     return (profiles || [])
@@ -95,10 +96,26 @@ export function AdminChatsPage() {
         if (!aActive && bActive) return 1;
         return 0;
       });
-  }, [onlineFilter, profiles, searchTerm]);
+  }, [onlineFilter, profiles, debouncedSearchTerm]);
+
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  // 페이지네이션 계산
+  const totalPages = Math.ceil(filteredProfiles.length / itemsPerPage);
+  const paginatedProfiles = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredProfiles.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredProfiles, currentPage, itemsPerPage]);
+
+  // 필터 변경 시 페이지 초기화
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm, onlineFilter]);
 
   useEffect(() => {
-    if (!isModalOpen && !showDeleteModal && !imagePreviewModal) {
+    if (!isModalOpen && !showToggleModal && !imagePreviewModal) {
       document.body.style.overflow = "unset";
       return;
     }
@@ -106,7 +123,7 @@ export function AdminChatsPage() {
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [imagePreviewModal, isModalOpen, showDeleteModal]);
+  }, [imagePreviewModal, isModalOpen, showToggleModal]);
 
   const previewUrl = useMemo(() => {
     if (!imageFile) return null;
@@ -310,16 +327,20 @@ export function AdminChatsPage() {
     }
   };
 
-  const openDelete = (id: string) => {
-    setDeleteTargetId(id);
-    setShowDeleteModal(true);
+  const openToggleActive = (id: string) => {
+    setToggleTargetId(id);
+    setShowToggleModal(true);
   };
 
-  const confirmDelete = async () => {
-    if (!deleteTargetId) return;
-    await deleteProfile(deleteTargetId);
-    setShowDeleteModal(false);
-    setDeleteTargetId(null);
+  const confirmToggleActive = async () => {
+    if (!toggleTargetId) return;
+    const target = (profiles || []).find((p: any) => p.id === toggleTargetId);
+    if (!target) return;
+
+    const newActiveState = target.is_active === false;
+    await updateProfile(toggleTargetId, { is_active: newActiveState });
+    setShowToggleModal(false);
+    setToggleTargetId(null);
   };
 
   const allProfiles = useMemo(() => {
@@ -360,12 +381,43 @@ export function AdminChatsPage() {
               개
             </p>
           </div>
-          <button
-            onClick={openCreateModal}
-            className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
-          >
-            <Plus size={20} />새 프로필 추가
-          </button>
+          <div className="flex items-center gap-2">
+            <CsvDownloadButton
+              data={filteredProfiles.map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                age: p.age,
+                height: p.height,
+                weight: p.weight,
+                job: p.job,
+                bio: p.bio,
+                interests: (p.interests || []).join(", "),
+                isOnline: p.is_online ? "온라인" : "오프라인",
+                assignedAgent: p.agent_username || "-",
+                isActive: p.is_active ? "활성" : "비활성",
+              }))}
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "name", label: "이름" },
+                { key: "age", label: "나이" },
+                { key: "height", label: "키" },
+                { key: "weight", label: "몸무게" },
+                { key: "job", label: "직업" },
+                { key: "bio", label: "소개" },
+                { key: "interests", label: "관심사" },
+                { key: "isOnline", label: "온라인상태" },
+                { key: "assignedAgent", label: "담당에이전트" },
+                { key: "isActive", label: "활성상태" },
+              ]}
+              filename={`채팅프로필_${getTodayKST()}.csv`}
+            />
+            <button
+              onClick={openCreateModal}
+              className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
+            >
+              <Plus size={20} />새 프로필 추가
+            </button>
+          </div>
         </div>
 
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-2 max-w-md">
@@ -426,17 +478,14 @@ export function AdminChatsPage() {
         )}
 
         {isLoading ? (
-          <div className="p-8 text-center text-gray-400">
-            <Loader2 className="w-6 h-6 animate-spin inline-block mr-2" />
-            불러오는 중...
-          </div>
+          <AdminPageLoader />
         ) : filteredProfiles.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
             프로필이 없습니다.
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {filteredProfiles.map((profile: any) => {
+            {paginatedProfiles.map((profile: any) => {
               const interests = Array.isArray(profile.interests)
                 ? (profile.interests as unknown as string[])
                 : [];
@@ -512,11 +561,15 @@ export function AdminChatsPage() {
                         수정
                       </button>
                       <button
-                        onClick={() => openDelete(profile.id)}
-                        className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 px-1.5 py-1 rounded transition-colors flex items-center justify-center gap-1 border border-red-500/30 text-xs"
+                        onClick={() => openToggleActive(profile.id)}
+                        className={`flex-1 px-1.5 py-1 rounded transition-colors flex items-center justify-center gap-1 text-xs ${
+                          profile.is_active === false
+                            ? "bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30"
+                            : "bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30"
+                        }`}
                       >
-                        <Trash2 size={12} />
-                        삭제
+                        <Power size={12} />
+                        {profile.is_active === false ? "활성" : "비활성"}
                       </button>
                     </div>
                   </div>
@@ -525,6 +578,12 @@ export function AdminChatsPage() {
             })}
           </div>
         )}
+        {/* 페이지네이션 */}
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {isModalOpen && (
@@ -887,94 +946,31 @@ export function AdminChatsPage() {
         </div>
       )}
 
-      {showDeleteModal && deleteTargetId && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-md">
-            <div className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
-              <h2 className="text-white text-lg flex items-center gap-2">
-                <Trash2 size={20} className="text-red-500" />
-                프로필 삭제 확인
-              </h2>
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {(() => {
-                const target = (profiles || []).find(
-                  (p: any) => p.id === deleteTargetId,
-                );
-                if (!target) return null;
-                const avatarUrl = getPublicUrlForPath(
-                  "chat-profile-images",
-                  target.image,
-                );
-                const interests = Array.isArray(target.interests)
-                  ? (target.interests as unknown as string[])
-                  : [];
-
-                return (
-                  <div className="flex items-center gap-3 p-4 bg-gray-800 rounded-lg">
-                    <div className="w-16 h-20 rounded overflow-hidden flex-shrink-0">
-                      <ImageWithFallback
-                        src={avatarUrl ?? undefined}
-                        alt={target.name || ""}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div>
-                      <p className="text-white font-medium">
-                        {target.name} ({target.age})
-                      </p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {interests.slice(0, 2).map((interest, idx) => (
-                          <span
-                            key={`${deleteTargetId}-${idx}`}
-                            className="text-xs text-indigo-400 bg-indigo-500/20 px-1.5 py-0.5 rounded-full"
-                          >
-                            #{interest}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-                <p className="text-white text-center mb-2">
-                  이 프로필을{" "}
-                  <span className="text-red-500 font-bold">삭제</span>
-                  하시겠습니까?
-                </p>
-                <p className="text-gray-400 text-sm text-center">
-                  삭제된 프로필은 목록에서 사라지지만, 기존 채팅 내역은
-                  보존됩니다.
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowDeleteModal(false)}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 rounded-lg transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={confirmDelete}
-                  className="flex-1 bg-red-500/80 hover:bg-red-500 text-white px-4 py-2.5 rounded-lg transition-colors"
-                >
-                  삭제하기
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showToggleModal && !!toggleTargetId}
+        title={(() => {
+          const target = (profiles || []).find(
+            (p: any) => p.id === toggleTargetId,
+          );
+          return target?.is_active === false
+            ? "프로필 활성화"
+            : "프로필 비활성화";
+        })()}
+        message={(() => {
+          const target = (profiles || []).find(
+            (p: any) => p.id === toggleTargetId,
+          );
+          const name = target?.name || "프로필";
+          return target?.is_active === false
+            ? `"${name}" 프로필을 활성화하시겠습니까? 활성화된 프로필은 매칭 목록에 다시 표시됩니다.`
+            : `"${name}" 프로필을 비활성화하시겠습니까? 비활성화된 프로필은 매칭 목록에서 숨겨집니다.`;
+        })()}
+        onConfirm={confirmToggleActive}
+        onCancel={() => {
+          setShowToggleModal(false);
+          setToggleTargetId(null);
+        }}
+      />
     </AdminLayout>
   );
 }

@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, MessageCircle, History, X } from "lucide-react";
+import { BetHistoryPanel } from "../components/BetHistoryPanel";
+import { QuickAmountButtons } from "../components/QuickAmountButtons";
 import {
   useCurrentRoundEdge,
   useGameSettings,
@@ -29,7 +31,7 @@ export function PowerballGamePage() {
     powerballOddEven: "odd" | "even" | null;
     powerballUnderOver: "under" | "over" | null;
   } | null>(null);
-  const lastShownRoundRef = useRef<number | null>(null);
+  const lastShownRoundRef = useRef<string | null>(null);
   const overlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const parsePowerballResult = (result: unknown) => {
@@ -105,7 +107,7 @@ export function PowerballGamePage() {
   const { messages: gameChatMessages, refetch: refetchGameChat } =
     useGameChat("powerball");
   const { sendMessage: sendGameMessage } = useSendGameChat();
-  const { bets: myBetsData } = useMyGameBets(profile?.id, "powerball");
+  const { bets: myBetsData, refetch: refetchBets } = useMyGameBets(profile?.id);
   const { history: gameHistoryData } = useGameHistory("powerball");
 
   const [betAmount, setBetAmount] = useState("");
@@ -260,14 +262,13 @@ export function PowerballGamePage() {
 
   const myBets = myBetsData.map((bet: any) => ({
     id: bet.id,
-    type:
-      betOptions[bet.bet_type as keyof typeof betOptions]?.label ??
-      bet.bet_type,
+    type: bet.bet_type || "",
     amount: bet.bet_amount,
     result: bet.status === "won" ? "승" : bet.status === "lost" ? "패" : "대기",
     round: getDisplayRoundNumber(bet.game_rounds?.round_number),
-    betTime: formatKST(bet.created_at, "time"),
+    betTime: formatKST(bet.created_at, "datetime"),
     winAmount: bet.win_amount || 0,
+    gameType: bet.game_rounds?.game_type || "",
   }));
 
   const gameResults = gameHistoryData.map((round: any) => {
@@ -310,8 +311,10 @@ export function PowerballGamePage() {
 
   useEffect(() => {
     if (initializedRef.current) return;
-    if (completedRound?.round_number) {
-      lastShownRoundRef.current = completedRound.round_number;
+    const roundNoRaw = completedRound?.round_number;
+    if (roundNoRaw != null) {
+      // raw round_number 기준으로 초기값을 저장하여 초기 팝업 노출 방지
+      lastShownRoundRef.current = String(roundNoRaw);
       initializedRef.current = true;
     }
   }, [completedRound?.round_number]);
@@ -328,33 +331,29 @@ export function PowerballGamePage() {
 
     if (!initializedRef.current) return;
     const roundNoRaw = completedRound?.round_number;
-    if (!roundNoRaw) return;
+    if (roundNoRaw == null) return;
+    const roundNoKey = String(roundNoRaw);
     if (!completedRound?.result) return;
     const roundNo = getDisplayRoundNumber(roundNoRaw);
 
     // 결과 해시 생성 (동일 결과 중복 표시 방지)
-    const resultHash = `${roundNoRaw}-${JSON.stringify(completedRound.result)}`;
+    const resultHash = `${roundNoKey}-${JSON.stringify(completedRound.result)}`;
 
     // 이미 표시한 라운드이거나 동일 결과면 스킵
     if (
-      lastShownRoundRef.current === roundNo &&
+      lastShownRoundRef.current === roundNoKey &&
       resultHashRef.current === resultHash
     )
       return;
 
     // 새 라운드 결과인 경우만 표시
-    if (lastShownRoundRef.current !== roundNo) {
-      lastShownRoundRef.current = roundNo;
+    if (lastShownRoundRef.current !== roundNoKey) {
+      lastShownRoundRef.current = roundNoKey;
       resultHashRef.current = resultHash;
       shownOverlayRef.current = true;
 
       const parsed = parsePowerballResult(completedRound.result);
       if (!parsed?.normalBalls || typeof parsed.powerball !== "number") return;
-
-      console.log(
-        `[ResultOverlay] Showing result for round ${roundNo}:`,
-        parsed,
-      );
 
       setOverlayResult({
         roundNumber: roundNo,
@@ -546,6 +545,7 @@ export function PowerballGamePage() {
         currentRoundData.id,
         bet.type,
         amount,
+        profile.last_login_ip || undefined,
       );
       if (!result.success) {
         showAlert({
@@ -558,6 +558,7 @@ export function PowerballGamePage() {
       }
     }
 
+    await refetchBets();
     showAlert({
       title: "배팅 완료",
       message: `${selectedBets
@@ -810,44 +811,10 @@ export function PowerballGamePage() {
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
                   />
                 </div>
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => handleQuickAmount(1000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    1천
-                  </button>
-                  <button
-                    onClick={() => handleQuickAmount(5000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    5천
-                  </button>
-                  <button
-                    onClick={() => handleQuickAmount(10000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    1만
-                  </button>
-                  <button
-                    onClick={() => handleQuickAmount(50000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    5만
-                  </button>
-                  <button
-                    onClick={() => handleQuickAmount(100000)}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    10만
-                  </button>
-                  <button
-                    onClick={() => setBetAmount(currentPoints.toString())}
-                    className="flex-1 bg-gray-800 text-white py-2 rounded hover:bg-gray-700 text-sm"
-                  >
-                    올인
-                  </button>
-                </div>
+                <QuickAmountButtons
+                  onAmountSelect={handleQuickAmount}
+                  currentPoints={currentPoints}
+                />
               </div>
 
               {/* 일반볼 배팅 */}
@@ -1323,75 +1290,12 @@ export function PowerballGamePage() {
       )}
 
       {/* Bet History Modal */}
-      {showBetHistory && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-lg border border-gray-700 max-w-2xl w-full">
-            <div className="bg-blue-500/20 border-b border-blue-500/30 px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-blue-500">📊</span>
-                <span className="text-white">배팅 기록</span>
-              </div>
-              <button
-                onClick={() => setShowBetHistory(false)}
-                className="text-gray-400 hover:text-white"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-4">
-              <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                {myBets.map((bet) => (
-                  <div
-                    key={bet.id}
-                    className="bg-gray-800 rounded-lg p-4 border border-gray-700"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-white">{bet.type}</span>
-                      <span
-                        className={`px-2 py-1 rounded text-sm ${
-                          bet.result === "승"
-                            ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                            : "bg-red-500/20 text-red-400 border border-red-500/30"
-                        }`}
-                      >
-                        {bet.result}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-gray-400">회차: </span>
-                        <span className="text-white">#{bet.round}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">배팅시간: </span>
-                        <span className="text-white">{bet.betTime}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">배팅금액: </span>
-                        <span className="text-white">
-                          {bet.amount.toLocaleString()}P
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">당첨금액: </span>
-                        <span
-                          className={
-                            bet.winAmount > 0
-                              ? "text-green-400"
-                              : "text-gray-500"
-                          }
-                        >
-                          {bet.winAmount.toLocaleString()}P
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <BetHistoryPanel
+        isOpen={showBetHistory}
+        onClose={() => setShowBetHistory(false)}
+        bets={myBets}
+        title="배팅 기록"
+      />
     </div>
   );
 }

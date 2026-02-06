@@ -1,7 +1,11 @@
 ﻿import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, supabaseAdmin } from "../../lib/supabase";
 import type { Tables, TablesInsert } from "../../lib/database.types";
-import { formatKST } from "../../lib/dateUtils";
+import {
+  formatKST,
+  getStartOfDayKST,
+  getEndOfDayKST,
+} from "../../lib/dateUtils";
 
 const gameSettingsCache = new Map<
   "powerball" | "ladder",
@@ -83,7 +87,8 @@ export function useUserGifts(userId: string | undefined) {
     const { data, error } = await supabase
       .from("gift_inventory")
       .select("*, gifts(*)")
-      .eq("user_id", userId)
+      .eq("owner_id", userId)
+      .eq("owner_type", "user")
       .gt("quantity", 0);
 
     if (error) {
@@ -99,6 +104,83 @@ export function useUserGifts(userId: string | undefined) {
   }, [fetchUserGifts]);
 
   return { userGifts, isLoading, error, refetch: fetchUserGifts };
+}
+
+// Hook for fetching agent's gift inventory with real-time updates
+export function useAgentGifts(agentId: string | undefined) {
+  const [agentGifts, setAgentGifts] = useState<
+    (Tables<"gift_inventory"> & { gifts: Tables<"gifts"> })[]
+  >([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchAgentGifts = useCallback(async () => {
+    if (!agentId) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    const { data, error } = await supabaseAdmin
+      .from("gift_inventory")
+      .select("*, gifts(*)")
+      .eq("owner_id", agentId)
+      .eq("owner_type", "agent")
+      .gt("quantity", 0);
+
+    if (error) {
+      setError(error);
+    } else {
+      setAgentGifts((data as any) || []);
+    }
+    setIsLoading(false);
+  }, [agentId]);
+
+  useEffect(() => {
+    fetchAgentGifts();
+  }, [fetchAgentGifts]);
+
+  // Polling for gift_inventory updates (more reliable than real-time)
+  // Poll every 3 seconds for near-realtime experience
+  useEffect(() => {
+    if (!agentId) return;
+
+    const pollInterval = setInterval(() => {
+      fetchAgentGifts();
+    }, 3000);
+
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [agentId, fetchAgentGifts]);
+
+  // Real-time subscription for gift_inventory changes (backup)
+  useEffect(() => {
+    if (!agentId) return;
+
+    const channel = supabase
+      .channel(`agent-gifts-${agentId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "gift_inventory",
+          filter: `owner_id=eq.${agentId}`,
+        },
+        () => {
+          // Refetch on any change to agent's inventory
+          fetchAgentGifts();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [agentId, fetchAgentGifts]);
+
+  return { agentGifts, isLoading, error, refetch: fetchAgentGifts };
 }
 
 // Hook for fetching notices
@@ -399,6 +481,7 @@ export function useUserBets(
   >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const refetchTimerRef = useRef<number | null>(null);
 
   const fetchBets = useCallback(async () => {
     if (!userId) {
@@ -407,9 +490,14 @@ export function useUserBets(
     }
 
     setIsLoading(true);
+    // gameType이 있으면 inner join으로 필터링, 없으면 일반 조인
+    const selectQuery = gameType
+      ? "*, game_rounds!inner(*)"
+      : "*, game_rounds(*)";
+
     let query = supabase
       .from("game_bets")
-      .select("*, game_rounds(*)")
+      .select(selectQuery)
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -431,6 +519,41 @@ export function useUserBets(
   useEffect(() => {
     fetchBets();
   }, [fetchBets]);
+
+  // 실시간 구독 - 배팅 상태 변경 시 즉시 업데이트 (당첨 결과 포함)
+  useEffect(() => {
+    if (!userId) return;
+
+    const scheduleRefetch = () => {
+      if (refetchTimerRef.current) {
+        window.clearTimeout(refetchTimerRef.current);
+      }
+      refetchTimerRef.current = window.setTimeout(() => {
+        void fetchBets();
+      }, 200);
+    };
+
+    const channel = supabase
+      .channel(`user-bets-${userId}-${gameType || "all"}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_bets",
+          filter: `user_id=eq.${userId}`,
+        },
+        scheduleRefetch,
+      )
+      .subscribe();
+
+    return () => {
+      if (refetchTimerRef.current) {
+        window.clearTimeout(refetchTimerRef.current);
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, gameType, fetchBets]);
 
   return { bets, isLoading, error, refetch: fetchBets };
 }
@@ -759,7 +882,11 @@ export function useChatMessages(roomId: string | undefined) {
   return { messages, isLoading, error, sendMessage, refetch: fetchMessages };
 }
 
-export function useRealtimeChat(roomId: string | undefined) {
+export function useRealtimeChat(
+  roomId: string | undefined,
+  options?: { useAdmin?: boolean },
+) {
+  const useAdmin = options?.useAdmin ?? false;
   const [messages, setMessages] = useState<
     (Tables<"messages"> & { gift_items?: Tables<"gifts"> | null })[]
   >([]);
@@ -813,7 +940,8 @@ export function useRealtimeChat(roomId: string | undefined) {
       return;
     }
 
-    if (!authedUserId) {
+    // Skip authedUserId check when using admin mode (for agents)
+    if (!useAdmin && !authedUserId) {
       setIsLoading(true);
       return;
     }
@@ -821,7 +949,9 @@ export function useRealtimeChat(roomId: string | undefined) {
     setIsLoading(true);
     setError(null);
 
-    const fallbackRes = await supabase
+    // Use supabaseAdmin for agent mode to bypass RLS
+    const client = useAdmin ? supabaseAdmin : supabase;
+    const fallbackRes = await client
       .from("messages")
       .select("*")
       .eq("room_id", roomId)
@@ -837,7 +967,7 @@ export function useRealtimeChat(roomId: string | undefined) {
     const hydrated = await hydrateGiftItems((fallbackRes.data as any) || []);
     setMessages((hydrated as any) || []);
     setIsLoading(false);
-  }, [roomId, authedUserId, hydrateGiftItems]);
+  }, [roomId, authedUserId, useAdmin, hydrateGiftItems]);
 
   useEffect(() => {
     let cancelled = false;
@@ -863,9 +993,12 @@ export function useRealtimeChat(roomId: string | undefined) {
     fetchMessages();
 
     if (!roomId) return;
-    if (!authedUserId) return;
+    // Skip authedUserId check when using admin mode (for agents)
+    if (!useAdmin && !authedUserId) return;
 
-    const channel = supabase
+    // Use supabaseAdmin for agent mode to bypass RLS
+    const client = useAdmin ? supabaseAdmin : supabase;
+    const channel = client
       .channel(`realtime-chat-${roomId}`)
       .on(
         "postgres_changes",
@@ -880,7 +1013,7 @@ export function useRealtimeChat(roomId: string | undefined) {
             const id = String((payload.new as any)?.id || "");
             if (!id) return;
 
-            const row = await supabase
+            const row = await client
               .from("messages")
               .select("*")
               .eq("id", id)
@@ -904,9 +1037,9 @@ export function useRealtimeChat(roomId: string | undefined) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      client.removeChannel(channel);
     };
-  }, [roomId, authedUserId, fetchMessages, hydrateGiftItems]);
+  }, [roomId, authedUserId, useAdmin, fetchMessages, hydrateGiftItems]);
 
   return { messages, isLoading, error, refetch: fetchMessages };
 }
@@ -967,8 +1100,11 @@ export function useSendMessage() {
     setIsLoading(true);
     setError(null);
 
+    // Use supabaseAdmin for profile (agent) senders to bypass RLS
+    const client = senderType === "profile" ? supabaseAdmin : supabase;
+
     try {
-      const { data: messageId, error: rpcError } = await supabase.rpc(
+      const { data: messageId, error: rpcError } = await client.rpc(
         "chat_send_message",
         {
           p_room_id: roomId,
@@ -982,7 +1118,7 @@ export function useSendMessage() {
 
       if (rpcError) throw rpcError;
 
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("messages")
         .select("*")
         .eq("id", String(messageId))
@@ -1016,7 +1152,7 @@ export function useMarkMessagesAsRead() {
     setError(null);
 
     try {
-      const { data: room, error: roomError } = await supabase
+      const { data: room, error: roomError } = await supabaseAdmin
         .from("chat_rooms")
         .select("user_id, profile_id")
         .eq("id", roomId)
@@ -1028,12 +1164,25 @@ export function useMarkMessagesAsRead() {
       const readerType =
         String(room.profile_id) === String(readerId) ? "profile" : "user";
 
-      const { error: rpcError } = await supabase.rpc("chat_mark_read", {
+      // Use supabaseAdmin for profile (agent) readers to bypass RLS
+      // For user readers, use regular supabase client
+      const client = readerType === "profile" ? supabaseAdmin : supabase;
+
+      const { error: rpcError } = await client.rpc("chat_mark_read", {
         p_room_id: roomId,
         p_reader_type: readerType,
       });
 
       if (rpcError) throw rpcError;
+
+      // Immediately update local state for profile readers
+      if (readerType === "profile") {
+        await supabaseAdmin
+          .from("chat_rooms")
+          .update({ profile_unread_count: 0 })
+          .eq("id", roomId);
+      }
+
       return { success: true };
     } catch (e) {
       const err = e as Error;
@@ -1171,19 +1320,140 @@ export function useAgents() {
       const rows = data || [];
       const enriched = await Promise.all(
         rows.map(async (agent) => {
-          const [profilesCountRes, membersCountRes] = await Promise.all([
-            supabaseAdmin
-              .from("chat_profiles")
-              .select("id", { count: "exact", head: true })
-              .eq("assigned_agent_id", agent.id),
-            supabaseAdmin
+          const [profilesCountRes, membersCountRes, membersRes] =
+            await Promise.all([
+              supabaseAdmin
+                .from("chat_profiles")
+                .select("id", { count: "exact", head: true })
+                .eq("assigned_agent_id", agent.id),
+              supabaseAdmin
+                .from("user_profiles")
+                .select("id", { count: "exact", head: true })
+                .eq("agent_id", agent.id),
+              supabaseAdmin
+                .from("user_profiles")
+                .select("id, agent_assigned_at")
+                .eq("agent_id", agent.id),
+            ]);
+
+          // Calculate total_revenue including HISTORICAL members using RPC
+          let totalRevenue = 0;
+          const currentMembers = membersRes.data || [];
+
+          // Get historical members from referral code change logs
+          const { data: historyLogs } = await supabaseAdmin.rpc(
+            "get_agent_referral_code_logs",
+            { p_agent_id: agent.id },
+          );
+
+          const currentIds = new Set(currentMembers.map((m: any) => m.id));
+          const historyIds = ((historyLogs as any[]) || [])
+            .filter(
+              (log: any) => (log.changes as any)?.fromAgentId === agent.id,
+            )
+            .map(
+              (log: any) =>
+                (log.target_id as string | null) ??
+                ((log.changes as any)?.userId as string | null),
+            )
+            .filter(
+              (id: any): id is string => Boolean(id) && !currentIds.has(id),
+            );
+
+          // Fetch historical member data
+          let historicalMembers: any[] = [];
+          if (historyIds.length > 0) {
+            const { data: histMembers } = await supabaseAdmin
               .from("user_profiles")
-              .select("id", { count: "exact", head: true })
-              .eq("agent_id", agent.id),
-          ]);
+              .select("id, agent_assigned_at")
+              .in("id", historyIds);
+            historicalMembers = histMembers || [];
+          }
+
+          // Merge all members
+          const allMembers = [...currentMembers, ...historicalMembers];
+          if (allMembers.length > 0) {
+            const memberIds = allMembers.map((m: any) => m.id);
+
+            // Build assignment windows for filtering
+            const historyLogsByUser = new Map<string, any[]>();
+            ((historyLogs as any[]) || []).forEach((log: any) => {
+              const userId =
+                (log.target_id as string | null) ??
+                ((log.changes as any)?.userId as string | null);
+              if (!userId) return;
+              const existing = historyLogsByUser.get(userId) || [];
+              existing.push(log);
+              historyLogsByUser.set(userId, existing);
+            });
+
+            const memberAssignmentWindows = new Map<
+              string,
+              { start: Date | null; end: Date | null }[]
+            >();
+
+            allMembers.forEach((member: any) => {
+              const logs = (historyLogsByUser.get(member.id) || []).slice();
+              logs.sort((a: any, b: any) => {
+                const aTime =
+                  (a.changes as any)?.toAssignedAt || a.created_at || "";
+                const bTime =
+                  (b.changes as any)?.toAssignedAt || b.created_at || "";
+                return new Date(aTime).getTime() - new Date(bTime).getTime();
+              });
+
+              const windows: { start: Date | null; end: Date | null }[] = [];
+              logs.forEach((log: any) => {
+                const changes = log.changes as any;
+                if (changes?.fromAgentId === agent.id) {
+                  const start = changes?.fromAssignedAt
+                    ? new Date(changes.fromAssignedAt)
+                    : null;
+                  const end = changes?.toAssignedAt
+                    ? new Date(changes.toAssignedAt)
+                    : new Date(log.created_at);
+                  windows.push({ start, end });
+                }
+              });
+
+              if (currentIds.has(member.id)) {
+                const start = member.agent_assigned_at
+                  ? new Date(member.agent_assigned_at)
+                  : null;
+                windows.push({ start, end: null });
+              }
+              memberAssignmentWindows.set(member.id, windows);
+            });
+
+            const isWithinWindow = (userId: string, date: Date) => {
+              const windows = memberAssignmentWindows.get(userId) || [];
+              if (windows.length === 0) return true;
+              return windows.some((w) => {
+                const afterStart = w.start ? date >= w.start : true;
+                const beforeEnd = w.end ? date < w.end : true;
+                return afterStart && beforeEnd;
+              });
+            };
+
+            // Fetch transactions using RPC (bypasses RLS)
+            const { data: txData } = await supabaseAdmin.rpc(
+              "get_agent_member_transactions",
+              { p_member_ids: memberIds, p_types: ["charge", "withdraw"] },
+            );
+
+            ((txData as any[]) || []).forEach((t: any) => {
+              const txDate = new Date(t.created_at || Date.now());
+              if (!isWithinWindow(t.user_id, txDate)) return;
+              const rawAmount = Number(t.amount || 0);
+              const amount =
+                t.type === "charge" ? rawAmount : -Math.abs(rawAmount);
+              totalRevenue += amount;
+            });
+          }
 
           return {
             ...agent,
+            total_revenue: totalRevenue,
             assigned_profiles_count: Number(profilesCountRes.count || 0),
             referred_members_count: Number(membersCountRes.count || 0),
           };
@@ -1259,18 +1529,29 @@ export function useBackofficeAccountActions(adminId?: string) {
   const [error, setError] = useState<Error | null>(null);
 
   const getValidAccessToken = useCallback(async (): Promise<string> => {
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabaseAdmin.auth.getSession();
-    if (sessionError) throw sessionError;
-    if (!session?.access_token) throw new Error("로그인이 필요합니다.");
-
+    // 먼저 세션 갱신 시도
     const { data: refreshed, error: refreshError } =
       await supabaseAdmin.auth.refreshSession();
 
     if (!refreshError && refreshed.session?.access_token) {
       return refreshed.session.access_token;
+    }
+
+    // 갱신 실패 시 기존 세션 확인
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabaseAdmin.auth.getSession();
+
+    if (sessionError) throw sessionError;
+    if (!session?.access_token) {
+      throw new Error("로그인이 필요합니다. 다시 로그인해주세요.");
+    }
+
+    // 토큰 만료 여부 확인
+    const expiresAt = session.expires_at;
+    if (expiresAt && expiresAt * 1000 < Date.now()) {
+      throw new Error("세션이 만료되었습니다. 다시 로그인해주세요.");
     }
 
     return session.access_token;
@@ -1304,17 +1585,19 @@ export function useBackofficeAccountActions(adminId?: string) {
       });
 
       if (!resp.ok) {
-        let text = "";
+        let errorMessage = "요청 처리 중 오류가 발생했습니다.";
         try {
-          text = await resp.clone().text();
+          const text = await resp.clone().text();
+          if (text) {
+            const parsed = JSON.parse(text);
+            if (parsed.error) {
+              errorMessage = parsed.error;
+            }
+          }
         } catch {
-          text = "";
+          // JSON 파싱 실패 시 기본 메시지 사용
         }
-        throw new Error(
-          `Edge Function returned a non-2xx status code (status=${
-            resp.status
-          } ${resp.statusText}${text ? `, body=${text}` : ""})`,
-        );
+        throw new Error(errorMessage);
       }
 
       const contentType = resp.headers.get("content-type") || "";
@@ -1335,7 +1618,7 @@ export function useBackofficeAccountActions(adminId?: string) {
             username: string;
             name: string;
             password: string;
-            role: "super_admin" | "admin";
+            role: "admin";
           }
         | {
             accountType: "agent";
@@ -1512,22 +1795,28 @@ export function useBackofficeAccountActions(adminId?: string) {
 
 // Hook for users management (admin)
 export function useUsers() {
-  const [users, setUsers] = useState<Tables<"user_profiles">[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // Join with agents table to get referral_code
     const { data, error } = await supabaseAdmin
       .from("user_profiles")
-      .select("*")
+      .select("*, agents:agent_id(referral_code)")
       .order("created_at", { ascending: false });
 
     if (error) {
       setError(error);
     } else {
-      setUsers(data || []);
+      // Flatten agents.referral_code into referral_code field
+      const usersWithReferral = (data || []).map((u: any) => ({
+        ...u,
+        referral_code: u.agents?.referral_code || "",
+      }));
+      setUsers(usersWithReferral);
     }
     setIsLoading(false);
   }, []);
@@ -1674,7 +1963,8 @@ export function useDepositRequests(userId?: string) {
       .insert(request)
       .select()
       .single();
-    if (!error) fetchRequests();
+    // 백그라운드에서 목록 새로고침 (응답 지연 방지)
+    if (!error) void fetchRequests();
     return { data, error };
   };
 
@@ -1740,13 +2030,49 @@ export function useWithdrawalRequests(userId?: string) {
   const createRequest = async (
     request: TablesInsert<"withdrawal_requests">,
   ) => {
-    const { data, error } = await supabase
-      .from("withdrawal_requests")
-      .insert(request)
-      .select()
-      .single();
-    if (!error) fetchRequests();
-    return { data, error };
+    try {
+      // Edge Function을 통해 출금 신청 처리 (포인트 즉시 차감 포함)
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) {
+        return { data: null, error: new Error("로그인이 필요합니다.") };
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-withdrawal`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            amount: request.amount,
+            bank: request.bank,
+            account_number: request.account_number,
+            account_holder: request.account_holder,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        return {
+          data: null,
+          error: new Error(result.error || "출금 신청에 실패했습니다."),
+        };
+      }
+
+      // 백그라운드에서 목록 새로고침 (응답 지연 방지)
+      void fetchRequests();
+      return { data: result.data, error: null };
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "출금 신청에 실패했습니다.";
+      return { data: null, error: new Error(errorMessage) };
+    }
   };
 
   const updateRequest = async (
@@ -1846,7 +2172,7 @@ export function useAdminGifts(adminId?: string) {
     setError(null);
 
     try {
-      const { data: giftRows, error: giftsError } = await supabase
+      const { data: giftRows, error: giftsError } = await supabaseAdmin
         .from("gifts")
         .select("*")
         .order("display_order", { ascending: true });
@@ -1859,7 +2185,7 @@ export function useAdminGifts(adminId?: string) {
       const pageSize = 1000;
       const maxRows = 20000;
       for (let from = 0; from < maxRows; from += pageSize) {
-        const { data: page, error: pageError } = await supabase
+        const { data: page, error: pageError } = await supabaseAdmin
           .from("gift_transactions")
           .select("gift_id, quantity, points_amount")
           .eq("transaction_type", "buy")
@@ -2061,7 +2387,7 @@ export function useAllNotices() {
 
   const fetchNotices = useCallback(async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("notices")
       .select("*, admins:author_id(username)")
       .order("is_pinned", { ascending: false })
@@ -2082,7 +2408,7 @@ export function useAllNotices() {
   const createNotice = async (
     notice: Omit<Tables<"notices">, "id" | "created_at" | "updated_at">,
   ) => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("notices")
       .insert(notice)
       .select()
@@ -2095,7 +2421,7 @@ export function useAllNotices() {
     id: string,
     updates: Partial<Tables<"notices">>,
   ) => {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("notices")
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", id);
@@ -2104,7 +2430,7 @@ export function useAllNotices() {
   };
 
   const deleteNotice = async (id: string) => {
-    const { error } = await supabase.from("notices").delete().eq("id", id);
+    const { error } = await supabaseAdmin.from("notices").delete().eq("id", id);
     if (!error) fetchNotices();
     return { error };
   };
@@ -2378,28 +2704,77 @@ export function useAllChatRooms() {
 // Hook for approval logs (admin_action_logs 사용)
 export function useApprovalLogs() {
   const [logs, setLogs] = useState<Tables<"admin_action_logs">[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchLogs = useCallback(async () => {
     setIsLoading(true);
-    const { data, error } = await supabaseAdmin
+
+    // Fetch logs with limit
+    const { data, error: fetchError } = await supabaseAdmin
       .from("admin_action_logs")
       .select("*, admins(name)")
-      .in("action", ["approve_user", "reject_user", "suspend_user"])
+      .in("action", [
+        "approve_user",
+        "reject_user",
+        "suspend_user",
+        "unsuspend_user",
+      ])
       .order("created_at", { ascending: false })
       .limit(100);
 
-    if (error) {
-      setError(error);
+    // Fetch total count separately
+    const { count, error: countError } = await supabaseAdmin
+      .from("admin_action_logs")
+      .select("*", { count: "exact", head: true })
+      .in("action", [
+        "approve_user",
+        "reject_user",
+        "suspend_user",
+        "unsuspend_user",
+      ]);
+
+    if (fetchError || countError) {
+      setError(fetchError || countError);
     } else {
       setLogs(data || []);
+      setTotalCount(count || 0);
     }
     setIsLoading(false);
   }, []);
 
   useEffect(() => {
     fetchLogs();
+
+    // Real-time subscription for admin_action_logs
+    const channel = supabaseAdmin
+      .channel("approval-logs-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "admin_action_logs",
+        },
+        (payload) => {
+          const action = (payload.new as any)?.action;
+          // Only refetch if it's a relevant action type
+          if (
+            action === "approve_user" ||
+            action === "reject_user" ||
+            action === "suspend_user" ||
+            action === "unsuspend_user"
+          ) {
+            fetchLogs();
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabaseAdmin.removeChannel(channel);
+    };
   }, [fetchLogs]);
 
   const createLog = async (
@@ -2414,7 +2789,7 @@ export function useApprovalLogs() {
     return { data, error };
   };
 
-  return { logs, isLoading, error, createLog, refetch: fetchLogs };
+  return { logs, totalCount, isLoading, error, createLog, refetch: fetchLogs };
 }
 
 // Hook for dashboard statistics (admin)
@@ -2423,6 +2798,7 @@ export function useDashboardStats(
   startDate?: string,
   endDate?: string,
 ) {
+  const requestIdRef = useRef(0);
   const [stats, setStats] = useState({
     newMembers: 0,
     approvedMembers: 0,
@@ -2445,76 +2821,100 @@ export function useDashboardStats(
   const [error, setError] = useState<Error | null>(null);
 
   const fetchStats = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
+    setError(null);
 
-    // Calculate date range
     const now = new Date();
     let fromDate: string;
     let toDate = now.toISOString();
 
     switch (period) {
-      case "today":
-        fromDate = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+      case "today": {
+        const today = formatKST(now, "date") || now.toISOString().slice(0, 10);
+        fromDate = getStartOfDayKST(today);
         break;
-      case "week":
-        fromDate = new Date(now.setDate(now.getDate() - 7)).toISOString();
+      }
+      case "week": {
+        const start = new Date();
+        start.setDate(start.getDate() - 7);
+        const startKey =
+          formatKST(start, "date") || start.toISOString().slice(0, 10);
+        fromDate = getStartOfDayKST(startKey);
         break;
-      case "month":
-        fromDate = new Date(now.setMonth(now.getMonth() - 1)).toISOString();
+      }
+      case "month": {
+        const start = new Date();
+        start.setMonth(start.getMonth() - 1);
+        const startKey =
+          formatKST(start, "date") || start.toISOString().slice(0, 10);
+        fromDate = getStartOfDayKST(startKey);
         break;
-      case "custom":
-        fromDate = startDate
-          ? new Date(startDate).toISOString()
-          : new Date(now.setMonth(now.getMonth() - 1)).toISOString();
-        toDate = endDate
-          ? new Date(endDate).toISOString()
-          : new Date().toISOString();
+      }
+      case "custom": {
+        const fallbackStart = new Date();
+        fallbackStart.setMonth(fallbackStart.getMonth() - 1);
+        const startKey = startDate || formatKST(fallbackStart, "date");
+        fromDate = startKey
+          ? getStartOfDayKST(startKey)
+          : fallbackStart.toISOString();
+        toDate = endDate ? getEndOfDayKST(endDate) : new Date().toISOString();
         break;
-      default:
-        fromDate = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+      }
+      default: {
+        const today = formatKST(now, "date") || now.toISOString().slice(0, 10);
+        fromDate = getStartOfDayKST(today);
+      }
     }
 
     try {
       // Fetch new members count
-      const { count: newMembersCount } = await supabase
+      const { count: newMembersCount } = await supabaseAdmin
         .from("user_profiles")
         .select("*", { count: "exact", head: true })
         .gte("created_at", fromDate)
         .lte("created_at", toDate);
 
       // Fetch approved members
-      const { count: approvedCount } = await supabase
+      const { count: approvedCount } = await supabaseAdmin
         .from("user_profiles")
         .select("*", { count: "exact", head: true })
         .eq("status", "active")
         .gte("created_at", fromDate)
         .lte("created_at", toDate);
 
+      const { count: rejectedCount } = await supabaseAdmin
+        .from("user_profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "rejected")
+        .gte("created_at", fromDate)
+        .lte("created_at", toDate);
+
       // Fetch deposit transactions
-      const { data: depositData } = await supabase
+      const { data: depositData } = await supabaseAdmin
         .from("point_transactions")
         .select("amount, type, created_at")
         .eq("type", "charge")
         .gte("created_at", fromDate)
         .lte("created_at", toDate);
 
-      // Fetch withdrawal transactions
-      const { data: withdrawData } = await supabase
-        .from("point_transactions")
-        .select("amount, type, created_at")
-        .eq("type", "withdraw")
-        .gte("created_at", fromDate)
-        .lte("created_at", toDate);
+      // Fetch approved withdrawal requests
+      const { data: withdrawData } = await supabaseAdmin
+        .from("withdrawal_requests")
+        .select("amount, processed_at")
+        .eq("status", "approved")
+        .gte("processed_at", fromDate)
+        .lte("processed_at", toDate);
 
       // Fetch game bets
-      const { data: gameBets } = await supabase
+      const { data: gameBets } = await supabaseAdmin
         .from("game_bets")
         .select("bet_amount, win_amount, game_rounds(game_type)")
         .gte("created_at", fromDate)
         .lte("created_at", toDate);
 
       // Fetch gift purchases
-      const { data: giftPurchases } = await supabase
+      const { data: giftPurchases } = await supabaseAdmin
         .from("gift_transactions")
         .select("points_amount, transaction_type, created_at")
         .eq("transaction_type", "buy")
@@ -2556,10 +2956,10 @@ export function useDashboardStats(
       const itemPurchase =
         giftPurchases?.reduce((sum, t) => sum + (t.points_amount || 0), 0) || 0;
 
-      setStats({
+      const nextStats = {
         newMembers: newMembersCount || 0,
         approvedMembers: approvedCount || 0,
-        rejectedMembers: (newMembersCount || 0) - (approvedCount || 0),
+        rejectedMembers: rejectedCount || 0,
         deposits,
         depositCount: depositData?.length || 0,
         withdrawals,
@@ -2574,12 +2974,18 @@ export function useDashboardStats(
         itemRevenue: itemPurchase,
         miniGameRevenue:
           ladderRolling - ladderWins + (powerballRolling - powerballWins),
-      });
-    } catch (err) {
-      setError(err as Error);
-    }
+      };
 
-    setIsLoading(false);
+      if (requestId !== requestIdRef.current) return;
+      setStats(nextStats);
+    } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      setError(err as Error);
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
+    }
   }, [period, startDate, endDate]);
 
   useEffect(() => {
@@ -2680,12 +3086,29 @@ export function useAdminUserActions(adminId?: string) {
           throw new Error("관리자 권한이 필요합니다.");
         }
 
+        // Fetch user info for logging
+        const { data: userInfo } = await supabaseAdmin
+          .from("user_profiles")
+          .select(
+            "nickname, name, email, phone, bank, account_number, account_holder, join_ip, created_at",
+          )
+          .eq("id", params.userId)
+          .single();
+
+        // When suspending, also set is_online to false to force logout
+        const updateData: Record<string, unknown> = {
+          status: params.status,
+          updated_at: new Date().toISOString(),
+        };
+
+        // If suspending user, set is_online to false
+        if (params.status === "suspended") {
+          updateData.is_online = false;
+        }
+
         const { error: updateError } = await supabaseAdmin
           .from("user_profiles")
-          .update({
-            status: params.status,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("id", params.userId);
         if (updateError) throw updateError;
 
@@ -2696,7 +3119,19 @@ export function useAdminUserActions(adminId?: string) {
           target_id: params.userId,
           target_type: "user_profiles",
           ip_address: null,
-          changes: { status: params.status, reason: params.reason || null },
+          changes: {
+            status: params.status,
+            reason: params.reason || null,
+            nickname: userInfo?.nickname || null,
+            name: userInfo?.name || null,
+            email: userInfo?.email || null,
+            phone: userInfo?.phone || null,
+            bank: userInfo?.bank || null,
+            account_number: userInfo?.account_number || null,
+            account_holder: userInfo?.account_holder || null,
+            signup_ip: userInfo?.join_ip || null,
+            created_at: userInfo?.created_at || null,
+          },
         });
 
         return { status: params.status };
@@ -2726,8 +3161,37 @@ export function useAdminUserActions(adminId?: string) {
             body: { userId: params.userId, newPassword: params.newPassword },
           });
 
+        // data에 에러 메시지가 있는 경우 (Edge Function이 에러 JSON 반환)
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
         if (invokeError) {
-          throw new Error(invokeError.message);
+          // Edge Function 에러에서 실제 메시지만 추출
+          let errorMessage = "비밀번호 변경 중 오류가 발생했습니다.";
+          try {
+            // FunctionsHttpError의 context에서 응답 본문 추출 시도
+            const ctx = (invokeError as { context?: Response }).context;
+            if (ctx) {
+              const body = await ctx.json();
+              if (body?.error) {
+                errorMessage = body.error;
+              }
+            }
+          } catch {
+            // context 파싱 실패 시 message에서 추출 시도
+            try {
+              const match = invokeError.message.match(
+                /"error"\s*:\s*"([^"]+)"/,
+              );
+              if (match) {
+                errorMessage = match[1];
+              }
+            } catch {
+              // 파싱 실패 시 기본 메시지 사용
+            }
+          }
+          throw new Error(errorMessage);
         }
 
         await supabaseAdmin.from("admin_action_logs").insert({
@@ -2765,6 +3229,7 @@ export function useAdminDashboardData(
   startDate?: string,
   endDate?: string,
 ) {
+  const requestIdRef = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [cards, setCards] = useState({
@@ -2801,6 +3266,31 @@ export function useAdminDashboardData(
     return iso.slice(0, 10);
   };
 
+  const buildDateBuckets = (fromIso: string, toIso: string) => {
+    const startKey = formatDateKey(fromIso);
+    const endKey = formatDateKey(toIso);
+    if (!startKey || !endKey) return [];
+    const [sy, sm, sd] = startKey.split("-").map(Number);
+    const [ey, em, ed] = endKey.split("-").map(Number);
+    const start = new Date(Date.UTC(sy, sm - 1, sd));
+    const end = new Date(Date.UTC(ey, em - 1, ed));
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+    if (start > end) return [];
+
+    const buckets: { date: string; deposits: number; withdrawals: number }[] =
+      [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      buckets.push({
+        date: formatDateKey(cursor.toISOString()),
+        deposits: 0,
+        withdrawals: 0,
+      });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return buckets;
+  };
+
   const calcPrevRange = (fromIso: string, toIso: string) => {
     const from = new Date(fromIso);
     const to = new Date(toIso);
@@ -2816,40 +3306,43 @@ export function useAdminDashboardData(
   const resolveRange = () => {
     const now = new Date();
     let fromDate: string;
-    let toDate = new Date().toISOString();
+    let toDate = now.toISOString();
 
     switch (period) {
       case "today": {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        fromDate = start.toISOString();
+        const today = formatKST(now, "date") || now.toISOString().slice(0, 10);
+        fromDate = getStartOfDayKST(today);
         break;
       }
       case "week": {
         const start = new Date();
         start.setDate(start.getDate() - 7);
-        fromDate = start.toISOString();
+        const startKey =
+          formatKST(start, "date") || start.toISOString().slice(0, 10);
+        fromDate = getStartOfDayKST(startKey);
         break;
       }
       case "month": {
         const start = new Date();
         start.setMonth(start.getMonth() - 1);
-        fromDate = start.toISOString();
+        const startKey =
+          formatKST(start, "date") || start.toISOString().slice(0, 10);
+        fromDate = getStartOfDayKST(startKey);
         break;
       }
       case "custom": {
-        fromDate = startDate
-          ? new Date(startDate).toISOString()
-          : new Date(now.setMonth(now.getMonth() - 1)).toISOString();
-        toDate = endDate
-          ? new Date(endDate).toISOString()
-          : new Date().toISOString();
+        const fallbackStart = new Date();
+        fallbackStart.setMonth(fallbackStart.getMonth() - 1);
+        const startKey = startDate || formatKST(fallbackStart, "date");
+        fromDate = startKey
+          ? getStartOfDayKST(startKey)
+          : fallbackStart.toISOString();
+        toDate = endDate ? getEndOfDayKST(endDate) : new Date().toISOString();
         break;
       }
       default: {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        fromDate = start.toISOString();
+        const today = formatKST(now, "date") || now.toISOString().slice(0, 10);
+        fromDate = getStartOfDayKST(today);
       }
     }
 
@@ -2858,6 +3351,7 @@ export function useAdminDashboardData(
   };
 
   const fetchDashboard = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -2867,86 +3361,100 @@ export function useAdminDashboardData(
       const [
         newMembersNow,
         newMembersPrev,
-        pointTxNow,
-        pointTxPrev,
+        depositTxNow,
+        depositTxPrev,
+        withdrawalsNowData,
+        withdrawalsPrevData,
         memberActive,
         memberPending,
         memberSuspended,
-        memberDeleted,
+        memberRejected,
       ] = await Promise.all([
-        supabase
+        supabaseAdmin
           .from("user_profiles")
           .select("id", { count: "exact", head: true })
           .gte("created_at", fromDate)
           .lte("created_at", toDate),
-        supabase
+        supabaseAdmin
           .from("user_profiles")
           .select("id", { count: "exact", head: true })
           .gte("created_at", prevFromIso)
           .lte("created_at", prevToIso),
-        supabase
+        supabaseAdmin
           .from("point_transactions")
           .select("type, amount, created_at")
-          .in("type", ["charge", "withdraw"])
+          .eq("type", "charge")
           .gte("created_at", fromDate)
           .lte("created_at", toDate),
-        supabase
+        supabaseAdmin
           .from("point_transactions")
           .select("type, amount, created_at")
-          .in("type", ["charge", "withdraw"])
+          .eq("type", "charge")
           .gte("created_at", prevFromIso)
           .lte("created_at", prevToIso),
-        supabase
+        supabaseAdmin
+          .from("withdrawal_requests")
+          .select("amount, processed_at")
+          .eq("status", "approved")
+          .gte("processed_at", fromDate)
+          .lte("processed_at", toDate),
+        supabaseAdmin
+          .from("withdrawal_requests")
+          .select("amount, processed_at")
+          .eq("status", "approved")
+          .gte("processed_at", prevFromIso)
+          .lte("processed_at", prevToIso),
+        supabaseAdmin
           .from("user_profiles")
           .select("id", { count: "exact", head: true })
           .eq("status", "active"),
-        supabase
+        supabaseAdmin
           .from("user_profiles")
           .select("id", { count: "exact", head: true })
           .eq("status", "pending"),
-        supabase
+        supabaseAdmin
           .from("user_profiles")
           .select("id", { count: "exact", head: true })
           .eq("status", "suspended"),
-        supabase
+        supabaseAdmin
           .from("user_profiles")
           .select("id", { count: "exact", head: true })
-          .eq("status", "deleted"),
+          .eq("status", "rejected"),
       ]);
 
       if (newMembersNow.error) throw newMembersNow.error;
       if (newMembersPrev.error) throw newMembersPrev.error;
-      if (pointTxNow.error) throw pointTxNow.error;
-      if (pointTxPrev.error) throw pointTxPrev.error;
+      if (depositTxNow.error) throw depositTxNow.error;
+      if (depositTxPrev.error) throw depositTxPrev.error;
+      if (withdrawalsNowData.error) throw withdrawalsNowData.error;
+      if (withdrawalsPrevData.error) throw withdrawalsPrevData.error;
       if (memberActive.error) throw memberActive.error;
       if (memberPending.error) throw memberPending.error;
       if (memberSuspended.error) throw memberSuspended.error;
-      if (memberDeleted.error) throw memberDeleted.error;
+      if (memberRejected.error) throw memberRejected.error;
 
-      const depositsNow = (pointTxNow.data || [])
-        .filter((t: any) => t.type === "charge")
-        .reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
-      const withdrawalsNow = (pointTxNow.data || [])
-        .filter((t: any) => t.type === "withdraw")
-        .reduce(
-          (sum: number, t: any) => sum + Math.abs(Number(t.amount || 0)),
-          0,
-        );
+      const depositsNow = (depositTxNow.data || []).reduce(
+        (sum: number, t: any) => sum + Number(t.amount || 0),
+        0,
+      );
+      const withdrawalsNow = (withdrawalsNowData.data || []).reduce(
+        (sum: number, w: any) => sum + Number(w.amount || 0),
+        0,
+      );
 
-      const depositsPrev = (pointTxPrev.data || [])
-        .filter((t: any) => t.type === "charge")
-        .reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
-      const withdrawalsPrev = (pointTxPrev.data || [])
-        .filter((t: any) => t.type === "withdraw")
-        .reduce(
-          (sum: number, t: any) => sum + Math.abs(Number(t.amount || 0)),
-          0,
-        );
+      const depositsPrev = (depositTxPrev.data || []).reduce(
+        (sum: number, t: any) => sum + Number(t.amount || 0),
+        0,
+      );
+      const withdrawalsPrev = (withdrawalsPrevData.data || []).reduce(
+        (sum: number, w: any) => sum + Number(w.amount || 0),
+        0,
+      );
 
       const totalRevenueNow = depositsNow - withdrawalsNow;
       const totalRevenuePrev = depositsPrev - withdrawalsPrev;
 
-      setCards({
+      const nextCards = {
         newMembers: {
           value: Number(newMembersNow.count ?? 0),
           prev: Number(newMembersPrev.count ?? 0),
@@ -2954,63 +3462,56 @@ export function useAdminDashboardData(
         deposits: { value: depositsNow, prev: depositsPrev },
         withdrawals: { value: withdrawalsNow, prev: withdrawalsPrev },
         totalRevenue: { value: totalRevenueNow, prev: totalRevenuePrev },
-      });
+      };
 
-      const days: { date: string; deposits: number; withdrawals: number }[] =
-        [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        days.push({
-          date: formatKST(d, "date"),
-          deposits: 0,
-          withdrawals: 0,
-        });
-      }
+      const days = buildDateBuckets(fromDate, toDate);
+      const [trendDepositRes, trendWithdrawRes] = await Promise.all([
+        supabaseAdmin
+          .from("point_transactions")
+          .select("amount, created_at")
+          .eq("type", "charge")
+          .gte("created_at", fromDate)
+          .lte("created_at", toDate),
+        supabaseAdmin
+          .from("withdrawal_requests")
+          .select("amount, processed_at")
+          .eq("status", "approved")
+          .gte("processed_at", fromDate)
+          .lte("processed_at", toDate),
+      ]);
 
-      const trendFromDate = new Date();
-      trendFromDate.setDate(trendFromDate.getDate() - 6);
-      trendFromDate.setHours(0, 0, 0, 0);
-      const trendFrom = trendFromDate.toISOString();
-      const trendTo = new Date().toISOString();
-      const { data: trendTx, error: trendErr } = await supabase
-        .from("point_transactions")
-        .select("type, amount, created_at")
-        .in("type", ["charge", "withdraw"])
-        .gte("created_at", trendFrom)
-        .lte("created_at", trendTo);
+      if (trendDepositRes.error) throw trendDepositRes.error;
+      if (trendWithdrawRes.error) throw trendWithdrawRes.error;
 
-      if (trendErr) throw trendErr;
       const byDate = new Map(
         days.map((d) => [d.date, { deposits: 0, withdrawals: 0 }]),
       );
-      (trendTx || []).forEach((t: any) => {
+      (trendDepositRes.data || []).forEach((t: any) => {
         if (!t.created_at) return;
         const key = formatDateKey(t.created_at);
         const bucket = byDate.get(key);
-        if (!bucket) return;
-        if (t.type === "charge") bucket.deposits += Number(t.amount || 0);
-        if (t.type === "withdraw")
-          bucket.withdrawals += Math.abs(Number(t.amount || 0));
+        if (bucket) bucket.deposits += Number(t.amount || 0);
       });
-      setRevenueTrend(
-        days.map((d) => {
-          const b = byDate.get(d.date) || { deposits: 0, withdrawals: 0 };
-          return {
-            date: d.date,
-            deposits: b.deposits,
-            withdrawals: b.withdrawals,
-          };
-        }),
-      );
+      (trendWithdrawRes.data || []).forEach((w: any) => {
+        if (!w.processed_at) return;
+        const key = formatDateKey(w.processed_at);
+        const bucket = byDate.get(key);
+        if (bucket) bucket.withdrawals += Number(w.amount || 0);
+      });
+      const nextRevenueTrend = days.map((d) => {
+        const b = byDate.get(d.date) || { deposits: 0, withdrawals: 0 };
+        return {
+          date: d.date,
+          deposits: b.deposits,
+          withdrawals: b.withdrawals,
+        };
+      });
 
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const { data: gameBets, error: gameBetsErr } = await supabase
+      const { data: gameBets, error: gameBetsErr } = await supabaseAdmin
         .from("game_bets")
         .select("bet_amount, created_at, game_rounds(game_type)")
-        .gte("created_at", todayStart.toISOString())
-        .lte("created_at", new Date().toISOString());
+        .gte("created_at", fromDate)
+        .lte("created_at", toDate);
 
       if (gameBetsErr) throw gameBetsErr;
       const ladder = (gameBets || [])
@@ -3019,88 +3520,187 @@ export function useAdminDashboardData(
       const powerball = (gameBets || [])
         .filter((b: any) => b.game_rounds?.game_type === "powerball")
         .reduce((sum: number, b: any) => sum + Number(b.bet_amount || 0), 0);
-      setGameBetting({ ladder, powerball });
+      const nextGameBetting = { ladder, powerball };
 
-      setMemberStatus({
+      const nextMemberStatus = {
         active: Number(memberActive.count ?? 0),
         pending: Number(memberPending.count ?? 0),
         suspended: Number(memberSuspended.count ?? 0),
-        deleted: Number(memberDeleted.count ?? 0),
-      });
+        rejected: Number(memberRejected.count ?? 0),
+      };
 
-      const [recentUsers, recentPoints, recentBets] = await Promise.all([
-        supabase
-          .from("user_profiles")
-          .select("id, name, nickname, created_at")
-          .order("created_at", { ascending: false })
-          .limit(10),
-        supabase
-          .from("point_transactions")
-          .select(
-            "id, type, amount, created_at, users:user_profiles(name, nickname)",
-          )
-          .order("created_at", { ascending: false })
-          .limit(10),
-        supabase
-          .from("game_bets")
-          .select(
-            "id, bet_amount, bet_type, created_at, users:user_profiles(name, nickname), game_rounds(game_type, round_number)",
-          )
-          .order("created_at", { ascending: false })
-          .limit(10),
-      ]);
+      const [recentUsers, recentPoints, recentBets, recentMemberActions] =
+        await Promise.all([
+          supabaseAdmin
+            .from("user_profiles")
+            .select("id, name, nickname, created_at")
+            .order("created_at", { ascending: false })
+            .limit(10),
+          supabaseAdmin
+            .from("point_transactions")
+            .select(
+              "id, type, amount, created_at, users:user_profiles(name, nickname)",
+            )
+            .order("created_at", { ascending: false })
+            .limit(10),
+          supabaseAdmin
+            .from("game_bets")
+            .select(
+              "id, bet_amount, bet_type, status, win_amount, created_at, users:user_profiles(name, nickname), game_rounds(game_type, round_number)",
+            )
+            .order("created_at", { ascending: false })
+            .limit(20),
+          supabaseAdmin
+            .from("admin_action_logs")
+            .select("id, action, created_at, target_id, target_type")
+            .in("action", [
+              "approve_user",
+              "reject_user",
+              "suspend_user",
+              "unsuspend_user",
+            ])
+            .order("created_at", { ascending: false })
+            .limit(10),
+        ]);
 
       if (recentUsers.error) throw recentUsers.error;
       if (recentPoints.error) throw recentPoints.error;
       if (recentBets.error) throw recentBets.error;
+      if (recentMemberActions.error) throw recentMemberActions.error;
+
+      // 회원 승인/거절된 사용자 ID 목록 (중복 방지용)
+      const memberActionUserIds = new Set(
+        (recentMemberActions.data || [])
+          .filter((a: any) => a.target_type === "user_profiles")
+          .map((a: any) => a.target_id),
+      );
+
+      // 승인/거절된 사용자 정보 조회
+      const memberActionUsers: Record<
+        string,
+        { name?: string; nickname?: string }
+      > = {};
+      if (memberActionUserIds.size > 0) {
+        const { data: users } = await supabaseAdmin
+          .from("user_profiles")
+          .select("id, name, nickname")
+          .in("id", Array.from(memberActionUserIds));
+        (users || []).forEach((u: any) => {
+          memberActionUsers[u.id] = { name: u.name, nickname: u.nickname };
+        });
+      }
 
       const activities: any[] = [];
+
+      // 회원 승인/거절/정지/정지해제 활동 추가
+      const memberActionLabels: Record<string, string> = {
+        approve_user: "회원가입 승인",
+        reject_user: "회원가입 거절",
+        suspend_user: "회원 정지",
+        unsuspend_user: "회원 정지해제",
+      };
+      (recentMemberActions.data || []).forEach((a: any) => {
+        if (a.target_type !== "user_profiles") return;
+        const user = memberActionUsers[a.target_id] || {};
+        const userName = user.nickname || user.name || "-";
+        const actionLabel = memberActionLabels[a.action] || a.action;
+        activities.push({
+          id: `member_action:${a.id}`,
+          created_at: a.created_at,
+          type: a.action,
+          userName,
+          meta: actionLabel,
+        });
+      });
+
+      // 일반 회원가입 (승인/거절되지 않은 신규 가입자만)
       (recentUsers.data || []).forEach((u: any) => {
+        if (memberActionUserIds.has(u.id)) return; // 이미 승인/거절 활동으로 추가됨
         activities.push({
           id: `signup:${u.id}`,
           created_at: u.created_at,
           type: "signup",
           userName: u.nickname || u.name || "-",
-          meta: "회원가입",
+          meta: "회원가입 대기",
         });
       });
       (recentPoints.data || []).forEach((p: any) => {
+        // bet, win, lose 타입은 game_bets에서 처리하므로 제외
+        // lose는 배팅 시 이미 차감되었으므로 중복 표시 방지
+        if (p.type === "bet" || p.type === "win" || p.type === "lose") return;
+
         const userName = p.users?.nickname || p.users?.name || "-";
+        const typeLabels: Record<string, string> = {
+          charge: "입금 승인",
+          withdraw: "출금 완료",
+          withdraw_pending: "출금 신청 (차감)",
+          withdraw_refund: "출금 거절 (환급)",
+          admin_adjust: "관리자 조정",
+          bonus: "보너스 지급",
+          chat_start: "채팅 시작",
+          gift_buy: "선물 구매",
+          gift_sell: "선물 판매",
+        };
         activities.push({
           id: `point:${p.id}`,
           created_at: p.created_at,
           type: p.type,
           userName,
           amount: Number(p.amount || 0),
-          meta:
-            p.type === "charge"
-              ? "입금"
-              : p.type === "withdraw"
-                ? "출금"
-                : "관리자 조정",
+          meta: typeLabels[p.type] || p.type,
         });
       });
       (recentBets.data || []).forEach((b: any) => {
         const userName = b.users?.nickname || b.users?.name || "-";
         const gameType =
           b.game_rounds?.game_type === "ladder" ? "사다리" : "파워볼";
+        const betAmount = Number(b.bet_amount || 0);
+        const winAmount = Number(b.win_amount || 0);
+
+        // 배팅 활동 (금액은 음수로 표시)
         activities.push({
           id: `bet:${b.id}`,
           created_at: b.created_at,
           type: "bet",
           userName,
-          amount: Number(b.bet_amount || 0),
-          meta: `${gameType} 베팅`,
+          amount: -betAmount,
+          meta: `${gameType} 배팅`,
         });
+
+        // 당첨 시 별도 활동 추가
+        if (b.status === "won" && winAmount > 0) {
+          activities.push({
+            id: `bet_win:${b.id}`,
+            created_at: b.created_at,
+            type: "bet_win",
+            userName,
+            amount: winAmount,
+            meta: `${gameType} 배팅 당첨`,
+          });
+        }
       });
 
+      // 정렬 우선순위: 1) 시간 내림차순, 2) 같은 시간일 때 bet_win이 bet보다 먼저 (당첨 → 배팅 순)
+      const typeOrder: Record<string, number> = { bet_win: 0, bet: 1 };
       activities.sort((a, b) => {
         const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
         const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return tb - ta;
+        if (tb !== ta) return tb - ta;
+        // 같은 시간일 때: bet_win이 bet보다 먼저 표시 (내림차순 목록에서 당첨 → 배팅)
+        const orderA = typeOrder[a.type] ?? 2;
+        const orderB = typeOrder[b.type] ?? 2;
+        return orderA - orderB;
       });
-      setRecentActivities(activities.slice(0, 10));
+      const nextActivities = activities.slice(0, 10);
+
+      if (requestId !== requestIdRef.current) return;
+      setCards(nextCards);
+      setRevenueTrend(nextRevenueTrend);
+      setGameBetting(nextGameBetting);
+      setMemberStatus(nextMemberStatus);
+      setRecentActivities(nextActivities);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err as Error);
       setCards({
         newMembers: { value: 0, prev: 0 },
@@ -3113,7 +3713,9 @@ export function useAdminDashboardData(
       setMemberStatus({ active: 0, pending: 0, suspended: 0, deleted: 0 });
       setRecentActivities([]);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [endDate, period, startDate]);
 
@@ -3173,6 +3775,28 @@ export function useReferralCodeValidation() {
   return { validateCode, isValidating };
 }
 
+// Helper function to get client IP address
+async function getClientIp(): Promise<string> {
+  try {
+    const response = await fetch("https://api.ipify.org?format=json");
+    if (response.ok) {
+      const data = await response.json();
+      return data.ip || "";
+    }
+  } catch {
+    // Fallback: try alternative IP API
+    try {
+      const fallback = await fetch("https://ipapi.co/ip/");
+      if (fallback.ok) {
+        return (await fallback.text()).trim();
+      }
+    } catch {
+      // Ignore errors
+    }
+  }
+  return "";
+}
+
 export function useUserRegistration() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3193,6 +3817,31 @@ export function useUserRegistration() {
     setError(null);
 
     try {
+      // Get client IP address for join_ip
+      const clientIp = await getClientIp();
+      const normalizedPhone = input.phone?.trim() || "";
+      const normalizedPhoneDigits = normalizedPhone.replace(/\D/g, "");
+
+      if (normalizedPhoneDigits) {
+        const { data: isDuplicate, error: phoneError } = await supabase.rpc(
+          "check_phone_duplicate",
+          {
+            p_phone: normalizedPhone,
+          },
+        );
+
+        if (phoneError) {
+          throw phoneError;
+        }
+
+        if (isDuplicate) {
+          const message = "이미 가입된 휴대폰번호 입니다.";
+          setError(message);
+          setIsRegistering(false);
+          return { success: false, error: message };
+        }
+      }
+
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: input.email,
         password: input.password,
@@ -3211,12 +3860,13 @@ export function useUserRegistration() {
         email: input.email,
         name: input.name,
         nickname: input.nickname,
-        phone: input.phone || null,
+        phone: normalizedPhone || null,
         bank: input.bank || null,
         account_number: input.accountNumber || null,
         account_holder: input.accountHolder || null,
         status: "pending",
         agent_id: input.referredBy || null,
+        join_ip: clientIp || null,
       };
 
       const { error: profileError } = await supabase
@@ -3258,17 +3908,74 @@ export function useAgentMembers(agentId: string | undefined) {
     setIsLoading(true);
     setError(null);
 
-    const { data, error } = await supabaseAdmin
-      .from("user_profiles")
-      .select("*")
-      .eq("agent_id", agentId)
-      .order("created_at", { ascending: false });
+    try {
+      const { data: agentRow, error: agentError } = await supabaseAdmin
+        .from("agents")
+        .select("referral_code")
+        .eq("id", agentId)
+        .maybeSingle();
 
-    if (error) {
-      setError(error);
+      if (agentError) throw agentError;
+
+      const referralCode = agentRow?.referral_code || "";
+
+      // Only fetch current members assigned to this agent
+      // Historical members are handled separately in useAgentDashboardStats for revenue calculation
+      const { data: currentMembers, error: membersError } = await supabaseAdmin
+        .from("user_profiles")
+        .select("*")
+        .eq("agent_id", agentId)
+        .order("created_at", { ascending: false });
+
+      if (membersError) throw membersError;
+
+      // Fetch financial data for all members
+      const memberIds = (currentMembers || []).map((m: any) => m.id);
+
+      let depositsByUser: Record<string, number> = {};
+      let withdrawalsByUser: Record<string, number> = {};
+
+      if (memberIds.length > 0) {
+        // Fetch charge transactions (deposits) - using point_transactions with type 'charge'
+        const { data: chargeData } = await supabaseAdmin
+          .from("point_transactions")
+          .select("user_id, amount")
+          .in("user_id", memberIds)
+          .eq("type", "charge");
+
+        // Fetch approved withdrawals
+        const { data: withdrawalData } = await supabaseAdmin
+          .from("withdrawal_requests")
+          .select("user_id, amount")
+          .in("user_id", memberIds)
+          .eq("status", "approved");
+
+        // Aggregate deposits by user
+        (chargeData || []).forEach((tx: any) => {
+          const userId = tx.user_id;
+          const amount = Number(tx.amount || 0);
+          depositsByUser[userId] = (depositsByUser[userId] || 0) + amount;
+        });
+
+        // Aggregate withdrawals by user
+        (withdrawalData || []).forEach((tx: any) => {
+          const userId = tx.user_id;
+          const amount = Number(tx.amount || 0);
+          withdrawalsByUser[userId] = (withdrawalsByUser[userId] || 0) + amount;
+        });
+      }
+
+      const members = (currentMembers || []).map((member: any) => ({
+        ...member,
+        agents: { referral_code: referralCode },
+        total_deposited: depositsByUser[member.id] || 0,
+        total_withdrawn: withdrawalsByUser[member.id] || 0,
+      }));
+
+      setMembers(members);
+    } catch (fetchError) {
+      setError(fetchError as Error);
       setMembers([]);
-    } else {
-      setMembers(data || []);
     }
 
     setIsLoading(false);
@@ -3301,6 +4008,69 @@ export function useAgentMembers(agentId: string | undefined) {
           filter: `agent_id=eq.${agentId}`,
         },
         () => scheduleRefetch(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "point_transactions",
+        },
+        () => scheduleRefetch(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "withdrawal_requests",
+        },
+        () => scheduleRefetch(),
+      )
+      .subscribe();
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      void supabaseAdmin.removeChannel(channel);
+    };
+  }, [agentId, fetchMembers]);
+
+  useEffect(() => {
+    if (!agentId) return;
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefetch = () => {
+      if (timeoutId) return;
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        void fetchMembers();
+      }, 300);
+    };
+
+    const channel = supabaseAdmin
+      .channel(`agent-members-history-${agentId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "admin_action_logs",
+          filter: "action=eq.change_user_referral_code",
+        },
+        (payload) => {
+          const record = (payload.new || payload.old) as any;
+          const changes = record?.changes as any;
+          if (
+            changes?.fromAgentId !== agentId &&
+            changes?.toAgentId !== agentId
+          ) {
+            return;
+          }
+          scheduleRefetch();
+        },
       )
       .subscribe();
 
@@ -3398,17 +4168,19 @@ export function useAgentChatRooms(agentId: string | undefined) {
   const [rooms, setRooms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [profileIds, setProfileIds] = useState<string[]>([]);
 
   const fetchRooms = useCallback(async () => {
     if (!agentId) {
       setRooms([]);
+      setProfileIds([]);
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
 
-    const { data: profiles, error: profilesError } = await supabase
+    const { data: profiles, error: profilesError } = await supabaseAdmin
       .from("chat_profiles")
       .select("id")
       .eq("assigned_agent_id", agentId);
@@ -3416,34 +4188,143 @@ export function useAgentChatRooms(agentId: string | undefined) {
     if (profilesError) {
       setError(profilesError);
       setRooms([]);
+      setProfileIds([]);
       setIsLoading(false);
       return;
     }
 
-    const profileIds = (profiles || []).map((p) => p.id);
-    if (profileIds.length === 0) {
+    const pIds = (profiles || []).map((p) => p.id);
+    setProfileIds(pIds);
+
+    if (pIds.length === 0) {
       setRooms([]);
       setIsLoading(false);
       return;
     }
 
-    const { data, error } = await supabase
+    const { data: roomsData, error: roomsError } = await supabaseAdmin
       .from("chat_rooms")
-      .select("*, users:user_profiles(*), chat_profiles(*)")
-      .in("profile_id", profileIds)
-      .order("last_message_at", { ascending: false });
+      .select(
+        "id, user_id, profile_id, status, last_message, last_message_at, last_message_sender_type, is_active, unread_count, profile_unread_count, user_gifts_count, user_gifts_value, profile_gifts_count, profile_gifts_value, created_at, chat_profiles(*)",
+      )
+      .in("profile_id", pIds)
+      .order("last_message_at", { ascending: false, nullsFirst: false });
 
-    if (error) {
-      setError(error);
-    } else {
-      setRooms(data || []);
+    if (roomsError) {
+      setError(roomsError);
+      setRooms([]);
+      setIsLoading(false);
+      return;
     }
+
+    // Fetch user profiles using RPC function that bypasses RLS
+    const userIds = [
+      ...new Set((roomsData || []).map((r: any) => r.user_id).filter(Boolean)),
+    ];
+    let usersMap = new Map<string, any>();
+
+    if (userIds.length > 0) {
+      const { data: usersData } = await supabaseAdmin.rpc(
+        "get_chat_room_user_profiles",
+        { user_ids: userIds },
+      );
+
+      (usersData || []).forEach((u: any) => {
+        if (u?.id) usersMap.set(u.id, u);
+      });
+    }
+
+    // Merge user data into rooms
+    const mergedRooms = (roomsData || []).map((room: any) => ({
+      ...room,
+      users: usersMap.get(room.user_id) || null,
+    }));
+
+    setRooms(mergedRooms);
     setIsLoading(false);
   }, [agentId]);
 
   useEffect(() => {
     fetchRooms();
   }, [fetchRooms]);
+
+  // Polling for chat_rooms updates (more reliable than real-time for agent view)
+  // Poll every 1.5 seconds for near-realtime experience
+  useEffect(() => {
+    if (!agentId || profileIds.length === 0) return;
+
+    const pollInterval = setInterval(() => {
+      fetchRooms();
+    }, 1500);
+
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [agentId, profileIds.length, fetchRooms]);
+
+  // Real-time subscription for chat_rooms changes (last_message, profile_unread_count)
+  useEffect(() => {
+    if (profileIds.length === 0) return;
+
+    const channel = supabase
+      .channel(`agent-chat-rooms-${agentId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_rooms",
+        },
+        (payload) => {
+          const newRecord = payload.new as any;
+          const oldRecord = payload.old as any;
+
+          // Check if this room belongs to one of the agent's profiles
+          const roomProfileId = newRecord?.profile_id || oldRecord?.profile_id;
+          if (!profileIds.includes(roomProfileId)) return;
+
+          if (payload.eventType === "INSERT") {
+            // Refetch to get full room data with joins
+            fetchRooms();
+          } else if (payload.eventType === "UPDATE") {
+            // Update the room in place
+            setRooms((prev) =>
+              prev
+                .map((room) => {
+                  if (room.id === newRecord.id) {
+                    return {
+                      ...room,
+                      last_message: newRecord.last_message,
+                      last_message_at: newRecord.last_message_at,
+                      last_message_sender_type:
+                        newRecord.last_message_sender_type,
+                      profile_unread_count: newRecord.profile_unread_count,
+                      unread_count: newRecord.unread_count,
+                    };
+                  }
+                  return room;
+                })
+                .sort((a, b) => {
+                  const aTime = a.last_message_at
+                    ? new Date(a.last_message_at).getTime()
+                    : 0;
+                  const bTime = b.last_message_at
+                    ? new Date(b.last_message_at).getTime()
+                    : 0;
+                  return bTime - aTime;
+                }),
+            );
+          } else if (payload.eventType === "DELETE") {
+            setRooms((prev) => prev.filter((room) => room.id !== oldRecord.id));
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profileIds, agentId, fetchRooms]);
 
   return { rooms, isLoading, error, refetch: fetchRooms };
 }
@@ -3464,10 +4345,10 @@ export function useAgentGiftTransactions(agentId: string | undefined) {
     setIsLoading(true);
     setError(null);
 
-    // Get agent's profiles
-    const { data: profiles, error: profilesError } = await supabase
+    // Get agent's profiles (including soft-deleted ones to preserve history)
+    const { data: profiles, error: profilesError } = await supabaseAdmin
       .from("chat_profiles")
-      .select("id, name")
+      .select("id, name, deleted_at")
       .eq("assigned_agent_id", agentId);
 
     if (profilesError) {
@@ -3490,7 +4371,7 @@ export function useAgentGiftTransactions(agentId: string | undefined) {
     const maxRows = 20000;
     const all: any[] = [];
     for (let from = 0; from < maxRows; from += pageSize) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from("gift_transactions")
         .select("*, gifts(*)")
         .or(
@@ -3537,7 +4418,7 @@ export function useAgentGiftTransactions(agentId: string | undefined) {
     >();
 
     if (userIds.length > 0) {
-      const { data: usersData, error: usersError } = await supabase
+      const { data: usersData, error: usersError } = await supabaseAdmin
         .from("user_profiles")
         .select("id, name, nickname")
         .in("id", userIds);
@@ -3586,30 +4467,6 @@ export function useAgentGiftTransactions(agentId: string | undefined) {
 
   useEffect(() => {
     void fetchTransactions();
-
-    if (!agentId) return;
-
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const schedule = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        void fetchTransactions();
-      }, 250);
-    };
-
-    const channel = supabase
-      .channel(`agent-gift-transactions-${agentId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "gift_transactions" },
-        schedule,
-      )
-      .subscribe();
-
-    return () => {
-      if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
-    };
   }, [fetchTransactions]);
 
   return { transactions, isLoading, error, refetch: fetchTransactions };
@@ -3623,6 +4480,7 @@ export function useAgentDashboardStats(agentId: string | undefined) {
     weeklyRevenue: 0,
     todayRevenue: 0,
     totalMembers: 0,
+    currentMembers: 0,
     activeMembers: 0,
     assignedProfiles: 0,
     onlineProfiles: 0,
@@ -3644,6 +4502,7 @@ export function useAgentDashboardStats(agentId: string | undefined) {
         weeklyRevenue: 0,
         todayRevenue: 0,
         totalMembers: 0,
+        currentMembers: 0,
         activeMembers: 0,
         assignedProfiles: 0,
         onlineProfiles: 0,
@@ -3663,8 +4522,8 @@ export function useAgentDashboardStats(agentId: string | undefined) {
     setError(null);
 
     try {
-      // Get agent info
-      const { data: agentData } = await supabase
+      // Get agent info (use supabaseAdmin to bypass RLS)
+      const { data: agentData } = await supabaseAdmin
         .from("agents")
         .select("referral_code")
         .eq("id", agentId)
@@ -3673,10 +4532,11 @@ export function useAgentDashboardStats(agentId: string | undefined) {
       const referralCode = agentData?.referral_code || "";
 
       const { data: assignedProfilesRows, error: profilesError } =
-        await supabase
+        await supabaseAdmin
           .from("chat_profiles")
           .select("id, is_online")
-          .eq("assigned_agent_id", agentId);
+          .eq("assigned_agent_id", agentId)
+          .eq("is_active", true);
       if (profilesError) throw profilesError;
 
       const profileIds = (assignedProfilesRows || []).map((p: any) => p.id);
@@ -3684,14 +4544,131 @@ export function useAgentDashboardStats(agentId: string | undefined) {
         (p: any) => p.is_online,
       ).length;
 
-      // Get members who used this referral code
-      const { data: membersData } = await supabase
+      // Get members currently assigned to this agent
+      const { data: currentMembers, error: membersError } = await supabaseAdmin
         .from("user_profiles")
         .select("*")
         .eq("agent_id", agentId);
 
-      const membersList = membersData || [];
+      if (membersError) throw membersError;
+
+      // Fetch referral code change logs using RPC function (bypasses RLS)
+      let historyLogs: any[] = [];
+      const { data: rpcLogs, error: historyError } = await supabaseAdmin.rpc(
+        "get_agent_referral_code_logs",
+        { p_agent_id: agentId },
+      );
+
+      if (historyError) {
+        console.warn(
+          "Failed to fetch referral code logs via RPC:",
+          historyError,
+        );
+      } else {
+        historyLogs = rpcLogs || [];
+      }
+
+      const currentIds = new Set(
+        (currentMembers || []).map((member: any) => member.id),
+      );
+      // Get user IDs from logs where this agent was the FROM agent (user left this agent)
+      const historyIds = historyLogs
+        .filter((log: any) => (log.changes as any)?.fromAgentId === agentId)
+        .map(
+          (log: any) =>
+            (log.target_id as string | null) ??
+            ((log.changes as any)?.userId as string | null),
+        )
+        .filter((id: any): id is string => Boolean(id));
+
+      const missingIds = historyIds.filter((id) => !currentIds.has(id));
+      let historicalMembers: any[] = [];
+
+      if (missingIds.length > 0) {
+        const { data: historyMembers, error: historyMembersError } =
+          await supabaseAdmin
+            .from("user_profiles")
+            .select("*")
+            .in("id", missingIds);
+
+        if (historyMembersError) throw historyMembersError;
+        historicalMembers = historyMembers || [];
+      }
+
+      const mergedMap = new Map<string, any>();
+      [...(currentMembers || []), ...historicalMembers].forEach((member) => {
+        if (member?.id) mergedMap.set(member.id, member);
+      });
+
+      const membersList = Array.from(mergedMap.values()).map((member: any) => ({
+        ...member,
+        referral_code: referralCode || "",
+      }));
       setMembers(membersList);
+
+      const historyLogsByUser = new Map<string, any[]>();
+      (historyLogs || []).forEach((log: any) => {
+        const userId =
+          (log.target_id as string | null) ??
+          ((log.changes as any)?.userId as string | null);
+        if (!userId) return;
+        const existing = historyLogsByUser.get(userId) || [];
+        existing.push(log);
+        historyLogsByUser.set(userId, existing);
+      });
+
+      const memberAssignmentWindows = new Map<
+        string,
+        { start: Date | null; end: Date | null }[]
+      >();
+      membersList.forEach((member: any) => {
+        const logs = (historyLogsByUser.get(member.id) || []).slice();
+        logs.sort((a: any, b: any) => {
+          const aTime = (a.changes as any)?.toAssignedAt || a.created_at || "";
+          const bTime = (b.changes as any)?.toAssignedAt || b.created_at || "";
+          return new Date(aTime).getTime() - new Date(bTime).getTime();
+        });
+
+        const windows: { start: Date | null; end: Date | null }[] = [];
+
+        // Build windows from assignment history logs
+        // Each log where fromAgentId === agentId represents when user LEFT this agent
+        logs.forEach((log: any) => {
+          const changes = log.changes as any;
+          if (changes?.fromAgentId !== agentId) return;
+          // Window: from when user was assigned to this agent until they left
+          const startValue = changes?.fromAssignedAt;
+          const endValue = changes?.toAssignedAt || log.created_at;
+          const start = startValue ? new Date(startValue) : null;
+          const end = endValue ? new Date(endValue) : null;
+          // Even if start is null (user was always with this agent), include the window
+          windows.push({ start, end });
+        });
+
+        // If user is currently assigned to this agent, add open-ended window
+        if (member.agent_id === agentId) {
+          const start = member.agent_assigned_at
+            ? new Date(member.agent_assigned_at)
+            : null;
+          windows.push({ start, end: null });
+        }
+
+        memberAssignmentWindows.set(member.id, windows);
+      });
+
+      // Check if a transaction date falls within any assignment window for the user
+      const isWithinAssignmentWindow = (userId: string, date: Date) => {
+        const windows = memberAssignmentWindows.get(userId) || [];
+        // If no windows defined, include all transactions (defensive fallback)
+        if (windows.length === 0) return true;
+        return windows.some((window) => {
+          // If start is null, treat as beginning of time
+          const afterStart = window.start ? date >= window.start : true;
+          // If end is null, treat as end of time (current assignment)
+          const beforeEnd = window.end ? date < window.end : true;
+          return afterStart && beforeEnd;
+        });
+      };
 
       const profileCount = profileIds.length;
 
@@ -3720,27 +4697,112 @@ export function useAgentDashboardStats(agentId: string | undefined) {
         let weeklyRevenue = 0;
         let todayRevenue = 0;
 
+        // Fetch transactions using RPC function (bypasses RLS for historical members)
+        const { data: txData, error: txErr } = await supabaseAdmin.rpc(
+          "get_agent_member_transactions",
+          { p_member_ids: memberIds, p_types: ["charge", "withdraw"] },
+        );
+
+        if (txErr) throw txErr;
+
+        // Map RPC result to expected format
+        const allTx = (txData || []).map((t: any) => ({
+          ...t,
+          users: { name: t.user_name, nickname: t.user_nickname },
+        }));
+
+        // Filter transactions to only include those during the assignment window
+        const filteredTx = (allTx || []).filter((t: any) => {
+          if (!t.user_id) return false;
+          const txDate = new Date(t.created_at || Date.now());
+          return isWithinAssignmentWindow(t.user_id, txDate);
+        });
+
         const pageSize = 1000;
         const maxRows = 20000;
-        const allTx: any[] = [];
+        const withdrawalRows: any[] = [];
         for (let from = 0; from < maxRows; from += pageSize) {
-          const { data: page, error: txErr } = await supabase
-            .from("point_transactions")
-            .select(
-              "id, user_id, type, amount, created_at, users:user_profiles(name, nickname)",
-            )
+          const { data: page, error: wErr } = await supabaseAdmin
+            .from("withdrawal_requests")
+            .select("id, user_id, amount, processed_at, created_at")
             .in("user_id", memberIds)
-            .in("type", ["charge", "withdraw"])
-            .order("created_at", { ascending: false })
+            .eq("status", "approved")
+            .order("processed_at", { ascending: false })
             .range(from, from + pageSize - 1);
 
-          if (txErr) throw txErr;
+          if (wErr) throw wErr;
           const rows = page || [];
-          allTx.push(...rows);
+          withdrawalRows.push(...rows);
           if (rows.length < pageSize) break;
         }
 
-        (allTx || []).forEach((t: any) => {
+        const existingWithdrawalIds = new Set(
+          filteredTx
+            .filter(
+              (t: any) =>
+                t.type === "withdraw" &&
+                t.related_type === "withdrawal_request" &&
+                t.related_id,
+            )
+            .map((t: any) => t.related_id as string),
+        );
+        const existingWithdrawalKeys = new Set(
+          filteredTx
+            .filter((t: any) => t.type === "withdraw")
+            .map((t: any) => {
+              const day = (t.created_at || "").split("T")[0] || "";
+              return `${t.user_id}:${Math.abs(Number(t.amount || 0))}:${day}`;
+            }),
+        );
+        const memberNameMap = new Map(
+          membersList.map((m: any) => [
+            m.id,
+            { name: m.name, nickname: m.nickname },
+          ]),
+        );
+
+        const supplementalWithdrawals = withdrawalRows
+          .filter((row: any) => {
+            if (existingWithdrawalIds.has(row.id)) return false;
+            const day = (row.processed_at || row.created_at || "").split(
+              "T",
+            )[0];
+            const key = `${row.user_id}:${Math.abs(Number(row.amount || 0))}:${day}`;
+            if (existingWithdrawalKeys.has(key)) return false;
+            const txDate = new Date(
+              row.processed_at || row.created_at || Date.now(),
+            );
+            if (!isWithinAssignmentWindow(row.user_id, txDate)) {
+              return false;
+            }
+            return true;
+          })
+          .map((row: any) => {
+            const names = memberNameMap.get(row.user_id) || {
+              name: null,
+              nickname: null,
+            };
+            return {
+              id: `withdrawal-${row.id}`,
+              user_id: row.user_id,
+              type: "withdraw",
+              amount: -Math.abs(Number(row.amount || 0)),
+              created_at: row.processed_at || row.created_at,
+              related_id: row.id,
+              related_type: "withdrawal_request",
+              users: names,
+            };
+          });
+
+        const mergedTx = [...filteredTx, ...supplementalWithdrawals].sort(
+          (a: any, b: any) => {
+            const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return bTime - aTime;
+          },
+        );
+
+        mergedTx.forEach((t: any) => {
           const rawAmount = Number(t.amount || 0);
           const amount = t.type === "charge" ? rawAmount : -Math.abs(rawAmount);
           const date = new Date(t.created_at || Date.now());
@@ -3751,7 +4813,8 @@ export function useAgentDashboardStats(agentId: string | undefined) {
           if (date >= today) todayRevenue += amount;
         });
 
-        setRevenueRecords(allTx);
+        // Only show filtered transactions in revenue records
+        setRevenueRecords(mergedTx);
 
         let chatRevenueTotal = 0;
         let chatRevenueMonth = 0;
@@ -3783,14 +4846,25 @@ export function useAgentDashboardStats(agentId: string | undefined) {
           });
         }
 
+        // currentMembers = only members currently assigned to this agent
+        // Filter explicitly by agent_id because RLS may return extra users from chat_room policy
+        const trulyCurrentMembers = (currentMembers || []).filter(
+          (m: any) => m.agent_id === agentId,
+        );
+        const currentMembersCount = trulyCurrentMembers.length;
+        // activeMembers = only currently assigned members with active status
+        const activeMembersCount = trulyCurrentMembers.filter(
+          (m: any) => m.status === "active",
+        ).length;
+
         setStats({
           totalRevenue,
           monthlyRevenue,
           weeklyRevenue,
           todayRevenue,
           totalMembers: membersList.length,
-          activeMembers: membersList.filter((m) => m.status === "active")
-            .length,
+          currentMembers: currentMembersCount,
+          activeMembers: activeMembersCount,
           assignedProfiles: profileCount || 0,
           onlineProfiles,
           referralCode,
@@ -3805,6 +4879,7 @@ export function useAgentDashboardStats(agentId: string | undefined) {
           weeklyRevenue: 0,
           todayRevenue: 0,
           totalMembers: 0,
+          currentMembers: 0,
           activeMembers: 0,
           assignedProfiles: profileCount || 0,
           onlineProfiles,
@@ -3822,6 +4897,7 @@ export function useAgentDashboardStats(agentId: string | undefined) {
         weeklyRevenue: 0,
         todayRevenue: 0,
         totalMembers: 0,
+        currentMembers: 0,
         activeMembers: 0,
         assignedProfiles: 0,
         onlineProfiles: 0,
@@ -3841,6 +4917,106 @@ export function useAgentDashboardStats(agentId: string | undefined) {
     fetchStats();
   }, [fetchStats]);
 
+  useEffect(() => {
+    if (!agentId) return;
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefetch = () => {
+      if (timeoutId) return;
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        void fetchStats();
+      }, 300);
+    };
+
+    const channel = supabaseAdmin
+      .channel(`agent-dashboard-realtime-${agentId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "admin_action_logs",
+          filter: "action=eq.change_user_referral_code",
+        },
+        (payload) => {
+          const record = (payload.new || payload.old) as any;
+          const changes = record?.changes as any;
+          if (
+            changes?.fromAgentId !== agentId &&
+            changes?.toAgentId !== agentId
+          ) {
+            return;
+          }
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_profiles",
+        },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "point_transactions",
+        },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_profiles",
+        },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "deposit_requests",
+        },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "withdrawal_requests",
+        },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      void supabaseAdmin.removeChannel(channel);
+    };
+  }, [agentId, fetchStats]);
+
   return {
     stats,
     members,
@@ -3851,38 +5027,75 @@ export function useAgentDashboardStats(agentId: string | undefined) {
   };
 }
 
-// Hook for all game rounds (admin)
+// Hook for all game rounds (admin) - 서버사이드 페이지네이션 지원
 export function useAllGameRounds(filters?: {
   gameType?: string;
-  status?: string;
   startDate?: string;
   endDate?: string;
+  startTime?: string; // HH:MM format
+  endTime?: string; // HH:MM format
+  page?: number;
+  pageSize?: number;
 }) {
   const [rounds, setRounds] = useState<Tables<"game_rounds">[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  const page = filters?.page ?? 1;
+  const pageSize = filters?.pageSize ?? 20;
+
   const fetchRounds = useCallback(async () => {
     setIsLoading(true);
+
+    // 날짜+시간 조합으로 필터링
+    let startDateTime = filters?.startDate;
+    let endDateTime = filters?.endDate;
+
+    if (filters?.startDate && filters?.startTime) {
+      const dateOnly =
+        formatKST(filters.startDate, "date") || filters.startDate.split("T")[0];
+      startDateTime = `${dateOnly}T${filters.startTime}:00+09:00`;
+    }
+    if (filters?.endDate && filters?.endTime) {
+      const dateOnly =
+        formatKST(filters.endDate, "date") || filters.endDate.split("T")[0];
+      endDateTime = `${dateOnly}T${filters.endTime}:59+09:00`;
+    }
+
+    // 먼저 총 개수 조회
+    let countQuery = supabaseAdmin
+      .from("game_rounds")
+      .select("*", { count: "exact", head: true });
+
+    if (filters?.gameType && filters.gameType !== "all") {
+      countQuery = countQuery.eq("game_type", filters.gameType);
+    }
+    if (startDateTime) {
+      countQuery = countQuery.gte("start_time", startDateTime);
+    }
+    if (endDateTime) {
+      countQuery = countQuery.lte("start_time", endDateTime);
+    }
+
+    const { count } = await countQuery;
+    setTotalCount(count || 0);
 
     // 관리자 클라이언트 사용 (RLS 스코프 준수)
     let query = supabaseAdmin
       .from("game_rounds")
       .select("*")
       .order("start_time", { ascending: false })
-      .limit(100);
+      .range((page - 1) * pageSize, page * pageSize - 1);
 
     if (filters?.gameType && filters.gameType !== "all") {
       query = query.eq("game_type", filters.gameType);
     }
-    if (filters?.status && filters.status !== "all") {
-      query = query.eq("status", filters.status);
+    if (startDateTime) {
+      query = query.gte("start_time", startDateTime);
     }
-    if (filters?.startDate) {
-      query = query.gte("start_time", filters.startDate);
-    }
-    if (filters?.endDate) {
-      query = query.lte("start_time", filters.endDate);
+    if (endDateTime) {
+      query = query.lte("start_time", endDateTime);
     }
 
     const { data, error } = await query;
@@ -3895,9 +5108,12 @@ export function useAllGameRounds(filters?: {
     setIsLoading(false);
   }, [
     filters?.gameType,
-    filters?.status,
     filters?.startDate,
     filters?.endDate,
+    filters?.startTime,
+    filters?.endTime,
+    page,
+    pageSize,
   ]);
 
   useEffect(() => {
@@ -3946,7 +5162,14 @@ export function useAllGameRounds(filters?: {
     return { error };
   };
 
-  return { rounds, isLoading, error, refetch: fetchRounds, updateRound };
+  return {
+    rounds,
+    totalCount,
+    isLoading,
+    error,
+    refetch: fetchRounds,
+    updateRound,
+  };
 }
 
 // Hook for all game bets (admin)
@@ -4037,11 +5260,11 @@ export function useAllGameBets(filters?: {
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefetch = () => {
-      if (timeoutId) return;
+      if (timeoutId) clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         timeoutId = null;
         void fetchBets();
-      }, 300);
+      }, 100);
     };
 
     const channel = supabaseAdmin
@@ -4093,7 +5316,7 @@ export function useReserveResult() {
   const reserveResult = useCallback(
     async (
       gameType: "powerball" | "ladder",
-      roundNumber: number,
+      roundNumber: string | number,
       reservedResult: any,
     ) => {
       setIsLoading(true);
@@ -4110,7 +5333,7 @@ export function useReserveResult() {
             reserved_at: new Date().toISOString(),
           })
           .eq("game_type", gameType)
-          .eq("round_number", roundNumber)
+          .eq("round_number", String(roundNumber))
           .select("id")
           .maybeSingle();
 
@@ -4131,7 +5354,7 @@ export function useReserveResult() {
   );
 
   const cancelReservation = useCallback(
-    async (gameType: "powerball" | "ladder", roundNumber: number) => {
+    async (gameType: "powerball" | "ladder", roundNumber: string | number) => {
       setIsLoading(true);
       setError(null);
 
@@ -4146,7 +5369,7 @@ export function useReserveResult() {
             reserved_at: null,
           })
           .eq("game_type", gameType)
-          .eq("round_number", roundNumber)
+          .eq("round_number", String(roundNumber))
           .select("id")
           .maybeSingle();
 
@@ -4339,8 +5562,8 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
   const fetchInFlightRef = useRef(false);
   const pendingRefetchRef = useRef(false); // 대기 중인 refetch 요청
   const bettingEndTimeRef = useRef<number | null>(null);
-  const previousRoundNumberRef = useRef<number | null>(null);
-  const previousCompletedRoundRef = useRef<number | null>(null);
+  const previousRoundNumberRef = useRef<string | null>(null);
+  const previousCompletedRoundRef = useRef<string | null>(null);
 
   const fetchCurrentRound = useCallback(async () => {
     if (fetchInFlightRef.current) {
@@ -4499,7 +5722,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
 
     // 실시간 구독 - 상태 변경 콜백 (페이로드에서 직접 데이터 추출)
     const channel = supabase
-      .channel(`current-round-${gameType}-${Date.now()}`) // 고유 채널명
+      .channel(`current-round-${gameType}`)
       .on(
         "postgres_changes",
         {
@@ -4511,11 +5734,6 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         (payload) => {
           const eventType = payload.eventType;
           const newData = payload.new as Tables<"game_rounds"> | null;
-          console.log(
-            `[Realtime] game_rounds ${eventType}:`,
-            newData?.round_number,
-            newData?.status,
-          );
 
           // INSERT 이벤트: 새 라운드가 생성됨 - 즉시 반영
           if (eventType === "INSERT" && newData) {
@@ -4548,9 +5766,6 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
             }
             triggerProcessingRef.current = false;
             setRoundTransitionPending(false);
-            console.log(
-              `[Realtime] New round ${newData.round_number} applied directly`,
-            );
           }
 
           // UPDATE 이벤트: 라운드 상태 변경 (completed 등)
@@ -4566,9 +5781,6 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
               } as Tables<"game_rounds">;
               setCompletedRound(updatedCompletedRound);
               previousCompletedRoundRef.current = newData.round_number;
-              console.log(
-                `[Realtime] Completed round ${newData.round_number} applied directly`,
-              );
             }
           }
 
@@ -4576,15 +5788,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
           fetchCurrentRound();
         },
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log(`[Realtime] Subscribed to game_rounds for ${gameType}`);
-        } else if (status === "CHANNEL_ERROR") {
-          console.error(`[Realtime] Channel error for ${gameType}`);
-        } else if (status === "TIMED_OUT") {
-          console.warn(`[Realtime] Subscription timed out for ${gameType}`);
-        }
-      });
+      .subscribe();
 
     return () => {
       clearInterval(interval);
@@ -4619,10 +5823,6 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
       setRoundTransitionPending(true);
 
       // 서버에 라운드 처리 요청 (재시도 로직 포함)
-      console.log(
-        `[GameTick] Calling game_tick_client for round ${currentRoundNumber}`,
-      );
-
       const callGameTick = async (retryCount = 0): Promise<void> => {
         try {
           const result = await supabase.rpc("game_tick_client", {
@@ -4657,32 +5857,24 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
           if (data?.skipped) {
             // Lock이 걸려있으면 재시도 (50ms 간격, 최대 80회 = 4초)
             if (retryCount < 80) {
-              console.log(`[GameTick] Skipped (lock), retry ${retryCount + 1}`);
               await new Promise((r) => setTimeout(r, 50));
               return callGameTick(retryCount + 1);
             }
           } else if (!hasSettled && !hasCreated) {
             // 아무것도 처리되지 않았으면 재시도 (50ms 간격, 최대 80회 = 4초)
             if (retryCount < 80) {
-              console.log(
-                `[GameTick] Nothing processed, retry ${retryCount + 1}`,
-              );
               await new Promise((r) => setTimeout(r, 50));
               return callGameTick(retryCount + 1);
             }
           }
 
           if (hasSettled) {
-            console.log(`[GameTick] Settled:`, data.settled);
             fetchCurrentRound();
           }
 
           if (hasCreated) {
-            console.log(`[GameTick] Created:`, data.created);
             fetchCurrentRound();
           }
-
-          console.log(`[GameTick] completed after ${retryCount} retries`, data);
         } catch (e) {
           console.error("game_tick_client exception:", e);
           if (retryCount < 30) {
@@ -4706,13 +5898,12 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         const newRoundNumber = previousRoundNumberRef.current;
         const newCompletedRound = previousCompletedRoundRef.current;
         const roundChanged = newRoundNumber !== currentRoundNumber;
+        // string 타입 round_number 비교 - 현재 라운드가 완료되었는지 확인
         const completedRoundChanged =
-          newCompletedRound !== null && newCompletedRound >= currentRoundNumber;
+          newCompletedRound !== null &&
+          newCompletedRound === currentRoundNumber;
 
         if (roundChanged || completedRoundChanged || pollCount >= maxPolls) {
-          console.log(
-            `[GameTick] Polling complete: roundChanged=${roundChanged}, completedChanged=${completedRoundChanged}, pollCount=${pollCount}`,
-          );
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
@@ -4799,10 +5990,6 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
       noActiveRoundTriggerRef.current = true;
       lastNoActiveRoundTriggerRef.current = now;
 
-      console.log(
-        `[GameTick] No active round detected, calling game_tick_client to create new round`,
-      );
-
       const createNewRound = async () => {
         try {
           const result = await supabase.rpc("game_tick_client", {
@@ -4818,10 +6005,6 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
             const data = result.data as {
               created?: any[];
             } | null;
-
-            if (data?.created && data.created.length > 0) {
-              console.log(`[GameTick] New round created:`, data.created);
-            }
 
             // 새 라운드 데이터 fetch
             fetchCurrentRound();
@@ -4943,6 +6126,8 @@ export function useBettingRoundBetCount(gameType: "powerball" | "ladder") {
 export function usePlaceBet() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const lastBetTimeRef = useRef<number>(0);
+  const THROTTLE_MS = 2000; // 2초 쓰로틀링
 
   const resolveGameSettings = async (gameType: string) => {
     const { data, error: settingsError } = await supabase
@@ -4999,7 +6184,15 @@ export function usePlaceBet() {
     roundId: string,
     betType: string,
     betAmount: number,
+    ipAddress?: string,
   ) => {
+    // 쓰로틀링 체크 - 연속 클릭 방지 (조용히 무시)
+    const now = Date.now();
+    if (now - lastBetTimeRef.current < THROTTLE_MS || isLoading) {
+      return { success: true, data: null, throttled: true };
+    }
+    lastBetTimeRef.current = now;
+
     setIsLoading(true);
     setError(null);
 
@@ -5077,6 +6270,7 @@ export function usePlaceBet() {
         p_bet_type: betType,
         p_amount: betAmount,
         p_odds: appliedOdds,
+        p_ip_address: ipAddress || null,
       });
 
       if (betError || !betId) {
@@ -5558,36 +6752,83 @@ export function useAdminPaymentRequests(adminId?: string) {
     fetchRequests();
   }, [fetchRequests]);
 
+  // 실시간 구독 + 폴링 백업 (5초 간격)
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let pollingId: ReturnType<typeof setInterval> | null = null;
+
     const scheduleRefetch = () => {
-      if (timeoutId) return;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       timeoutId = setTimeout(() => {
         timeoutId = null;
         void fetchRequests();
-      }, 300);
+      }, 100);
     };
 
-    const channel = supabaseAdmin
-      .channel("admin-payment-requests")
+    const channelName = `admin-payment-requests`;
+    const channel = supabase
+      .channel(channelName)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "deposit_requests" },
-        () => scheduleRefetch(),
+        { event: "INSERT", schema: "public", table: "deposit_requests" },
+        () => {
+          scheduleRefetch();
+        },
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "withdrawal_requests" },
-        () => scheduleRefetch(),
+        { event: "UPDATE", schema: "public", table: "deposit_requests" },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "deposit_requests" },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "withdrawal_requests" },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "withdrawal_requests" },
+        () => {
+          scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "withdrawal_requests" },
+        () => {
+          scheduleRefetch();
+        },
       )
       .subscribe();
+
+    // 폴링 백업: 5초마다 데이터 새로고침 (실시간 구독 실패 시 대비)
+    pollingId = setInterval(() => {
+      void fetchRequests();
+    }, 5000);
 
     return () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = null;
       }
-      void supabaseAdmin.removeChannel(channel);
+      if (pollingId) {
+        clearInterval(pollingId);
+        pollingId = null;
+      }
+      void supabase.removeChannel(channel);
     };
   }, [fetchRequests]);
 
@@ -5620,13 +6861,13 @@ export function useAdminPaymentRequests(adminId?: string) {
         return { error: null };
       }
 
-      const creditAmount =
-        (approvedRequest.amount || 0) + (approvedRequest.bonus_amount ?? 0);
+      const depositAmount = approvedRequest.amount || 0;
+      const bonusAmount = approvedRequest.bonus_amount ?? 0;
 
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
+      // 1. 입금액 트랜잭션 생성 (charge 타입)
       const { error: addPointsError } = await supabaseAdmin.rpc("add_points", {
         p_user_id: approvedRequest.user_id,
-        p_amount: creditAmount,
+        p_amount: depositAmount,
         p_type: "charge",
         p_reference_id: approvedRequest.id,
         p_description: "입금 승인",
@@ -5634,6 +6875,21 @@ export function useAdminPaymentRequests(adminId?: string) {
 
       if (addPointsError) {
         throw addPointsError;
+      }
+
+      // 2. 보너스가 있을 경우 별도의 bonus 타입 트랜잭션 생성
+      if (bonusAmount > 0) {
+        const { error: addBonusError } = await supabaseAdmin.rpc("add_points", {
+          p_user_id: approvedRequest.user_id,
+          p_amount: bonusAmount,
+          p_type: "bonus",
+          p_reference_id: approvedRequest.id,
+          p_description: `충전 보너스 (${depositAmount.toLocaleString()}원 충전)`,
+        });
+
+        if (addBonusError) {
+          throw addBonusError;
+        }
       }
 
       // 관리자 클라이언트 사용 (RLS 스코프 준수)
@@ -5729,48 +6985,19 @@ export function useAdminPaymentRequests(adminId?: string) {
         return { error: null };
       }
 
-      const debitAmount = approvedRequest.amount || 0;
-
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
-      const { data: user, error: userError } = await supabaseAdmin
-        .from("user_profiles")
-        .select("points")
-        .eq("id", approvedRequest.user_id)
-        .single();
-
-      if (userError || !user) {
-        throw userError ?? new Error("사용자 정보를 찾을 수 없습니다.");
-      }
-
-      const balanceBefore = user.points ?? 0;
-
-      if (balanceBefore < debitAmount) {
-        // 관리자 클라이언트 사용 (RLS 스코프 준수)
-        await supabaseAdmin
-          .from("withdrawal_requests")
-          .update({
-            status: "pending",
-            processed_at: null,
-            processed_by: null,
-          })
-          .eq("id", approvedRequest.id);
-        throw new Error(
-          "사용자 포인트가 부족하여 출금 요청을 승인할 수 없습니다.",
-        );
-      }
-
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
-      const { error: addPointsError } = await supabaseAdmin.rpc("add_points", {
-        p_user_id: approvedRequest.user_id,
-        p_amount: -debitAmount,
-        p_type: "withdraw",
-        p_reference_id: approvedRequest.id,
-        p_description: "출금 승인",
+      // 포인트는 이미 출금 신청 시 차감되었으므로 상태만 변경
+      // 출금 완료 트랜잭션 기록 (통계 집계용)
+      await supabaseAdmin.from("point_transactions").insert({
+        user_id: approvedRequest.user_id,
+        type: "withdraw",
+        amount: -approvedRequest.amount,
+        balance_before: null,
+        balance_after: null,
+        related_id: approvedRequest.id,
+        related_type: "withdrawal_request",
+        description: "출금 완료",
+        admin_id: processedBy,
       });
-
-      if (addPointsError) {
-        throw addPointsError;
-      }
 
       // 관리자 클라이언트 사용 (RLS 스코프 준수)
       await supabaseAdmin.from("admin_action_logs").insert({
@@ -5801,7 +7028,19 @@ export function useAdminPaymentRequests(adminId?: string) {
         throw new Error("관리자 세션 정보가 없습니다.");
       }
 
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
+      // 1. 먼저 출금 신청 정보 조회 (환급할 금액 확인)
+      const { data: withdrawalRequest, error: fetchError } = await supabaseAdmin
+        .from("withdrawal_requests")
+        .select("*")
+        .eq("id", id)
+        .eq("status", "pending")
+        .single();
+
+      if (fetchError || !withdrawalRequest) {
+        throw fetchError ?? new Error("출금 신청을 찾을 수 없습니다.");
+      }
+
+      // 2. 관리자 클라이언트 사용 (RLS 스코프 준수) - 상태 업데이트
       const { error } = await supabaseAdmin
         .from("withdrawal_requests")
         .update({
@@ -5813,20 +7052,88 @@ export function useAdminPaymentRequests(adminId?: string) {
         .eq("id", id)
         .eq("status", "pending");
 
-      if (!error) await fetchRequests();
-
-      if (!error) {
-        // 관리자 클라이언트 사용 (RLS 스코프 준수)
-        await supabaseAdmin.from("admin_action_logs").insert({
-          action: "reject_withdrawal",
-          admin_id: processedBy,
-          target_id: id,
-          target_type: "withdrawal_requests",
-          ip_address: null,
-          changes: { reason: reason ?? null },
-        });
+      if (error) {
+        throw error;
       }
-      return { error };
+
+      // 3. 포인트 환급 (출금 신청 시 차감된 포인트 복원) - 직접 업데이트
+      const refundAmount = withdrawalRequest.amount || 0;
+      const userId = withdrawalRequest.user_id;
+
+      // 현재 포인트 조회
+      const { data: userProfile, error: userFetchError } = await supabaseAdmin
+        .from("user_profiles")
+        .select("points")
+        .eq("id", userId)
+        .single();
+
+      if (userFetchError || !userProfile) {
+        // 환급 실패 시 상태 롤백
+        await supabaseAdmin
+          .from("withdrawal_requests")
+          .update({
+            status: "pending",
+            processed_at: null,
+            processed_by: null,
+            reject_reason: null,
+          })
+          .eq("id", id);
+        throw userFetchError ?? new Error("사용자 정보를 찾을 수 없습니다.");
+      }
+
+      const currentPoints = userProfile.points ?? 0;
+      const newPoints = currentPoints + refundAmount;
+
+      // 포인트 업데이트
+      const { error: refundError } = await supabaseAdmin
+        .from("user_profiles")
+        .update({ points: newPoints, updated_at: new Date().toISOString() })
+        .eq("id", userId);
+
+      if (refundError) {
+        // 환급 실패 시 상태 롤백
+        await supabaseAdmin
+          .from("withdrawal_requests")
+          .update({
+            status: "pending",
+            processed_at: null,
+            processed_by: null,
+            reject_reason: null,
+          })
+          .eq("id", id);
+        throw refundError;
+      }
+
+      // 포인트 트랜잭션 기록
+      await supabaseAdmin.from("point_transactions").insert({
+        user_id: userId,
+        type: "withdraw_refund",
+        amount: refundAmount,
+        balance_before: currentPoints,
+        balance_after: newPoints,
+        related_id: id,
+        related_type: "withdrawal_request",
+        description: `출금 거절 환급${reason ? ` (사유: ${reason})` : ""}`,
+        admin_id: processedBy,
+      });
+
+      await fetchRequests();
+
+      // 4. 관리자 액션 로그 기록
+      await supabaseAdmin.from("admin_action_logs").insert({
+        action: "reject_withdrawal",
+        admin_id: processedBy,
+        target_id: id,
+        target_type: "withdrawal_requests",
+        ip_address: null,
+        changes: {
+          reason: reason ?? null,
+          refundAmount: refundAmount,
+          userId: withdrawalRequest.user_id,
+        },
+      });
+
+      return { error: null };
     } catch (err) {
       const errorObj = err as Error;
       setError(errorObj);

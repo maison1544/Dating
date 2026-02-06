@@ -1,6 +1,9 @@
 import { AdminLayout } from "../components/AdminLayout";
+import { useDebounce } from "../hooks/useDebounce";
 import { UserDetailModal } from "../components/UserDetailModal";
-import { useState, useEffect } from "react";
+import { SuspendConfirmModal } from "../components/SuspendConfirmModal";
+import { AdminPagination } from "../components/common/AdminPagination";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Search,
   Filter,
@@ -22,8 +25,9 @@ import {
 } from "../hooks/useSupabase";
 import { useAuth } from "../contexts/AuthContext";
 import { useAlert } from "../contexts/AlertContext";
-import { formatKST } from "../../lib/dateUtils";
+import { formatDatetime, getTodayKST } from "../../lib/dateUtils";
 import { getPublicUrlForPath } from "../../lib/storage";
+import { CsvDownloadButton } from "../components/CsvDownloadButton";
 
 export function AdminUsersPage() {
   const { adminAccount, isAdmin } = useAuth();
@@ -36,8 +40,10 @@ export function AdminUsersPage() {
   } = useUsers();
   const {
     logs: approvalLogs,
+    totalCount: approvalLogsTotalCount,
     isLoading: logsLoading,
     createLog,
+    refetch: refetchLogs,
   } = useApprovalLogs();
 
   const { adjustUserPoints, setUserStatus } = useAdminUserActions(
@@ -48,8 +54,13 @@ export function AdminUsersPage() {
   void usersLoading;
 
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState("all");
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+
+  // Pagination state for approval logs
+  const [logPage, setLogPage] = useState(1);
+  const logsPerPage = 10;
 
   type SortKey =
     | "name"
@@ -62,147 +73,183 @@ export function AdminUsersPage() {
   const [sortKey, setSortKey] = useState<SortKey>("joined");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const approvalLogsFormatted = approvalLogs.map((log: any) => {
-    const changes = log.changes;
-    const record: Record<string, unknown> =
-      typeof changes === "object" && changes !== null && !Array.isArray(changes)
-        ? (changes as Record<string, unknown>)
-        : {};
+  // 승인 로그 포맷팅 (useMemo로 최적화)
+  const approvalLogsFormatted = useMemo(
+    () =>
+      approvalLogs.map((log: any) => {
+        const changes = log.changes;
+        const record: Record<string, unknown> =
+          typeof changes === "object" &&
+          changes !== null &&
+          !Array.isArray(changes)
+            ? (changes as Record<string, unknown>)
+            : {};
 
-    const nickname =
-      typeof record.nickname === "string"
-        ? record.nickname
-        : typeof record.user_nickname === "string"
-          ? record.user_nickname
+        const nickname =
+          typeof record.nickname === "string"
+            ? record.nickname
+            : typeof record.user_nickname === "string"
+              ? record.user_nickname
+              : "";
+        const name =
+          typeof record.name === "string"
+            ? record.name
+            : typeof record.user_name === "string"
+              ? record.user_name
+              : "";
+        const email =
+          typeof record.email === "string"
+            ? record.email
+            : typeof record.user_email === "string"
+              ? record.user_email
+              : "";
+        const phone =
+          typeof record.phone === "string"
+            ? record.phone
+            : typeof record.user_phone === "string"
+              ? record.user_phone
+              : "";
+        const bank =
+          typeof record.bank === "string"
+            ? record.bank
+            : typeof record.user_bank === "string"
+              ? record.user_bank
+              : "";
+
+        const accountNumber =
+          typeof record.account_number === "string"
+            ? record.account_number
+            : typeof record.accountNumber === "string"
+              ? record.accountNumber
+              : typeof record.user_account_number === "string"
+                ? record.user_account_number
+                : "";
+        const accountHolder =
+          typeof record.account_holder === "string"
+            ? record.account_holder
+            : typeof record.accountHolder === "string"
+              ? record.accountHolder
+              : typeof record.user_account_holder === "string"
+                ? record.user_account_holder
+                : "";
+
+        // Get suspension/rejection reason from changes
+        const reason = typeof record.reason === "string" ? record.reason : "";
+
+        const action =
+          log.action === "approve_user"
+            ? "승인"
+            : log.action === "reject_user"
+              ? "거절"
+              : log.action === "suspend_user"
+                ? "정지"
+                : log.action === "unsuspend_user"
+                  ? "정지해제"
+                  : log.action;
+
+        const actionDate = log.created_at
+          ? formatDatetime(log.created_at, "")
           : "";
-    const name =
-      typeof record.name === "string"
-        ? record.name
-        : typeof record.user_name === "string"
-          ? record.user_name
-          : "";
-    const email =
-      typeof record.email === "string"
-        ? record.email
-        : typeof record.user_email === "string"
-          ? record.user_email
-          : "";
-    const phone =
-      typeof record.phone === "string"
-        ? record.phone
-        : typeof record.user_phone === "string"
-          ? record.user_phone
-          : "";
-    const bank =
-      typeof record.bank === "string"
-        ? record.bank
-        : typeof record.user_bank === "string"
-          ? record.user_bank
-          : "";
 
-    const accountNumber =
-      typeof record.account_number === "string"
-        ? record.account_number
-        : typeof record.accountNumber === "string"
-          ? record.accountNumber
-          : typeof record.user_account_number === "string"
-            ? record.user_account_number
-            : "";
-    const accountHolder =
-      typeof record.account_holder === "string"
-        ? record.account_holder
-        : typeof record.accountHolder === "string"
-          ? record.accountHolder
-          : typeof record.user_account_holder === "string"
-            ? record.user_account_holder
-            : "";
+        const actionBy =
+          typeof (log as any)?.admins?.name === "string"
+            ? ((log as any).admins.name as string)
+            : log.admin_id;
 
-    const action =
-      log.action === "approve_user"
-        ? "승인"
-        : log.action === "reject_user"
-          ? "거절"
-          : log.action === "suspend_user"
-            ? "정지"
-            : log.action;
+        const signupIp =
+          typeof record.signup_ip === "string"
+            ? record.signup_ip
+            : typeof record.join_ip === "string"
+              ? record.join_ip
+              : "";
+        const signupDate =
+          typeof record.created_at === "string"
+            ? formatDatetime(record.created_at, "")
+            : typeof record.signup_date === "string"
+              ? formatDatetime(record.signup_date, "")
+              : "";
 
-    const actionDate = log.created_at
-      ? formatKST(log.created_at, "datetime")
-      : "";
+        return {
+          id: log.id,
+          nickname,
+          name,
+          email,
+          phone,
+          bank,
+          accountNumber,
+          accountHolder,
+          action,
+          actionDate,
+          actionBy,
+          reason,
+          signupIp,
+          signupDate,
+        };
+      }),
+    [approvalLogs],
+  );
 
-    const actionBy =
-      typeof (log as any)?.admins?.name === "string"
-        ? ((log as any).admins.name as string)
-        : log.admin_id;
+  const formatDate = formatDatetime;
 
-    return {
-      id: log.id,
-      nickname,
-      name,
-      email,
-      phone,
-      bank,
-      accountNumber,
-      accountHolder,
-      action,
-      actionDate,
-      actionBy,
-    };
-  });
+  // 가입 승인 대기 사용자 (useMemo로 최적화)
+  const pendingApprovals = useMemo(
+    () =>
+      dbUsers
+        .filter((u: any) => u.status === "pending")
+        .map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          nickname: u.nickname || "",
+          email: u.email,
+          phone: u.phone || "",
+          createdAt: u.created_at || null,
+          joined: formatDate(u.created_at),
+          joinIp: u.join_ip ?? (u as any).signup_ip ?? "",
+          bank: u.bank || "",
+          accountNumber: u.account_number || "",
+          accountHolder: u.account_holder || "",
+          referralCode: u.referral_code || "",
+        })),
+    [dbUsers],
+  );
 
-  const formatDate = (value: string | null | undefined) => {
-    if (!value) return "-";
-    return formatKST(value, "datetime") || "-";
-  };
-
-  // 가입 승인 대기 사용자 (status가 pending인 사용자)
-  const pendingApprovals = dbUsers
-    .filter((u: any) => u.status === "pending")
-    .map((u: any) => ({
-      id: u.id,
-      name: u.name,
-      nickname: u.nickname || "",
-      email: u.email,
-      phone: u.phone || "",
-      joined: formatDate(u.created_at),
-      joinIp: u.join_ip ?? (u as any).signup_ip ?? "",
-      bank: u.bank || "",
-      accountNumber: u.account_number || "",
-      accountHolder: u.account_holder || "",
-      referralCode: u.referral_code || "",
-    }));
-
-  // 활성 사용자 목록
-  const users = dbUsers
-    .filter((u: any) => u.status !== "pending")
-    .map((u: any) => ({
-      id: u.id,
-      name: u.name,
-      nickname: u.nickname || "",
-      email: u.email,
-      phone: u.phone || "",
-      createdAt: u.created_at || null,
-      lastLoginAt: u.last_login_at || null,
-      joined: formatDate(u.created_at),
-      lastLogin: formatDate(u.last_login_at),
-      joinIp: u.join_ip ?? (u as any).signup_ip ?? "",
-      lastIp: u.last_login_ip ?? "",
-      status:
-        u.status === "active"
-          ? "활성"
-          : u.status === "suspended"
-            ? "정지"
-            : u.status || "",
-      points: u.points || 0,
-      online: u.is_online || false,
-      bank: u.bank || "",
-      accountNumber: u.account_number || "",
-      accountHolder: u.account_holder || "",
-      revenue: u.total_spent || 0,
-      referralCode: u.referral_code || "",
-      profileImage:
-        getPublicUrlForPath("profile-images", u.profile_image) || null,
-    }));
+  // 활성 사용자 목록 (useMemo로 최적화)
+  const users = useMemo(
+    () =>
+      dbUsers
+        .filter((u: any) => u.status !== "pending")
+        .map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          nickname: u.nickname || "",
+          email: u.email,
+          phone: u.phone || "",
+          createdAt: u.created_at || null,
+          lastLoginAt: u.last_login_at || null,
+          joined: formatDate(u.created_at),
+          lastLogin: formatDate(u.last_login_at),
+          joinIp: u.join_ip ?? (u as any).signup_ip ?? "",
+          lastIp: u.last_login_ip ?? "",
+          status:
+            u.status === "active"
+              ? "활성"
+              : u.status === "suspended"
+                ? "정지"
+                : u.status === "rejected"
+                  ? "승인거절"
+                  : u.status || "",
+          points: u.points || 0,
+          online: u.is_online || false,
+          bank: u.bank || "",
+          accountNumber: u.account_number || "",
+          accountHolder: u.account_holder || "",
+          revenue: u.total_spent || 0,
+          referralCode: u.referral_code || "",
+          profileImage:
+            getPublicUrlForPath("profile-images", u.profile_image) || null,
+        })),
+    [dbUsers],
+  );
 
   const toggleSort = (key: SortKey) => {
     setSortKey((prev) => {
@@ -217,6 +264,10 @@ export function AdminUsersPage() {
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   // 프로필 이미지 팝업 state
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
@@ -234,6 +285,8 @@ export function AdminUsersPage() {
   const [statusChangeAction, setStatusChangeAction] = useState<"ban" | "unban">(
     "ban",
   );
+  const [suspensionReason, setSuspensionReason] = useState<string | null>(null);
+  const [statusChangeReasonInput, setStatusChangeReasonInput] = useState("");
 
   // 회원 가입 승인/거절 팝업 상태
   const [showApprovalConfirmModal, setShowApprovalConfirmModal] =
@@ -268,7 +321,7 @@ export function AdminUsersPage() {
               deleted_at: null,
             })
           : await updateUser(applicant.id, {
-              status: "deleted",
+              status: "rejected",
               deleted_at: new Date().toISOString(),
             });
 
@@ -291,6 +344,8 @@ export function AdminUsersPage() {
           bank: applicant.bank,
           account_number: applicant.accountNumber,
           account_holder: applicant.accountHolder,
+          signup_ip: applicant.joinIp,
+          created_at: applicant.createdAt,
         },
       });
 
@@ -317,63 +372,148 @@ export function AdminUsersPage() {
     }
   };
 
-  const filteredUsers = users.filter((user) => {
-    const q = searchTerm.trim().toLowerCase();
-    const matchesSearch =
-      !q ||
-      user.name.toLowerCase().includes(q) ||
-      user.nickname.toLowerCase().includes(q) ||
-      user.email.toLowerCase().includes(q) ||
-      String(user.joinIp || "")
-        .toLowerCase()
-        .includes(q) ||
-      String(user.lastIp || "")
-        .toLowerCase()
-        .includes(q);
-    const matchesStatus =
-      statusFilter === "all" || user.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const handleStatusChangeConfirm = useCallback(async () => {
+    if (!statusChangeUser) return;
 
-  const sortedUsers = [...filteredUsers].sort((a, b) => {
-    const dir = sortDir === "asc" ? 1 : -1;
-
-    const safeString = (v: unknown) => String(v ?? "").toLowerCase();
-    const dateValue = (v: string | null) => (v ? new Date(v).getTime() : 0);
-    const statusRank = (s: string) =>
-      s === "활성" ? 0 : s === "정지" ? 1 : s === "대기" ? 2 : 3;
-
-    let cmp = 0;
-    switch (sortKey) {
-      case "name":
-        cmp = safeString(a.nickname || a.name).localeCompare(
-          safeString(b.nickname || b.name),
-        );
-        break;
-      case "joined":
-        cmp = dateValue(a.createdAt) - dateValue(b.createdAt);
-        break;
-      case "lastLogin":
-        cmp = dateValue(a.lastLoginAt) - dateValue(b.lastLoginAt);
-        break;
-      case "joinIp":
-        cmp = safeString(a.joinIp).localeCompare(safeString(b.joinIp));
-        break;
-      case "lastIp":
-        cmp = safeString(a.lastIp).localeCompare(safeString(b.lastIp));
-        break;
-      case "status":
-        cmp = statusRank(a.status) - statusRank(b.status);
-        break;
-      case "points":
-        cmp = Number(a.points || 0) - Number(b.points || 0);
-        break;
-      default:
-        cmp = 0;
+    if (!isAdmin || !adminAccount?.id) {
+      showAlert({
+        title: "권한 오류",
+        message: "관리자 권한이 필요합니다.",
+        type: "warning",
+      });
+      return;
     }
-    if (cmp !== 0) return cmp * dir;
-    return safeString(a.id).localeCompare(safeString(b.id));
-  });
+
+    try {
+      const nextStatus = statusChangeAction === "ban" ? "suspended" : "active";
+
+      await setUserStatus({
+        userId: statusChangeUser.id,
+        status: nextStatus,
+        reason:
+          statusChangeAction === "ban"
+            ? statusChangeReasonInput || undefined
+            : undefined,
+      });
+
+      await Promise.all([refetchUsers(), refetchLogs()]);
+
+      showAlert({
+        title: "처리 완료",
+        message:
+          statusChangeAction === "ban"
+            ? `${statusChangeUser.name} 회원이 정지되었습니다.`
+            : `${statusChangeUser.name} 회원의 정지가 해제되었습니다.`,
+        type: "success",
+      });
+      setShowStatusChangeModal(false);
+      setStatusChangeUser(null);
+      setSuspensionReason(null);
+      setStatusChangeReasonInput("");
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "처리 중 오류가 발생했습니다";
+      showAlert({ title: "오류", message: msg, type: "error" });
+    }
+  }, [
+    adminAccount?.id,
+    isAdmin,
+    refetchLogs,
+    refetchUsers,
+    setUserStatus,
+    showAlert,
+    statusChangeAction,
+    statusChangeReasonInput,
+    statusChangeUser,
+  ]);
+
+  // 필터링된 사용자 목록 (useMemo로 최적화)
+  const filteredUsers = useMemo(
+    () =>
+      users.filter((user) => {
+        const q = debouncedSearchTerm.trim().toLowerCase();
+        const matchesSearch =
+          !q ||
+          user.name.toLowerCase().includes(q) ||
+          user.nickname.toLowerCase().includes(q) ||
+          user.email.toLowerCase().includes(q) ||
+          String(user.joinIp || "")
+            .toLowerCase()
+            .includes(q) ||
+          String(user.lastIp || "")
+            .toLowerCase()
+            .includes(q);
+        const matchesStatus =
+          statusFilter === "all" || user.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      }),
+    [users, debouncedSearchTerm, statusFilter],
+  );
+
+  // 정렬된 사용자 목록 (useMemo로 최적화)
+  const sortedUsers = useMemo(
+    () =>
+      [...filteredUsers].sort((a, b) => {
+        const dir = sortDir === "asc" ? 1 : -1;
+
+        const safeString = (v: unknown) => String(v ?? "").toLowerCase();
+        const dateValue = (v: string | null) => (v ? new Date(v).getTime() : 0);
+        const statusRank = (s: string) =>
+          s === "활성"
+            ? 0
+            : s === "정지"
+              ? 1
+              : s === "승인거절"
+                ? 2
+                : s === "대기"
+                  ? 3
+                  : 4;
+
+        let cmp = 0;
+        switch (sortKey) {
+          case "name":
+            cmp = safeString(a.nickname || a.name).localeCompare(
+              safeString(b.nickname || b.name),
+            );
+            break;
+          case "joined":
+            cmp = dateValue(a.createdAt) - dateValue(b.createdAt);
+            break;
+          case "lastLogin":
+            cmp = dateValue(a.lastLoginAt) - dateValue(b.lastLoginAt);
+            break;
+          case "joinIp":
+            cmp = safeString(a.joinIp).localeCompare(safeString(b.joinIp));
+            break;
+          case "lastIp":
+            cmp = safeString(a.lastIp).localeCompare(safeString(b.lastIp));
+            break;
+          case "status":
+            cmp = statusRank(a.status) - statusRank(b.status);
+            break;
+          case "points":
+            cmp = Number(a.points || 0) - Number(b.points || 0);
+            break;
+          default:
+            cmp = 0;
+        }
+        if (cmp !== 0) return cmp * dir;
+        return safeString(a.id).localeCompare(safeString(b.id));
+      }),
+    [filteredUsers, sortKey, sortDir],
+  );
+
+  // 페이지네이션 계산
+  const totalPages = Math.ceil(sortedUsers.length / itemsPerPage);
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sortedUsers.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedUsers, currentPage, itemsPerPage]);
+
+  // 필터 변경 시 페이지 초기화
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm, statusFilter]);
 
   const SortIcon = ({ column }: { column: SortKey }) => {
     const active = sortKey === column;
@@ -390,53 +530,23 @@ export function AdminUsersPage() {
   // 엔터키로 정지/정지 해제 확인
   useEffect(() => {
     if (!showStatusChangeModal || !statusChangeUser) return;
+    if (statusChangeAction === "ban") return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        void (async () => {
-          try {
-            if (!isAdmin || !adminAccount?.id) {
-              showAlert({
-                title: "권한 오류",
-                message: "관리자 권한이 필요합니다.",
-                type: "warning",
-              });
-              return;
-            }
-
-            const nextStatus =
-              statusChangeAction === "ban" ? "suspended" : "active";
-            await setUserStatus({
-              userId: statusChangeUser.id,
-              status: nextStatus,
-              reason: undefined,
-            });
-            await refetchUsers();
-            showAlert({
-              title: "처리 완료",
-              message:
-                statusChangeAction === "ban"
-                  ? `${statusChangeUser.name} 회원이 정지되었습니다.`
-                  : `${statusChangeUser.name} 회원의 정지가 해제되었습니다.`,
-              type: "success",
-            });
-            setShowStatusChangeModal(false);
-            setStatusChangeUser(null);
-          } catch (err) {
-            const msg =
-              err instanceof Error
-                ? err.message
-                : "처리 중 오류가 발생했습니다";
-            showAlert({ title: "오류", message: msg, type: "error" });
-          }
-        })();
+        void handleStatusChangeConfirm();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showStatusChangeModal, statusChangeUser, statusChangeAction]);
+  }, [
+    handleStatusChangeConfirm,
+    showStatusChangeModal,
+    statusChangeUser,
+    statusChangeAction,
+  ]);
 
   // 엔터키로 회원 가입 승인/거절 확인
   useEffect(() => {
@@ -459,6 +569,8 @@ export function AdminUsersPage() {
         return "bg-green-500/20 text-green-500";
       case "정지":
         return "bg-red-500/20 text-red-500";
+      case "승인거절":
+        return "bg-orange-500/20 text-orange-500";
       default:
         return "bg-gray-500/20 text-gray-500";
     }
@@ -482,18 +594,61 @@ export function AdminUsersPage() {
                 정지 {users.filter((u) => u.status === "정지").length}명
               </span>
               <span className="text-gray-500">|</span>
+              <span className="text-orange-400">
+                승인거절 {users.filter((u) => u.status === "승인거절").length}명
+              </span>
+              <span className="text-gray-500">|</span>
               <span className="text-blue-400">
                 현재접속 {users.filter((u) => u.online).length}명
               </span>
             </div>
           </div>
-          <button
-            onClick={() => setShowApprovalModal(true)}
-            className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
-          >
-            <UserCheck size={20} />
-            회원 승인 대기 ({pendingApprovals.length})
-          </button>
+          <div className="flex items-center gap-2">
+            <CsvDownloadButton
+              data={sortedUsers.map((u) => ({
+                id: u.id,
+                name: u.name,
+                nickname: u.nickname,
+                email: u.email,
+                phone: u.phone,
+                status: u.status,
+                points: u.points,
+                joined: u.joined,
+                lastLogin: u.lastLogin,
+                joinIp: u.joinIp,
+                lastIp: u.lastIp,
+                bank: u.bank,
+                accountNumber: u.accountNumber,
+                accountHolder: u.accountHolder,
+                online: u.online ? "접속중" : "오프라인",
+              }))}
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "name", label: "이름" },
+                { key: "nickname", label: "닉네임" },
+                { key: "email", label: "이메일" },
+                { key: "phone", label: "전화번호" },
+                { key: "status", label: "상태" },
+                { key: "points", label: "포인트" },
+                { key: "joined", label: "가입일" },
+                { key: "lastLogin", label: "최근로그인" },
+                { key: "joinIp", label: "가입IP" },
+                { key: "lastIp", label: "최근IP" },
+                { key: "bank", label: "은행" },
+                { key: "accountNumber", label: "계좌번호" },
+                { key: "accountHolder", label: "예금주" },
+                { key: "online", label: "접속상태" },
+              ]}
+              filename={`회원목록_${getTodayKST()}.csv`}
+            />
+            <button
+              onClick={() => setShowApprovalModal(true)}
+              className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
+            >
+              <UserCheck size={20} />
+              회원 승인 대기 ({pendingApprovals.length})
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -525,6 +680,7 @@ export function AdminUsersPage() {
                 <option value="all">전체 상태</option>
                 <option value="활성">활성</option>
                 <option value="정지">정지</option>
+                <option value="승인거절">승인거절</option>
               </select>
             </div>
           </div>
@@ -598,51 +754,53 @@ export function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {sortedUsers.map((user) => (
+                {paginatedUsers.map((user) => (
                   <tr
                     key={user.id}
                     className="hover:bg-gray-800/50 transition-colors"
                   >
-                    <td className="px-2 text-center h-16">
-                      <div className="flex items-center justify-center gap-3 h-full">
-                        <div className="relative flex-shrink-0">
-                          {user.profileImage ? (
-                            <img
-                              src={user.profileImage}
-                              alt={user.name}
-                              className="w-10 h-10 rounded-full object-cover cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedProfileImage(
-                                  user.profileImage || "",
-                                );
-                                setSelectedProfileName(user.name);
-                                setShowProfileImageModal(true);
-                              }}
-                            />
-                          ) : (
-                            <div className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center text-gray-400">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="w-6 h-6"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                                />
-                              </svg>
-                            </div>
-                          )}
-                          {user.online && (
-                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-gray-900 rounded-full"></span>
-                          )}
+                    <td className="px-4 h-16">
+                      <div className="flex items-center gap-3 h-full">
+                        <div className="w-10 h-10 flex-shrink-0">
+                          <div className="relative w-full h-full">
+                            {user.profileImage ? (
+                              <img
+                                src={user.profileImage}
+                                alt={user.name}
+                                className="w-10 h-10 rounded-full object-cover cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProfileImage(
+                                    user.profileImage || "",
+                                  );
+                                  setSelectedProfileName(user.name);
+                                  setShowProfileImageModal(true);
+                                }}
+                              />
+                            ) : (
+                              <div className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center text-gray-400">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="w-6 h-6"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                  />
+                                </svg>
+                              </div>
+                            )}
+                            {user.online && (
+                              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-gray-900 rounded-full"></span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-left">
+                        <div className="text-left min-w-0">
                           <p className="text-white text-sm leading-tight">
                             {user.nickname}{" "}
                             <span className="text-white text-sm">
@@ -712,22 +870,63 @@ export function AdminUsersPage() {
                             onClick={() => {
                               setStatusChangeUser(user);
                               setStatusChangeAction("ban");
+                              setStatusChangeReasonInput("");
+                              setSuspensionReason(null);
                               setShowStatusChangeModal(true);
                             }}
                             className="p-2 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-red-500"
-                            title="정지"
+                            title="회원 정지"
                           >
                             <Ban size={16} />
                           </button>
-                        ) : user.status === "정지" ? (
+                        ) : user.status === "정지" ||
+                          user.status === "승인거절" ? (
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               setStatusChangeUser(user);
                               setStatusChangeAction("unban");
+                              setStatusChangeReasonInput("");
+                              setSuspensionReason(null);
+                              // Fetch suspension/rejection reason from admin_action_logs
+                              try {
+                                const { supabaseAdmin } =
+                                  await import("../../lib/supabase");
+                                // For rejected users, check reject_user action; for suspended, check suspend_user
+                                const actionType =
+                                  user.status === "승인거절"
+                                    ? "reject_user"
+                                    : "suspend_user";
+                                const { data } = await supabaseAdmin
+                                  .from("admin_action_logs")
+                                  .select("changes")
+                                  .eq("action", actionType)
+                                  .eq("target_id", user.id)
+                                  .order("created_at", { ascending: false })
+                                  .limit(1)
+                                  .single();
+                                if (
+                                  data?.changes &&
+                                  typeof data.changes === "object"
+                                ) {
+                                  const changes = data.changes as Record<
+                                    string,
+                                    unknown
+                                  >;
+                                  if (typeof changes.reason === "string") {
+                                    setSuspensionReason(changes.reason);
+                                  }
+                                }
+                              } catch {
+                                // Ignore errors - reason is optional
+                              }
                               setShowStatusChangeModal(true);
                             }}
                             className="p-2 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-green-500"
-                            title="정지 해제"
+                            title={
+                              user.status === "승인거절"
+                                ? "승인거절 해제"
+                                : "정지 해제"
+                            }
                           >
                             <CheckCircle size={16} />
                           </button>
@@ -756,6 +955,12 @@ export function AdminUsersPage() {
               </tbody>
             </table>
           </div>
+          {/* 페이지네이션 */}
+          <AdminPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
 
@@ -941,150 +1146,56 @@ export function AdminUsersPage() {
         })()}
 
       {/* Status Change Modal - 정지/정지 해제 확인 팝업 */}
-      {showStatusChangeModal && statusChangeUser && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-md">
-            <div className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
-              <h2 className="text-white text-lg flex items-center gap-2">
-                {statusChangeAction === "ban" ? (
-                  <>
-                    <Ban size={20} className="text-red-500" />
-                    회원 정지
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle size={20} className="text-green-500" />
-                    정지 해제
-                  </>
-                )}
-              </h2>
-              <button
-                onClick={() => {
-                  setShowStatusChangeModal(false);
-                  setStatusChangeUser(null);
-                }}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="flex items-center gap-3 p-4 bg-gray-800 rounded-lg">
-                <div className="w-12 h-12 bg-indigo-500/80 rounded-full flex items-center justify-center text-white">
-                  {statusChangeUser.name[0]}
-                </div>
-                <div>
-                  <p className="text-white font-medium">
-                    {statusChangeUser.nickname} ({statusChangeUser.name})
-                  </p>
-                  <p className="text-gray-400 text-sm">
-                    {statusChangeUser.email}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-                {statusChangeAction === "ban" ? (
-                  <>
-                    <p className="text-white text-center mb-2">
-                      정말 이 회원을{" "}
-                      <span className="text-red-500 font-bold">정지</span>
-                      하시겠습니까?
-                    </p>
-                    <p className="text-gray-400 text-sm text-center">
-                      정지된 회원은 로그인 및 모든 서비스 이용이 제한됩니다.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-white text-center mb-2">
-                      이 회원의 정지를{" "}
-                      <span className="text-green-500 font-bold">해제</span>
-                      하시겠습니까?
-                    </p>
-                    <p className="text-gray-400 text-sm text-center">
-                      정지 해제 시 모든 서비스를 정상적으로 이용할 수 있습니다.
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setShowStatusChangeModal(false);
-                    setStatusChangeUser(null);
-                  }}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 rounded-lg transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={() => {
-                    void (async () => {
-                      try {
-                        if (!isAdmin || !adminAccount?.id) {
-                          showAlert({
-                            title: "권한 오류",
-                            message: "관리자 권한이 필요합니다.",
-                            type: "warning",
-                          });
-                          return;
-                        }
-
-                        const nextStatus =
-                          statusChangeAction === "ban" ? "suspended" : "active";
-
-                        await setUserStatus({
-                          userId: statusChangeUser.id,
-                          status: nextStatus,
-                          reason: undefined,
-                        });
-
-                        await refetchUsers();
-
-                        showAlert({
-                          title: "처리 완료",
-                          message:
-                            statusChangeAction === "ban"
-                              ? `${statusChangeUser.name} 회원이 정지되었습니다.`
-                              : `${statusChangeUser.name} 회원의 정지가 해제되었습니다.`,
-                          type: "success",
-                        });
-                        setShowStatusChangeModal(false);
-                        setStatusChangeUser(null);
-                      } catch (err) {
-                        const msg =
-                          err instanceof Error
-                            ? err.message
-                            : "처리 중 오류가 발생했습니다";
-                        showAlert({
-                          title: "오류",
-                          message: msg,
-                          type: "error",
-                        });
-                      }
-                    })();
-                  }}
-                  className={`flex-1 px-4 py-2.5 rounded-lg transition-colors text-white ${
-                    statusChangeAction === "ban"
-                      ? "bg-red-500/80 hover:bg-red-500"
-                      : "bg-green-500/80 hover:bg-green-500"
-                  }`}
-                >
-                  {statusChangeAction === "ban" ? "정지하기" : "해제하기"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <SuspendConfirmModal
+        isOpen={showStatusChangeModal && !!statusChangeUser}
+        title={statusChangeAction === "ban" ? "회원 정지" : "정지 해제"}
+        message={
+          statusChangeUser && (
+            <p className="text-gray-300">
+              {statusChangeAction === "ban"
+                ? `${statusChangeUser.name} 회원을 정지하시겠습니까?`
+                : statusChangeUser.status === "승인거절"
+                  ? `${statusChangeUser.name} 회원의 승인거절을 해제하시겠습니까?`
+                  : `${statusChangeUser.name} 회원의 정지를 해제하시겠습니까?`}
+            </p>
+          )
+        }
+        isSuspending={statusChangeAction === "ban"}
+        reason={statusChangeAction === "ban" ? null : suspensionReason}
+        reasonLabel={
+          statusChangeUser?.status === "승인거절" ? "거절 사유:" : "정지 사유:"
+        }
+        reasonInputValue={statusChangeReasonInput}
+        onReasonInputChange={setStatusChangeReasonInput}
+        onReasonInputKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
+            void handleStatusChangeConfirm();
+          }
+        }}
+        confirmLabel={statusChangeAction === "ban" ? "정지하기" : "확인"}
+        confirmClassName={
+          statusChangeAction === "ban"
+            ? "bg-red-500 hover:bg-red-600"
+            : "bg-green-500 hover:bg-green-600"
+        }
+        cancelLabel="취소"
+        onCancel={() => {
+          setShowStatusChangeModal(false);
+          setStatusChangeUser(null);
+          setSuspensionReason(null);
+          setStatusChangeReasonInput("");
+        }}
+        onConfirm={() => {
+          void handleStatusChangeConfirm();
+        }}
+      />
 
       {/* Approval Modal */}
       {showApprovalModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg w-full max-w-[95vw] max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between">
               <h2 className="text-white text-xl flex items-center gap-2">
                 <UserCheck size={24} />
@@ -1228,88 +1339,189 @@ export function AdminUsersPage() {
               <div>
                 <h3 className="text-white text-lg mb-4 flex items-center gap-2">
                   <Eye size={18} />
-                  승인/거절 로그 ({approvalLogsFormatted.length}건)
+                  승인/거절/정지/정지해제 로그 ({approvalLogsTotalCount}건)
                 </h3>
                 <div className="bg-gray-800 rounded-lg overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-gray-700">
                         <tr>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             닉네임(이름)
                           </th>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             이메일
                           </th>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             전화번호
                           </th>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             은행
                           </th>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             계좌번호
                           </th>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             예금주
                           </th>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             결과
                           </th>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
+                            가입 IP
+                          </th>
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
+                            가입 신청일
+                          </th>
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             처리일시
                           </th>
-                          <th className="px-4 py-3 text-center text-xs text-gray-400 uppercase">
+                          <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase whitespace-nowrap">
                             처리자
                           </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700">
-                        {approvalLogsFormatted.map((log: any) => (
-                          <tr key={log.id} className="hover:bg-gray-700/50">
-                            <td className="px-4 py-3 text-center text-sm">
-                              <div className="text-white">{log.nickname}</div>
-                              <div className="text-gray-400 text-xs">
-                                ({log.name})
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-center text-gray-300 text-sm">
-                              {log.email}
-                            </td>
-                            <td className="px-4 py-3 text-center text-gray-300 text-sm">
-                              {log.phone}
-                            </td>
-                            <td className="px-4 py-3 text-center text-gray-300 text-sm">
-                              {log.bank}
-                            </td>
-                            <td className="px-4 py-3 text-center text-gray-300 text-sm">
-                              {log.accountNumber}
-                            </td>
-                            <td className="px-4 py-3 text-center text-gray-300 text-sm">
-                              {log.accountHolder}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs ${
-                                  log.action === "승인"
-                                    ? "bg-green-500/20 text-green-500"
-                                    : "bg-red-500/20 text-red-500"
-                                }`}
-                              >
-                                {log.action}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-center text-gray-300 text-sm">
-                              {log.actionDate}
-                            </td>
-                            <td className="px-4 py-3 text-center text-gray-300 text-sm">
-                              {log.actionBy}
-                            </td>
-                          </tr>
-                        ))}
+                        {approvalLogsFormatted
+                          .slice(
+                            (logPage - 1) * logsPerPage,
+                            logPage * logsPerPage,
+                          )
+                          .map((log: any) => (
+                            <tr key={log.id} className="hover:bg-gray-700/50">
+                              <td className="px-3 py-2 text-center text-sm whitespace-nowrap">
+                                <div className="text-white">{log.nickname}</div>
+                                <div className="text-gray-400 text-xs">
+                                  ({log.name})
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.email}
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.phone}
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.bank}
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.accountNumber}
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.accountHolder}
+                              </td>
+                              <td className="px-3 py-2 text-center whitespace-nowrap">
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs ${
+                                    log.action === "승인"
+                                      ? "bg-green-500/20 text-green-500"
+                                      : log.action === "거절"
+                                        ? "bg-red-500/20 text-red-500"
+                                        : log.action === "정지"
+                                          ? "bg-orange-500/20 text-orange-500"
+                                          : log.action === "정지해제"
+                                            ? "bg-blue-500/20 text-blue-500"
+                                            : "bg-gray-500/20 text-gray-500"
+                                  }`}
+                                >
+                                  {log.action}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.signupIp || "-"}
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.signupDate || "-"}
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.actionDate}
+                              </td>
+                              <td className="px-3 py-2 text-center text-gray-300 text-sm whitespace-nowrap">
+                                {log.actionBy}
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
+                  {/* Pagination Controls */}
+                  {approvalLogsFormatted.length > logsPerPage && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700">
+                      <div className="text-sm text-gray-400">
+                        {(logPage - 1) * logsPerPage + 1} -{" "}
+                        {Math.min(
+                          logPage * logsPerPage,
+                          approvalLogsFormatted.length,
+                        )}{" "}
+                        / {approvalLogsFormatted.length}건
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLogPage(1)}
+                          disabled={logPage === 1}
+                          className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          «
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogPage((p) => Math.max(1, p - 1))}
+                          disabled={logPage === 1}
+                          className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ‹
+                        </button>
+                        <span className="text-sm text-gray-300 px-2">
+                          {logPage} /{" "}
+                          {Math.ceil(
+                            approvalLogsFormatted.length / logsPerPage,
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLogPage((p) =>
+                              Math.min(
+                                Math.ceil(
+                                  approvalLogsFormatted.length / logsPerPage,
+                                ),
+                                p + 1,
+                              ),
+                            )
+                          }
+                          disabled={
+                            logPage >=
+                            Math.ceil(
+                              approvalLogsFormatted.length / logsPerPage,
+                            )
+                          }
+                          className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ›
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLogPage(
+                              Math.ceil(
+                                approvalLogsFormatted.length / logsPerPage,
+                              ),
+                            )
+                          }
+                          disabled={
+                            logPage >=
+                            Math.ceil(
+                              approvalLogsFormatted.length / logsPerPage,
+                            )
+                          }
+                          className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          »
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

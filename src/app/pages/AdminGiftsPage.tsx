@@ -1,15 +1,12 @@
 import { AdminLayout } from "../components/AdminLayout";
+import { AdminPageLoader } from "../components/common/AdminPageLoader";
 import { useState, useEffect, FormEvent, useRef } from "react";
 import {
-  DollarSign,
   ToggleLeft,
   ToggleRight,
   Save,
-  Loader2,
   Plus,
-  Trash2,
   X,
-  // ChevronDown,
   ChevronLeft,
   ChevronRight,
   MoreVertical,
@@ -17,6 +14,8 @@ import {
 import { useAdminGifts } from "../hooks/useSupabase";
 import { useAuth } from "../contexts/AuthContext";
 import { useAlert } from "../contexts/AlertContext";
+import { CsvDownloadButton } from "../components/CsvDownloadButton";
+import { getTodayKST } from "../../lib/dateUtils";
 
 interface GiftItem {
   id: string;
@@ -124,9 +123,7 @@ export function AdminGiftsPage() {
   if (isLoading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 text-pink-500 animate-spin" />
-        </div>
+        <AdminPageLoader />
       </AdminLayout>
     );
   }
@@ -270,12 +267,37 @@ export function AdminGiftsPage() {
             </p>
           </div>
 
-          <button
-            onClick={openCreateModal}
-            className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
-          >
-            <Plus size={20} />새 선물 추가
-          </button>
+          <div className="flex items-center gap-2">
+            <CsvDownloadButton
+              data={gifts.map((g) => ({
+                id: g.id,
+                emoji: g.emoji,
+                name: g.name,
+                buyPrice: g.buyPrice,
+                sellPrice: g.sellPrice,
+                isActive: g.isActive ? "활성" : "비활성",
+                salesCount: g.salesCount,
+                revenuePoints: g.revenuePoints,
+              }))}
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "emoji", label: "이모지" },
+                { key: "name", label: "이름" },
+                { key: "buyPrice", label: "구매가격" },
+                { key: "sellPrice", label: "판매가격" },
+                { key: "isActive", label: "활성상태" },
+                { key: "salesCount", label: "판매건수" },
+                { key: "revenuePoints", label: "매출포인트" },
+              ]}
+              filename={`기프트목록_${getTodayKST()}.csv`}
+            />
+            <button
+              onClick={openCreateModal}
+              className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
+            >
+              <Plus size={20} />새 선물 추가
+            </button>
+          </div>
         </div>
 
         {/* Gifts Table */}
@@ -449,28 +471,11 @@ export function AdminGiftsPage() {
                             {openDropdownId === gift.id && (
                               <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 min-w-[140px] py-1">
                                 <button
-                                  onClick={() => {
-                                    startEditing(gift);
-                                    setOpenDropdownId(null);
-                                  }}
-                                  className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
-                                >
-                                  <DollarSign size={14} />
-                                  가격 수정
-                                </button>
-                                <button
                                   onClick={() => openEditModal(gift)}
                                   className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
                                 >
                                   <Save size={14} />
                                   상세 수정
-                                </button>
-                                <button
-                                  onClick={() => openDeleteModal(gift.id)}
-                                  className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 flex items-center gap-2"
-                                >
-                                  <Trash2 size={14} />
-                                  삭제(비활성)
                                 </button>
                               </div>
                             )}
@@ -534,7 +539,6 @@ export function AdminGiftsPage() {
             <p>
               • <strong>판매가</strong>: 기프트 구매 시 차감되는 포인트
             </p>
-            <p>• 가격 수정: 가격 옆의 $ 아이콘을 클릭하여 수정할 수 있습니다</p>
             <p>
               • 상태 토글: 활성/비활성을 클릭하여 아이템의 판매 여부를 변경할 수
               있습니다

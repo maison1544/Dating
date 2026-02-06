@@ -1,9 +1,13 @@
 import { AdminLayout } from "../components/AdminLayout";
-import { useState, useEffect } from "react";
+import { useDebounce } from "../hooks/useDebounce";
+import { useState, useEffect, useMemo } from "react";
 import { Search, Plus, Edit, Trash2, Pin, PinOff, X } from "lucide-react";
+import { AdminPagination } from "../components/common/AdminPagination";
+import { AdminPageLoader } from "../components/common/AdminPageLoader";
 import { useAdminNotices } from "../hooks/useSupabase";
 import { useAuth } from "../contexts/AuthContext";
-import { formatKST } from "../../lib/dateUtils";
+import { formatDatetime, formatKST, getTodayKST } from "../../lib/dateUtils";
+import { CsvDownloadButton } from "../components/CsvDownloadButton";
 
 interface Notice {
   id: string;
@@ -16,6 +20,7 @@ interface Notice {
 
 export function AdminNoticesPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
 
@@ -68,13 +73,27 @@ export function AdminNoticesPage() {
 
   const filteredNotices = notices.filter(
     (notice) =>
-      notice.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      notice.content.toLowerCase().includes(searchTerm.toLowerCase()),
+      notice.title.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      notice.content.toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
   );
 
-  const formatDate = (dateString: string) => {
-    return formatKST(dateString, "datetime") || dateString;
-  };
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // 페이지네이션 계산
+  const totalPages = Math.ceil(filteredNotices.length / itemsPerPage);
+  const paginatedNotices = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredNotices.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredNotices, currentPage, itemsPerPage]);
+
+  // 필터 변경 시 페이지 초기화
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const formatDate = formatDatetime;
 
   const handleOpenModal = (notice?: Notice) => {
     if (notice) {
@@ -176,12 +195,33 @@ export function AdminNoticesPage() {
               </span>
             </p>
           </div>
-          <button
-            onClick={() => handleOpenModal()}
-            className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
-          >
-            <Plus size={20} />새 공지사항 작성
-          </button>
+          <div className="flex items-center gap-2">
+            <CsvDownloadButton
+              data={filteredNotices.map((n) => ({
+                id: n.id,
+                title: n.title,
+                content: n.content,
+                author: n.author,
+                createdAt: formatKST(n.created_at, "datetime"),
+                isPinned: n.is_pinned ? "고정" : "-",
+              }))}
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "title", label: "제목" },
+                { key: "content", label: "내용" },
+                { key: "author", label: "작성자" },
+                { key: "createdAt", label: "작성일" },
+                { key: "isPinned", label: "고정여부" },
+              ]}
+              filename={`공지사항_${getTodayKST()}.csv`}
+            />
+            <button
+              onClick={() => handleOpenModal()}
+              className="bg-indigo-500/80 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-fit shadow-lg shadow-indigo-500/20"
+            >
+              <Plus size={20} />새 공지사항 작성
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -210,7 +250,7 @@ export function AdminNoticesPage() {
           )}
 
           {isLoading ? (
-            <div className="p-8 text-center text-gray-400">불러오는 중...</div>
+            <AdminPageLoader />
           ) : filteredNotices.length === 0 ? (
             <div className="p-8 text-center text-gray-400">
               공지사항이 없습니다.
@@ -245,7 +285,7 @@ export function AdminNoticesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800">
-                  {filteredNotices.map((notice) => (
+                  {paginatedNotices.map((notice) => (
                     <tr
                       key={notice.id}
                       className="hover:bg-gray-800/50 transition-colors"
@@ -309,6 +349,12 @@ export function AdminNoticesPage() {
                   ))}
                 </tbody>
               </table>
+              {/* 페이지네이션 */}
+              <AdminPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </div>
           )}
         </div>
