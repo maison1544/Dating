@@ -14,12 +14,15 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["./src/*"]
+    }
   },
-  "references": [
-    { "path": "./apps/user" },
-    { "path": "./apps/admin" },
-    { "path": "./apps/agent" },
-    { "path": "./packages/shared" }
+  "include": ["src"],
+  "exclude": [
+    "src/app/pages/AdminUsersPage_new.tsx",
+    "src/app/pages/AdminAccountsPage_TEMP.tsx"
   ]
 }

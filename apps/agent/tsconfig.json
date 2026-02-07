@@ -14,12 +14,11 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../../packages/shared/src/*"]
+    }
   },
-  "references": [
-    { "path": "./apps/user" },
-    { "path": "./apps/admin" },
-    { "path": "./apps/agent" },
-    { "path": "./packages/shared" }
-  ]
+  "include": ["src", "../../packages/shared/src"]
 }
