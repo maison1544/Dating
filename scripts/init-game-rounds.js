@@ -3,14 +3,17 @@
 
 const { createClient } = require("@supabase/supabase-js");
 
-const supabaseUrl =
-  process.env.VITE_SUPABASE_URL || "https://beyzubmbwygxiixuieiy.supabase.co";
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+if (!supabaseUrl) {
+  console.error("Error: VITE_SUPABASE_URL environment variable is required");
+  process.exit(1);
+}
 const supabaseKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseKey) {
   console.error(
-    "Error: SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_ANON_KEY required"
+    "Error: SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_ANON_KEY required",
   );
   process.exit(1);
 }
@@ -42,7 +45,7 @@ async function initGameRounds() {
       .eq("id", round.id);
 
     console.log(
-      `Completed expired round: ${round.game_type} #${round.round_number}`
+      `Completed expired round: ${round.game_type} #${round.round_number}`,
     );
   }
 
