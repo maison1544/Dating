@@ -13,15 +13,6 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const showTestAccountInfo = (() => {
-    try {
-      const url = new URL(import.meta.env.VITE_SUPABASE_URL);
-      return url.hostname === "localhost" || url.hostname === "127.0.0.1";
-    } catch {
-      return false;
-    }
-  })();
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -70,18 +61,6 @@ export function LoginPage() {
         {/* Login Form */}
         <div className="bg-gray-900 rounded-lg border border-gray-800 p-8">
           <h2 className="text-white text-2xl mb-6 text-center">로그인</h2>
-
-          {/* Test Account Info */}
-          {showTestAccountInfo && (
-            <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
-              <p className="text-indigo-400 text-xs text-center mb-1">
-                테스트 계정
-              </p>
-              <p className="text-white text-xs text-center">
-                test@secretday.com / test1234
-              </p>
-            </div>
-          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">

@@ -97,7 +97,7 @@ export function AdminLoginPage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder={isAgentLogin ? "agent" : "admin"}
+                  placeholder="아이디를 입력하세요"
                   className="w-full bg-gray-800/60 border border-gray-600/30 rounded-lg pl-10 pr-4 py-3 text-gray-200 placeholder:text-gray-500 focus:outline-none focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/50 transition-all"
                   required
                   disabled={isLoading}
