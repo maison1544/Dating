@@ -1,24 +1,17 @@
 {
   "name": "dating-monorepo",
   "private": true,
-  "version": "0.0.1",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "version": "1.0.0",
   "scripts": {
-    "dev:user": "npm run dev --workspace=@dating/user",
-    "dev:admin": "npm run dev --workspace=@dating/admin",
-    "dev:agent": "npm run dev --workspace=@dating/agent",
-    "build:user": "npm run build --workspace=@dating/user",
-    "build:admin": "npm run build --workspace=@dating/admin",
-    "build:agent": "npm run build --workspace=@dating/agent",
-    "build": "npm run build:user && npm run build:admin && npm run build:agent",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\dev-all.ps1",
+    "dev:user": "pnpm --filter web dev -- -p 3000",
+    "dev:admin": "pnpm --filter web dev -- -p 3001",
+    "dev:agent": "pnpm --filter web dev -- -p 3002",
+    "build": "pnpm --filter web build",
+    "start": "pnpm --filter web start",
+    "lint": "pnpm --filter web lint"
   },
   "devDependencies": {
-    "@playwright/test": "^1.41.2",
     "typescript": "^5.6.3"
   }
 }
