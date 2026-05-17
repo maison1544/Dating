@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { supabase, supabaseAdmin } from "@/lib/supabase/client";
 import type { Tables, TablesInsert } from "@/lib/types/database.types";
 import {
@@ -11,6 +12,12 @@ const gameSettingsCache = new Map<
   "powerball" | "ladder",
   Tables<"game_settings"> | null
 >();
+
+type RealtimePostgresPayload = {
+  eventType?: string;
+  new?: unknown;
+  old?: unknown;
+};
 
 // Hook for fetching chat profiles
 export function useChatProfiles() {
@@ -447,7 +454,7 @@ export function useSendGameChat() {
       try {
         const text = (message || "").trim();
         if (!text) {
-          throw new Error("메시지를 입력해주세요.");
+          throw new Error("???? ??????.");
         }
 
         const { error } = await supabase.rpc("game_chat_send", {
@@ -490,7 +497,7 @@ export function useUserBets(
     }
 
     setIsLoading(true);
-    // gameType이 있으면 inner join으로 필터링, 없으면 일반 조인
+    // gameType? ??? inner join?? ???, ??? ?? ??
     const selectQuery = gameType
       ? "*, game_rounds!inner(*)"
       : "*, game_rounds(*)";
@@ -520,7 +527,7 @@ export function useUserBets(
     fetchBets();
   }, [fetchBets]);
 
-  // 실시간 구독 - 배팅 상태 변경 시 즉시 업데이트 (당첨 결과 포함)
+  // ??? ?? - ?? ?? ?? ? ?? ???? (?? ?? ??)
   useEffect(() => {
     if (!userId) return;
 
@@ -732,7 +739,7 @@ export function useCreateOrGetChatRoom() {
               (roomRef as any)?.chat_room_id;
 
         if (!id) {
-          throw new Error("채팅방 생성에 실패했습니다.");
+          throw new Error("??? ??? ??????.");
         }
 
         const { data: room, error: roomError } = await supabase
@@ -742,7 +749,7 @@ export function useCreateOrGetChatRoom() {
           .maybeSingle();
 
         if (roomError) throw roomError;
-        if (!room) throw new Error("채팅방 생성에 실패했습니다.");
+        if (!room) throw new Error("??? ??? ??????.");
 
         return { success: true, room };
       } catch (e) {
@@ -797,17 +804,21 @@ export function useChatMessages(roomId: string | undefined) {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.auth.getUser().then(({ data }) => {
-      if (cancelled) return;
-      setAuthedUserId(data.user?.id ?? null);
-    });
+    supabase.auth
+      .getUser()
+      .then((result: { data: { user: { id: string } | null } }) => {
+        if (cancelled) return;
+        setAuthedUserId(result.data.user?.id ?? null);
+      });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (cancelled) return;
-      setAuthedUserId(session?.user?.id ?? null);
-    });
+    } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        if (cancelled) return;
+        setAuthedUserId(session?.user?.id ?? null);
+      },
+    );
 
     return () => {
       cancelled = true;
@@ -832,7 +843,7 @@ export function useChatMessages(roomId: string | undefined) {
           table: "messages",
           filter: `room_id=eq.${roomId}`,
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           setMessages((prev) => [...prev, payload.new as Tables<"messages">]);
         },
       )
@@ -971,17 +982,21 @@ export function useRealtimeChat(
 
   useEffect(() => {
     let cancelled = false;
-    supabase.auth.getUser().then(({ data }) => {
-      if (cancelled) return;
-      setAuthedUserId(data.user?.id ?? null);
-    });
+    supabase.auth
+      .getUser()
+      .then((result: { data: { user: { id: string } | null } }) => {
+        if (cancelled) return;
+        setAuthedUserId(result.data.user?.id ?? null);
+      });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (cancelled) return;
-      setAuthedUserId(session?.user?.id ?? null);
-    });
+    } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        if (cancelled) return;
+        setAuthedUserId(session?.user?.id ?? null);
+      },
+    );
 
     return () => {
       cancelled = true;
@@ -1008,7 +1023,7 @@ export function useRealtimeChat(
           table: "messages",
           filter: `room_id=eq.${roomId}`,
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           void (async () => {
             const id = String((payload.new as any)?.id || "");
             if (!id) return;
@@ -1125,7 +1140,7 @@ export function useSendMessage() {
         .maybeSingle();
 
       if (error) throw error;
-      if (!data) throw new Error("메시지를 찾을 수 없습니다.");
+      if (!data) throw new Error("???? ?? ? ????.");
 
       const hydrated = await hydrateGiftItems([data as any]);
       const hydratedRow = (hydrated || [])[0] as any;
@@ -1159,7 +1174,7 @@ export function useMarkMessagesAsRead() {
         .maybeSingle();
 
       if (roomError) throw roomError;
-      if (!room) throw new Error("채팅방을 찾을 수 없습니다.");
+      if (!room) throw new Error("???? ?? ? ????.");
 
       const readerType =
         String(room.profile_id) === String(readerId) ? "profile" : "user";
@@ -1204,7 +1219,7 @@ export function useAdminAccounts() {
 
   const fetchAccounts = useCallback(async () => {
     setIsLoading(true);
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     const { data, error } = await supabaseAdmin
       .from("admins")
       .select("*")
@@ -1222,7 +1237,7 @@ export function useAdminAccounts() {
     fetchAccounts();
   }, [fetchAccounts]);
 
-  // 실시간 구독 - admins 변경 감지
+  // ??? ?? - admins ?? ??
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefetch = () => {
@@ -1254,7 +1269,7 @@ export function useAdminAccounts() {
   const createAccount = async (
     account: Omit<Tables<"admins">, "created_at" | "updated_at">,
   ) => {
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     const { data, error } = await supabaseAdmin
       .from("admins")
       .insert(account as Tables<"admins">)
@@ -1268,7 +1283,7 @@ export function useAdminAccounts() {
     id: string,
     updates: Partial<Tables<"admins">>,
   ) => {
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     const { error } = await supabaseAdmin
       .from("admins")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -1278,7 +1293,7 @@ export function useAdminAccounts() {
   };
 
   const deleteAccount = async (id: string) => {
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     const { error } = await supabaseAdmin.from("admins").delete().eq("id", id);
     if (!error) fetchAccounts();
     return { error };
@@ -1310,14 +1325,14 @@ export function useAgents() {
     setError(null);
 
     try {
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
+      // ??? ????? ?? (RLS ??? ??)
       const { data, error } = await supabaseAdmin
         .from("agents")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const rows = data || [];
+      const rows = (data || []) as Tables<"agents">[];
       const enriched = await Promise.all(
         rows.map(async (agent) => {
           const [profilesCountRes, membersCountRes, membersRes] =
@@ -1473,7 +1488,7 @@ export function useAgents() {
     fetchAgents();
   }, [fetchAgents]);
 
-  // 실시간 구독 - agents 변경 감지
+  // ??? ?? - agents ?? ??
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefetch = () => {
@@ -1506,7 +1521,7 @@ export function useAgents() {
     id: string,
     updates: Partial<Tables<"agents">>,
   ) => {
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     const { error } = await supabaseAdmin
       .from("agents")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -1529,7 +1544,7 @@ export function useBackofficeAccountActions(adminId?: string) {
   const [error, setError] = useState<Error | null>(null);
 
   const getValidAccessToken = useCallback(async (): Promise<string> => {
-    // 먼저 세션 갱신 시도
+    // ?? ?? ?? ??
     const { data: refreshed, error: refreshError } =
       await supabaseAdmin.auth.refreshSession();
 
@@ -1537,7 +1552,7 @@ export function useBackofficeAccountActions(adminId?: string) {
       return refreshed.session.access_token;
     }
 
-    // 갱신 실패 시 기존 세션 확인
+    // ?? ?? ? ?? ?? ??
     const {
       data: { session },
       error: sessionError,
@@ -1545,13 +1560,13 @@ export function useBackofficeAccountActions(adminId?: string) {
 
     if (sessionError) throw sessionError;
     if (!session?.access_token) {
-      throw new Error("로그인이 필요합니다. 다시 로그인해주세요.");
+      throw new Error("???? ?????. ?? ???????.");
     }
 
-    // 토큰 만료 여부 확인
+    // ?? ?? ?? ??
     const expiresAt = session.expires_at;
     if (expiresAt && expiresAt * 1000 < Date.now()) {
-      throw new Error("세션이 만료되었습니다. 다시 로그인해주세요.");
+      throw new Error("??? ???????. ?? ???????.");
     }
 
     return session.access_token;
@@ -1563,12 +1578,8 @@ export function useBackofficeAccountActions(adminId?: string) {
       accessToken: string,
       body: unknown,
     ): Promise<T> => {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as
-        | string
-        | undefined;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
-        | string
-        | undefined;
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
       if (!supabaseUrl || !anonKey) {
         throw new Error("Missing Supabase environment variables");
@@ -1585,7 +1596,7 @@ export function useBackofficeAccountActions(adminId?: string) {
       });
 
       if (!resp.ok) {
-        let errorMessage = "요청 처리 중 오류가 발생했습니다.";
+        let errorMessage = "?? ?? ? ??? ??????.";
         try {
           const text = await resp.clone().text();
           if (text) {
@@ -1595,7 +1606,7 @@ export function useBackofficeAccountActions(adminId?: string) {
             }
           }
         } catch {
-          // JSON 파싱 실패 시 기본 메시지 사용
+          // JSON ?? ?? ? ?? ??? ??
         }
         throw new Error(errorMessage);
       }
@@ -1632,7 +1643,7 @@ export function useBackofficeAccountActions(adminId?: string) {
       setError(null);
 
       try {
-        if (!adminId) throw new Error("관리자 권한이 필요합니다.");
+        if (!adminId) throw new Error("??? ??? ?????.");
 
         const accessToken = await getValidAccessToken();
 
@@ -1670,10 +1681,10 @@ export function useBackofficeAccountActions(adminId?: string) {
       setError(null);
 
       try {
-        if (!adminId) throw new Error("관리자 권한이 필요합니다.");
-        if (!params.agentId) throw new Error("agentId가 필요합니다.");
+        if (!adminId) throw new Error("??? ??? ?????.");
+        if (!params.agentId) throw new Error("agentId? ?????.");
         if (!params.profileIds || params.profileIds.length === 0) {
-          throw new Error("할당할 프로필을 선택해주세요.");
+          throw new Error("??? ???? ??????.");
         }
 
         const { error: updateError } = await supabaseAdmin
@@ -1714,7 +1725,7 @@ export function useBackofficeAccountActions(adminId?: string) {
       setError(null);
 
       try {
-        if (!adminId) throw new Error("관리자 권한이 필요합니다.");
+        if (!adminId) throw new Error("??? ??? ?????.");
 
         const accessToken = await getValidAccessToken();
 
@@ -1752,7 +1763,7 @@ export function useBackofficeAccountActions(adminId?: string) {
       setError(null);
 
       try {
-        if (!adminId) throw new Error("관리자 권한이 필요합니다.");
+        if (!adminId) throw new Error("??? ??? ?????.");
 
         const accessToken = await getValidAccessToken();
 
@@ -1801,7 +1812,7 @@ export function useUsers() {
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     // Join with agents table to get referral_code
     const { data, error } = await supabaseAdmin
       .from("user_profiles")
@@ -1825,7 +1836,7 @@ export function useUsers() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // 실시간 구독 - user_profiles 변경 감지
+  // ??? ?? - user_profiles ?? ??
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefetch = () => {
@@ -1858,7 +1869,7 @@ export function useUsers() {
     id: string,
     updates: Partial<Tables<"user_profiles">>,
   ) => {
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     const { error } = await supabaseAdmin
       .from("user_profiles")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -1870,7 +1881,7 @@ export function useUsers() {
   return { users, isLoading, error, refetch: fetchUsers, updateUser };
 }
 
-// Hook for point packages (charging_cards 사용)
+// Hook for point packages (charging_cards ??)
 export function usePointPackages() {
   type PointPackage = {
     id: string;
@@ -1896,7 +1907,7 @@ export function usePointPackages() {
       setError(error);
     } else {
       setPackages(
-        (data || []).map((card) => {
+        ((data || []) as Tables<"charging_cards">[]).map((card) => {
           const amount = card.amount;
           const bonusAmount = card.bonus_amount ?? 0;
 
@@ -1920,7 +1931,7 @@ export function usePointPackages() {
   return { packages, isLoading, error, refetch: fetchPackages };
 }
 
-// Hook for deposit requests (입금 신청)
+// Hook for deposit requests (?? ??)
 export function useDepositRequests(userId?: string) {
   const [requests, setRequests] = useState<Tables<"deposit_requests">[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1963,7 +1974,7 @@ export function useDepositRequests(userId?: string) {
       .insert(request)
       .select()
       .single();
-    // 백그라운드에서 목록 새로고침 (응답 지연 방지)
+    // ??????? ?? ???? (?? ?? ??)
     if (!error) void fetchRequests();
     return { data, error };
   };
@@ -1990,7 +2001,7 @@ export function useDepositRequests(userId?: string) {
   };
 }
 
-// Hook for withdrawal requests (출금 신청)
+// Hook for withdrawal requests (?? ??)
 export function useWithdrawalRequests(userId?: string) {
   const [requests, setRequests] = useState<Tables<"withdrawal_requests">[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -2031,16 +2042,24 @@ export function useWithdrawalRequests(userId?: string) {
     request: TablesInsert<"withdrawal_requests">,
   ) => {
     try {
-      // Edge Function을 통해 출금 신청 처리 (포인트 즉시 차감 포함)
+      // Edge Function? ?? ?? ?? ?? (??? ?? ?? ??)
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
 
       if (!token) {
-        return { data: null, error: new Error("로그인이 필요합니다.") };
+        return { data: null, error: new Error("???? ?????.") };
+      }
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl) {
+        return {
+          data: null,
+          error: new Error("Supabase URL? ???? ?????."),
+        };
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-withdrawal`,
+        `${supabaseUrl}/functions/v1/request-withdrawal`,
         {
           method: "POST",
           headers: {
@@ -2061,16 +2080,16 @@ export function useWithdrawalRequests(userId?: string) {
       if (!response.ok || !result.success) {
         return {
           data: null,
-          error: new Error(result.error || "출금 신청에 실패했습니다."),
+          error: new Error(result.error || "?? ??? ??????."),
         };
       }
 
-      // 백그라운드에서 목록 새로고침 (응답 지연 방지)
+      // ??????? ?? ???? (?? ?? ??)
       void fetchRequests();
       return { data: result.data, error: null };
     } catch (err) {
       const errorMessage =
-        err instanceof Error ? err.message : "출금 신청에 실패했습니다.";
+        err instanceof Error ? err.message : "?? ??? ??????.";
       return { data: null, error: new Error(errorMessage) };
     }
   };
@@ -2179,7 +2198,7 @@ export function useAdminGifts(adminId?: string) {
 
       if (giftsError) throw giftsError;
 
-      const rows = giftRows || [];
+      const rows = (giftRows || []) as Tables<"gifts">[];
       const statsMap = new Map<string, { sales: number; revenue: number }>();
 
       const pageSize = 1000;
@@ -2701,7 +2720,7 @@ export function useAllChatRooms() {
   return { rooms, isLoading, error, refetch: fetchRooms };
 }
 
-// Hook for approval logs (admin_action_logs 사용)
+// Hook for approval logs (admin_action_logs ??)
 export function useApprovalLogs() {
   const [logs, setLogs] = useState<Tables<"admin_action_logs">[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -2757,7 +2776,7 @@ export function useApprovalLogs() {
           schema: "public",
           table: "admin_action_logs",
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const action = (payload.new as any)?.action;
           // Only refetch if it's a relevant action type
           if (
@@ -2923,9 +2942,16 @@ export function useDashboardStats(
 
       // Calculate stats
       const deposits =
-        depositData?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0;
+        depositData?.reduce(
+          (sum: number, t: { amount: number | null }) => sum + (t.amount || 0),
+          0,
+        ) || 0;
       const withdrawals =
-        withdrawData?.reduce((sum, t) => sum + Math.abs(t.amount || 0), 0) || 0;
+        withdrawData?.reduce(
+          (sum: number, t: { amount: number | null }) =>
+            sum + Math.abs(t.amount || 0),
+          0,
+        ) || 0;
 
       const ladderBets =
         gameBets?.filter((b: any) => b.game_rounds?.game_type === "ladder") ||
@@ -2954,7 +2980,11 @@ export function useDashboardStats(
       );
 
       const itemPurchase =
-        giftPurchases?.reduce((sum, t) => sum + (t.points_amount || 0), 0) || 0;
+        giftPurchases?.reduce(
+          (sum: number, t: { points_amount: number | null }) =>
+            sum + (t.points_amount || 0),
+          0,
+        ) || 0;
 
       const nextStats = {
         newMembers: newMembersCount || 0,
@@ -3010,11 +3040,11 @@ export function useAdminUserActions(adminId?: string) {
 
       try {
         if (!adminId) {
-          throw new Error("관리자 권한이 필요합니다.");
+          throw new Error("??? ??? ?????.");
         }
         const amount = Math.trunc(params.amount);
         if (!Number.isFinite(amount) || amount === 0) {
-          throw new Error("유효한 금액을 입력하세요.");
+          throw new Error("??? ??? ?????.");
         }
 
         const { data: userRow, error: userError } = await supabaseAdmin
@@ -3024,13 +3054,13 @@ export function useAdminUserActions(adminId?: string) {
           .single();
 
         if (userError || !userRow) {
-          throw new Error("사용자 정보를 찾을 수 없습니다.");
+          throw new Error("??? ??? ?? ? ????.");
         }
 
         const balanceBefore = Number(userRow.points || 0);
         const balanceAfter = balanceBefore + amount;
         if (balanceAfter < 0) {
-          throw new Error("잔액은 0보다 작을 수 없습니다.");
+          throw new Error("??? 0?? ?? ? ????.");
         }
 
         const { error: addPointsError } = await supabaseAdmin.rpc(
@@ -3042,7 +3072,7 @@ export function useAdminUserActions(adminId?: string) {
             p_reference_id: null,
             p_description:
               params.description ||
-              (amount > 0 ? "관리자 지급" : "관리자 차감"),
+              (amount > 0 ? "??? ??" : "??? ??"),
           },
         );
         if (addPointsError) throw addPointsError;
@@ -3083,7 +3113,7 @@ export function useAdminUserActions(adminId?: string) {
       setError(null);
       try {
         if (!adminId) {
-          throw new Error("관리자 권한이 필요합니다.");
+          throw new Error("??? ??? ?????.");
         }
 
         // Fetch user info for logging
@@ -3153,7 +3183,7 @@ export function useAdminUserActions(adminId?: string) {
 
       try {
         if (!adminId) {
-          throw new Error("관리자 권한이 필요합니다.");
+          throw new Error("??? ??? ?????.");
         }
 
         const { data, error: invokeError } =
@@ -3161,16 +3191,16 @@ export function useAdminUserActions(adminId?: string) {
             body: { userId: params.userId, newPassword: params.newPassword },
           });
 
-        // data에 에러 메시지가 있는 경우 (Edge Function이 에러 JSON 반환)
+        // data? ?? ???? ?? ?? (Edge Function? ?? JSON ??)
         if (data?.error) {
           throw new Error(data.error);
         }
 
         if (invokeError) {
-          // Edge Function 에러에서 실제 메시지만 추출
-          let errorMessage = "비밀번호 변경 중 오류가 발생했습니다.";
+          // Edge Function ???? ?? ???? ??
+          let errorMessage = "???? ?? ? ??? ??????.";
           try {
-            // FunctionsHttpError의 context에서 응답 본문 추출 시도
+            // FunctionsHttpError? context?? ?? ?? ?? ??
             const ctx = (invokeError as { context?: Response }).context;
             if (ctx) {
               const body = await ctx.json();
@@ -3179,7 +3209,7 @@ export function useAdminUserActions(adminId?: string) {
               }
             }
           } catch {
-            // context 파싱 실패 시 message에서 추출 시도
+            // context ?? ?? ? message?? ?? ??
             try {
               const match = invokeError.message.match(
                 /"error"\s*:\s*"([^"]+)"/,
@@ -3188,7 +3218,7 @@ export function useAdminUserActions(adminId?: string) {
                 errorMessage = match[1];
               }
             } catch {
-              // 파싱 실패 시 기본 메시지 사용
+              // ?? ?? ? ?? ??? ??
             }
           }
           throw new Error(errorMessage);
@@ -3246,7 +3276,7 @@ export function useAdminDashboardData(
     active: 0,
     pending: 0,
     suspended: 0,
-    deleted: 0,
+    rejected: 0,
   });
   const [recentActivities, setRecentActivities] = useState<
     {
@@ -3568,14 +3598,14 @@ export function useAdminDashboardData(
       if (recentBets.error) throw recentBets.error;
       if (recentMemberActions.error) throw recentMemberActions.error;
 
-      // 회원 승인/거절된 사용자 ID 목록 (중복 방지용)
+      // ?? ??/??? ??? ID ?? (?? ???)
       const memberActionUserIds = new Set(
         (recentMemberActions.data || [])
           .filter((a: any) => a.target_type === "user_profiles")
           .map((a: any) => a.target_id),
       );
 
-      // 승인/거절된 사용자 정보 조회
+      // ??/??? ??? ?? ??
       const memberActionUsers: Record<
         string,
         { name?: string; nickname?: string }
@@ -3592,12 +3622,12 @@ export function useAdminDashboardData(
 
       const activities: any[] = [];
 
-      // 회원 승인/거절/정지/정지해제 활동 추가
+      // ?? ??/??/??/???? ?? ??
       const memberActionLabels: Record<string, string> = {
-        approve_user: "회원가입 승인",
-        reject_user: "회원가입 거절",
-        suspend_user: "회원 정지",
-        unsuspend_user: "회원 정지해제",
+        approve_user: "???? ??",
+        reject_user: "???? ??",
+        suspend_user: "?? ??",
+        unsuspend_user: "?? ????",
       };
       (recentMemberActions.data || []).forEach((a: any) => {
         if (a.target_type !== "user_profiles") return;
@@ -3613,33 +3643,33 @@ export function useAdminDashboardData(
         });
       });
 
-      // 일반 회원가입 (승인/거절되지 않은 신규 가입자만)
+      // ?? ???? (??/???? ?? ?? ????)
       (recentUsers.data || []).forEach((u: any) => {
-        if (memberActionUserIds.has(u.id)) return; // 이미 승인/거절 활동으로 추가됨
+        if (memberActionUserIds.has(u.id)) return; // ?? ??/?? ???? ???
         activities.push({
           id: `signup:${u.id}`,
           created_at: u.created_at,
           type: "signup",
           userName: u.nickname || u.name || "-",
-          meta: "회원가입 대기",
+          meta: "???? ??",
         });
       });
       (recentPoints.data || []).forEach((p: any) => {
-        // bet, win, lose 타입은 game_bets에서 처리하므로 제외
-        // lose는 배팅 시 이미 차감되었으므로 중복 표시 방지
+        // bet, win, lose ??? game_bets?? ????? ??
+        // lose? ?? ? ?? ??????? ?? ?? ??
         if (p.type === "bet" || p.type === "win" || p.type === "lose") return;
 
         const userName = p.users?.nickname || p.users?.name || "-";
         const typeLabels: Record<string, string> = {
-          charge: "입금 승인",
-          withdraw: "출금 완료",
-          withdraw_pending: "출금 신청 (차감)",
-          withdraw_refund: "출금 거절 (환급)",
-          admin_adjust: "관리자 조정",
-          bonus: "보너스 지급",
-          chat_start: "채팅 시작",
-          gift_buy: "선물 구매",
-          gift_sell: "선물 판매",
+          charge: "?? ??",
+          withdraw: "?? ??",
+          withdraw_pending: "?? ?? (??)",
+          withdraw_refund: "?? ?? (??)",
+          admin_adjust: "??? ??",
+          bonus: "??? ??",
+          chat_start: "?? ??",
+          gift_buy: "?? ??",
+          gift_sell: "?? ??",
         };
         activities.push({
           id: `point:${p.id}`,
@@ -3653,21 +3683,21 @@ export function useAdminDashboardData(
       (recentBets.data || []).forEach((b: any) => {
         const userName = b.users?.nickname || b.users?.name || "-";
         const gameType =
-          b.game_rounds?.game_type === "ladder" ? "사다리" : "파워볼";
+          b.game_rounds?.game_type === "ladder" ? "???" : "???";
         const betAmount = Number(b.bet_amount || 0);
         const winAmount = Number(b.win_amount || 0);
 
-        // 배팅 활동 (금액은 음수로 표시)
+        // ?? ?? (??? ??? ??)
         activities.push({
           id: `bet:${b.id}`,
           created_at: b.created_at,
           type: "bet",
           userName,
           amount: -betAmount,
-          meta: `${gameType} 배팅`,
+          meta: `${gameType} ??`,
         });
 
-        // 당첨 시 별도 활동 추가
+        // ?? ? ?? ?? ??
         if (b.status === "won" && winAmount > 0) {
           activities.push({
             id: `bet_win:${b.id}`,
@@ -3675,18 +3705,18 @@ export function useAdminDashboardData(
             type: "bet_win",
             userName,
             amount: winAmount,
-            meta: `${gameType} 배팅 당첨`,
+            meta: `${gameType} ?? ??`,
           });
         }
       });
 
-      // 정렬 우선순위: 1) 시간 내림차순, 2) 같은 시간일 때 bet_win이 bet보다 먼저 (당첨 → 배팅 순)
+      // ?? ????: 1) ?? ????, 2) ?? ??? ? bet_win? bet?? ?? (?? ? ?? ?)
       const typeOrder: Record<string, number> = { bet_win: 0, bet: 1 };
       activities.sort((a, b) => {
         const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
         const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
         if (tb !== ta) return tb - ta;
-        // 같은 시간일 때: bet_win이 bet보다 먼저 표시 (내림차순 목록에서 당첨 → 배팅)
+        // ?? ??? ?: bet_win? bet?? ?? ?? (???? ???? ?? ? ??)
         const orderA = typeOrder[a.type] ?? 2;
         const orderB = typeOrder[b.type] ?? 2;
         return orderA - orderB;
@@ -3710,7 +3740,7 @@ export function useAdminDashboardData(
       });
       setRevenueTrend([]);
       setGameBetting({ ladder: 0, powerball: 0 });
-      setMemberStatus({ active: 0, pending: 0, suspended: 0, deleted: 0 });
+      setMemberStatus({ active: 0, pending: 0, suspended: 0, rejected: 0 });
       setRecentActivities([]);
     } finally {
       if (requestId === requestIdRef.current) {
@@ -3835,7 +3865,7 @@ export function useUserRegistration() {
         }
 
         if (isDuplicate) {
-          const message = "이미 가입된 휴대폰번호 입니다.";
+          const message = "?? ??? ????? ???.";
           setError(message);
           setIsRegistering(false);
           return { success: false, error: message };
@@ -3852,7 +3882,7 @@ export function useUserRegistration() {
       }
 
       if (!data.user) {
-        throw new Error("회원가입에 실패했습니다");
+        throw new Error("????? ??????");
       }
 
       const profileInsert: TablesInsert<"user_profiles"> = {
@@ -3883,7 +3913,7 @@ export function useUserRegistration() {
       setIsRegistering(false);
       return { success: true };
     } catch (err) {
-      const message = err instanceof Error ? err.message : "회원가입 실패";
+      const message = err instanceof Error ? err.message : "???? ??";
       setError(message);
       setIsRegistering(false);
       return { success: false, error: message };
@@ -4060,7 +4090,7 @@ export function useAgentMembers(agentId: string | undefined) {
           table: "admin_action_logs",
           filter: "action=eq.change_user_referral_code",
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const record = (payload.new || payload.old) as any;
           const changes = record?.changes as any;
           if (
@@ -4118,8 +4148,9 @@ export function useAgentChatProfiles(agentId: string | undefined) {
 
     if (!agentId) return;
 
+    const channelSuffix = crypto.randomUUID();
     const channel = supabase
-      .channel(`agent-chat-profiles-${agentId}`)
+      .channel(`agent-chat-profiles-${agentId}-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -4193,7 +4224,7 @@ export function useAgentChatRooms(agentId: string | undefined) {
       return;
     }
 
-    const pIds = (profiles || []).map((p) => p.id);
+    const pIds = ((profiles || []) as Array<{ id: string }>).map((p) => p.id);
     setProfileIds(pIds);
 
     if (pIds.length === 0) {
@@ -4275,7 +4306,7 @@ export function useAgentChatRooms(agentId: string | undefined) {
           schema: "public",
           table: "chat_rooms",
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const newRecord = payload.new as any;
           const oldRecord = payload.old as any;
 
@@ -4364,7 +4395,8 @@ export function useAgentGiftTransactions(agentId: string | undefined) {
       return;
     }
 
-    const profileIds = profiles.map((p) => p.id);
+    const typedProfiles = profiles as Array<{ id: string; name: string | null }>;
+    const profileIds = typedProfiles.map((p) => p.id);
 
     // Get gift transactions involving agent's profiles (pagination to avoid truncation)
     const pageSize = 1000;
@@ -4435,7 +4467,7 @@ export function useAgentGiftTransactions(agentId: string | undefined) {
 
     // Map profile names to transactions
     const profileMap = new Map(
-      profiles.map((p) => [p.id, p.name || "Unknown"]),
+      typedProfiles.map((p) => [p.id, p.name || "Unknown"]),
     );
 
     const mappedData = all.map((t: any) => {
@@ -4939,7 +4971,7 @@ export function useAgentDashboardStats(agentId: string | undefined) {
           table: "admin_action_logs",
           filter: "action=eq.change_user_referral_code",
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const record = (payload.new || payload.old) as any;
           const changes = record?.changes as any;
           if (
@@ -5027,7 +5059,7 @@ export function useAgentDashboardStats(agentId: string | undefined) {
   };
 }
 
-// Hook for all game rounds (admin) - 서버사이드 페이지네이션 지원
+// Hook for all game rounds (admin) - ????? ?????? ??
 export function useAllGameRounds(filters?: {
   gameType?: string;
   startDate?: string;
@@ -5048,7 +5080,7 @@ export function useAllGameRounds(filters?: {
   const fetchRounds = useCallback(async () => {
     setIsLoading(true);
 
-    // 날짜+시간 조합으로 필터링
+    // ??+?? ???? ???
     let startDateTime = filters?.startDate;
     let endDateTime = filters?.endDate;
 
@@ -5063,7 +5095,7 @@ export function useAllGameRounds(filters?: {
       endDateTime = `${dateOnly}T${filters.endTime}:59+09:00`;
     }
 
-    // 먼저 총 개수 조회
+    // ?? ? ?? ??
     let countQuery = supabaseAdmin
       .from("game_rounds")
       .select("*", { count: "exact", head: true });
@@ -5081,7 +5113,7 @@ export function useAllGameRounds(filters?: {
     const { count } = await countQuery;
     setTotalCount(count || 0);
 
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     let query = supabaseAdmin
       .from("game_rounds")
       .select("*")
@@ -5120,7 +5152,7 @@ export function useAllGameRounds(filters?: {
     fetchRounds();
   }, [fetchRounds]);
 
-  // 실시간 구독 - game_rounds 변경 감지
+  // ??? ?? - game_rounds ?? ??
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefetch = () => {
@@ -5153,7 +5185,7 @@ export function useAllGameRounds(filters?: {
     id: string,
     updates: Partial<Tables<"game_rounds">>,
   ) => {
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     const { error } = await supabaseAdmin
       .from("game_rounds")
       .update(updates)
@@ -5194,7 +5226,7 @@ export function useAllGameBets(filters?: {
       const all: any[] = [];
 
       for (let from = 0; from < maxRows; from += pageSize) {
-        // 관리자 클라이언트 사용 (RLS 스코프 준수)
+        // ??? ????? ?? (RLS ??? ??)
         let query = supabaseAdmin
           .from("game_bets")
           .select(
@@ -5256,7 +5288,7 @@ export function useAllGameBets(filters?: {
     fetchBets();
   }, [fetchBets]);
 
-  // 실시간 구독 - game_bets 변경 감지
+  // ??? ?? - game_bets ?? ??
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefetch = () => {
@@ -5293,11 +5325,11 @@ export function useReserveResult() {
   const [error, setError] = useState<Error | null>(null);
 
   const requireAdmin = useCallback(async () => {
-    // 관리자는 supabaseAdmin으로 인증하므로 supabaseAdmin.auth.getUser() 사용
+    // ???? supabaseAdmin?? ????? supabaseAdmin.auth.getUser() ??
     const { data: authData, error: authError } =
       await supabaseAdmin.auth.getUser();
     if (authError || !authData.user?.id) {
-      throw new Error("관리자 권한이 필요합니다.");
+      throw new Error("??? ??? ?????.");
     }
 
     const { data: adminRow, error: adminError } = await supabaseAdmin
@@ -5307,7 +5339,7 @@ export function useReserveResult() {
       .maybeSingle();
 
     if (adminError || !adminRow) {
-      throw new Error("관리자 권한이 필요합니다.");
+      throw new Error("??? ??? ?????.");
     }
 
     return authData.user.id;
@@ -5338,7 +5370,7 @@ export function useReserveResult() {
           .maybeSingle();
 
         if (updateError) throw updateError;
-        if (!data?.id) throw new Error("회차를 찾을 수 없습니다.");
+        if (!data?.id) throw new Error("??? ?? ? ????.");
 
         return { success: true };
       } catch (err) {
@@ -5374,7 +5406,7 @@ export function useReserveResult() {
           .maybeSingle();
 
         if (updateError) throw updateError;
-        if (!data?.id) throw new Error("회차를 찾을 수 없습니다.");
+        if (!data?.id) throw new Error("??? ?? ? ????.");
 
         return { success: true };
       } catch (err) {
@@ -5393,32 +5425,32 @@ export function useReserveResult() {
 }
 
 // ============================================
-// 미니게임 Hooks - Supabase 직접 호출 방식
+// ???? Hooks - Supabase ?? ?? ??
 // ============================================
 
-// 베팅 옵션과 배당률 정의
+// ?? ??? ??? ??
 const POWERBALL_BET_TYPES: Record<string, { name: string; odds: number }> = {
-  "normal-odd": { name: "일반홀", odds: 1.95 },
-  "normal-even": { name: "일반짝", odds: 1.95 },
-  "normal-under": { name: "일반언더", odds: 1.95 },
-  "normal-over": { name: "일반오버", odds: 1.95 },
-  "powerball-odd": { name: "파워홀", odds: 1.95 },
-  "powerball-even": { name: "파워짝", odds: 1.95 },
-  "powerball-under": { name: "파워언더", odds: 1.95 },
-  "powerball-over": { name: "파워오버", odds: 1.95 },
+  "normal-odd": { name: "???", odds: 1.95 },
+  "normal-even": { name: "???", odds: 1.95 },
+  "normal-under": { name: "????", odds: 1.95 },
+  "normal-over": { name: "????", odds: 1.95 },
+  "powerball-odd": { name: "???", odds: 1.95 },
+  "powerball-even": { name: "???", odds: 1.95 },
+  "powerball-under": { name: "????", odds: 1.95 },
+  "powerball-over": { name: "????", odds: 1.95 },
 };
 
 const LADDER_BET_TYPES: Record<string, { name: string; odds: number }> = {
-  leftStart: { name: "좌출발", odds: 1.95 },
-  rightStart: { name: "우출발", odds: 1.95 },
-  line3: { name: "3줄", odds: 1.95 },
-  line4: { name: "4줄", odds: 1.95 },
-  oddEnd: { name: "홀", odds: 1.95 },
-  evenEnd: { name: "짝", odds: 1.95 },
-  left3Even: { name: "좌3짝", odds: 3.8 },
-  left4Odd: { name: "좌4홀", odds: 3.8 },
-  right3Odd: { name: "우3홀", odds: 3.8 },
-  right4Even: { name: "우4짝", odds: 3.8 },
+  leftStart: { name: "???", odds: 1.95 },
+  rightStart: { name: "???", odds: 1.95 },
+  line3: { name: "3?", odds: 1.95 },
+  line4: { name: "4?", odds: 1.95 },
+  oddEnd: { name: "?", odds: 1.95 },
+  evenEnd: { name: "?", odds: 1.95 },
+  left3Even: { name: "?3?", odds: 3.8 },
+  left4Odd: { name: "?4?", odds: 3.8 },
+  right3Odd: { name: "?3?", odds: 3.8 },
+  right4Even: { name: "?4?", odds: 3.8 },
 };
 
 export const normalizeGameSettingsOdds = (
@@ -5504,7 +5536,7 @@ export const normalizeGameSettingsOdds = (
   return { enabled: enabledByBetType, odds: oddsByBetType };
 };
 
-// 게임 라운드 목록 조회 (Supabase 직접)
+// ?? ??? ?? ?? (Supabase ??)
 export function useGameRoundsEdge(gameType?: string) {
   const [rounds, setRounds] = useState<Tables<"game_rounds">[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -5543,8 +5575,8 @@ export function useGameRoundsEdge(gameType?: string) {
   return { rounds, isLoading, error, refetch: fetchRounds };
 }
 
-// 현재 라운드 조회 (Supabase 직접 + Realtime) - 서버 시간 기반 카운트다운
-// 개선 사항: Realtime 구독 상태 확인, 폴링 최적화, 결과 갱신 개선
+// ?? ??? ?? (Supabase ?? + Realtime) - ?? ?? ?? ?????
+// ?? ??: Realtime ?? ?? ??, ?? ???, ?? ?? ??
 export function useCurrentRoundEdge(gameType: string = "powerball") {
   const [round, setRound] = useState<Tables<"game_rounds"> | null>(null);
   const [completedRound, setCompletedRound] =
@@ -5553,21 +5585,21 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // 로딩 중 표시: 라운드 전환 감지용 상태
+  // ?? ? ??: ??? ?? ??? ??
   const [roundTransitionPending, setRoundTransitionPending] = useState(false);
 
-  // 서버 시간 기반 타이머 계산
-  const serverTimeOffsetRef = useRef<number>(0); // 서버시간 - 클라이언트시간
+  // ?? ?? ?? ??? ??
+  const serverTimeOffsetRef = useRef<number>(0); // ???? - ???????
   const lastServerSyncRef = useRef<number>(0);
   const fetchInFlightRef = useRef(false);
-  const pendingRefetchRef = useRef(false); // 대기 중인 refetch 요청
+  const pendingRefetchRef = useRef(false); // ?? ?? refetch ??
   const bettingEndTimeRef = useRef<number | null>(null);
-  const previousRoundNumberRef = useRef<string | null>(null);
-  const previousCompletedRoundRef = useRef<string | null>(null);
+  const previousRoundNumberRef = useRef<number | null>(null);
+  const previousCompletedRoundRef = useRef<number | null>(null);
 
   const fetchCurrentRound = useCallback(async () => {
     if (fetchInFlightRef.current) {
-      // fetch 진행 중이면 완료 후 다시 fetch 하도록 플래그 설정
+      // fetch ?? ??? ?? ? ?? fetch ??? ??? ??
       pendingRefetchRef.current = true;
       return;
     }
@@ -5587,8 +5619,8 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
             error: any;
           });
 
-      // 최신 라운드 조회 (betting/playing/completed) + 완료 라운드 조회 병렬 수행
-      // 보안 뷰 사용 - result/reserved_result 숨김 처리
+      // ?? ??? ?? (betting/playing/completed) + ?? ??? ?? ?? ??
+      // ?? ? ?? - result/reserved_result ?? ??
       const currentRoundPromise = supabase
         .from("game_rounds_secure")
         .select("*")
@@ -5632,15 +5664,15 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         const safeRound = {
           ...data,
           result: isHiddenState ? null : data.result,
-          reserved_result: null, // 프론트에서는 항상 숨김
+          reserved_result: null, // ?????? ?? ??
         };
 
-        // 라운드 번호 변경 감지
+        // ??? ?? ?? ??
         if (
           previousRoundNumberRef.current !== null &&
           previousRoundNumberRef.current !== data.round_number
         ) {
-          // 라운드 전환 감지 시 전환 상태 해제
+          // ??? ?? ?? ? ?? ?? ??
           setRoundTransitionPending(false);
         }
         previousRoundNumberRef.current = data.round_number;
@@ -5668,7 +5700,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
           setTimeRemaining(0);
         }
       } else {
-        // 라운드가 없을 때 초기화
+        // ???? ?? ? ???
         setRound(null);
         bettingEndTimeRef.current = null;
         setTimeRemaining(0);
@@ -5679,7 +5711,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
       if (completedError && (completedError as any).code !== "PGRST116") {
         setError(completedError);
       } else if (completed) {
-        // 완료 라운드 변경 감지 - 완료 라운드가 바뀌면 즉시 업데이트
+        // ?? ??? ?? ?? - ?? ???? ??? ?? ????
         const isNewCompletedRound =
           previousCompletedRoundRef.current !== completed.round_number;
         previousCompletedRoundRef.current = completed.round_number;
@@ -5690,7 +5722,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         } as any;
         setCompletedRound(updatedCompletedRound);
 
-        // 완료 라운드 변경 시 전환 상태 해제
+        // ?? ??? ?? ? ?? ?? ??
         if (isNewCompletedRound) {
           setRoundTransitionPending(false);
         }
@@ -5703,10 +5735,10 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
       fetchInFlightRef.current = false;
       setIsLoading(false);
 
-      // 대기 중인 refetch 요청이 있으면 즉시 다시 fetch
+      // ?? ?? refetch ??? ??? ?? ?? fetch
       if (pendingRefetchRef.current) {
         pendingRefetchRef.current = false;
-        // 다음 틱에서 refetch 실행 (무한 루프 방지)
+        // ?? ??? refetch ?? (?? ?? ??)
         setTimeout(() => {
           fetchCurrentRound();
         }, 50);
@@ -5714,13 +5746,13 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
     }
   }, [gameType]);
 
-  // Realtime 구독 - 상태 변경 반영
+  // Realtime ?? - ?? ?? ??
   useEffect(() => {
     fetchCurrentRound();
-    // 기본 폴링 간격 3초
+    // ?? ?? ?? 3?
     const interval = setInterval(fetchCurrentRound, 3000);
 
-    // 실시간 구독 - 상태 변경 콜백 (페이로드에서 직접 데이터 추출)
+    // ??? ?? - ?? ?? ?? (?????? ?? ??? ??)
     const channel = supabase
       .channel(`current-round-${gameType}`)
       .on(
@@ -5731,11 +5763,11 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
           table: "game_rounds",
           filter: `game_type=eq.${gameType}`,
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const eventType = payload.eventType;
           const newData = payload.new as Tables<"game_rounds"> | null;
 
-          // INSERT 이벤트: 새 라운드가 생성됨 - 즉시 반영
+          // INSERT ???: ? ???? ??? - ?? ??
           if (eventType === "INSERT" && newData) {
             const isHiddenState =
               newData.status === "betting" || newData.status === "playing";
@@ -5747,7 +5779,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
             setRound(safeRound);
             previousRoundNumberRef.current = newData.round_number;
 
-            // 새 라운드의 타이머 설정
+            // ? ???? ??? ??
             if (newData.status === "betting" && newData.betting_end_time) {
               const endTimeMs = new Date(newData.betting_end_time).getTime();
               bettingEndTimeRef.current = endTimeMs;
@@ -5759,7 +5791,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
               setTimeRemaining(remaining);
             }
 
-            // 폴링 종료
+            // ?? ??
             if (pollingIntervalRef.current) {
               clearInterval(pollingIntervalRef.current);
               pollingIntervalRef.current = null;
@@ -5768,9 +5800,9 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
             setRoundTransitionPending(false);
           }
 
-          // UPDATE 이벤트: 라운드 상태 변경 (completed 등)
+          // UPDATE ???: ??? ?? ?? (completed ?)
           if (eventType === "UPDATE" && newData) {
-            // completed/settled 상태면 completedRound 업데이트
+            // completed/settled ??? completedRound ????
             if (
               newData.status === "completed" ||
               newData.status === "settled"
@@ -5784,7 +5816,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
             }
           }
 
-          // 추가로 fetch도 실행하여 다른 데이터 동기화
+          // ??? fetch? ???? ?? ??? ???
           fetchCurrentRound();
         },
       )
@@ -5796,14 +5828,14 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
     };
   }, [fetchCurrentRound, gameType]);
 
-  // 타이머가 0이 되면 서버 처리 요청 + 결과 반영 폴링
+  // ???? 0? ?? ?? ?? ?? + ?? ?? ??
   const triggerProcessingRef = useRef(false);
   const lastTriggerTimeRef = useRef(0);
   const lastProcessedRoundRef = useRef<number | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // timeRemaining이 4초 이하이고 betting 상태이면 서버 처리 트리거 (더 일찍 시작)
+    // timeRemaining? 4? ???? betting ???? ?? ?? ??? (? ?? ??)
     const currentRoundNumber = round?.round_number;
     const shouldTrigger =
       timeRemaining <= 4 &&
@@ -5814,7 +5846,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
 
     if (shouldTrigger && currentRoundNumber) {
       const now = Date.now();
-      // 1초 이내 중복 호출 방지
+      // 1? ?? ?? ?? ??
       if (now - lastTriggerTimeRef.current < 1000) return;
 
       triggerProcessingRef.current = true;
@@ -5822,7 +5854,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
       lastProcessedRoundRef.current = currentRoundNumber;
       setRoundTransitionPending(true);
 
-      // 서버에 라운드 처리 요청 (재시도 로직 포함)
+      // ??? ??? ?? ?? (??? ?? ??)
       const callGameTick = async (retryCount = 0): Promise<void> => {
         try {
           const result = await supabase.rpc("game_tick_client", {
@@ -5830,7 +5862,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
           });
           if (result.error) {
             console.error("game_tick_client error:", result.error);
-            // 에러 시에도 재시도
+            // ?? ??? ???
             if (retryCount < 30) {
               await new Promise((r) => setTimeout(r, 300));
               return callGameTick(retryCount + 1);
@@ -5855,13 +5887,13 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
             data.created.length > 0;
 
           if (data?.skipped) {
-            // Lock이 걸려있으면 재시도 (50ms 간격, 최대 80회 = 4초)
+            // Lock? ????? ??? (50ms ??, ?? 80? = 4?)
             if (retryCount < 80) {
               await new Promise((r) => setTimeout(r, 50));
               return callGameTick(retryCount + 1);
             }
           } else if (!hasSettled && !hasCreated) {
-            // 아무것도 처리되지 않았으면 재시도 (50ms 간격, 최대 80회 = 4초)
+            // ???? ???? ???? ??? (50ms ??, ?? 80? = 4?)
             if (retryCount < 80) {
               await new Promise((r) => setTimeout(r, 50));
               return callGameTick(retryCount + 1);
@@ -5886,19 +5918,19 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
 
       callGameTick();
 
-      // 즉시 폴링 시작 (RPC 완료를 기다리지 않음 - 빠른 결과 표시)
+      // ?? ?? ?? (RPC ??? ???? ?? - ?? ?? ??)
       let pollCount = 0;
-      const maxPolls = 100; // 약 10초 (100ms 간격)
+      const maxPolls = 100; // ? 10? (100ms ??)
 
       const pollForResult = async () => {
         pollCount++;
         await fetchCurrentRound();
 
-        // 라운드가 전환되었는지 확인 - ref 사용하여 stale closure 방지
+        // ???? ?????? ?? - ref ???? stale closure ??
         const newRoundNumber = previousRoundNumberRef.current;
         const newCompletedRound = previousCompletedRoundRef.current;
         const roundChanged = newRoundNumber !== currentRoundNumber;
-        // string 타입 round_number 비교 - 현재 라운드가 완료되었는지 확인
+        // string ?? round_number ?? - ?? ???? ?????? ??
         const completedRoundChanged =
           newCompletedRound !== null &&
           newCompletedRound === currentRoundNumber;
@@ -5913,10 +5945,10 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         }
       };
 
-      // 즉시 1회 폴링
+      // ?? 1? ??
       pollForResult();
 
-      // 100ms마다 폴링 (매우 빠른 결과 표시)
+      // 100ms?? ?? (?? ?? ?? ??)
       pollingIntervalRef.current = setInterval(pollForResult, 100);
     }
 
@@ -5934,9 +5966,9 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
     fetchCurrentRound,
   ]);
 
-  // 타이머가 0 근처이거나 전환 중이면 빠른 폴링
+  // ???? 0 ????? ?? ??? ?? ??
   useEffect(() => {
-    // timeRemaining이 5초 이하, 혹은 betting 상태에서 0이거나 전환 중이면 fast polling
+    // timeRemaining? 5? ??, ?? betting ???? 0??? ?? ??? fast polling
     const needsFastPolling =
       (timeRemaining > 0 && timeRemaining <= 5) ||
       (timeRemaining <= 0 &&
@@ -5944,16 +5976,16 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
       roundTransitionPending;
 
     if (needsFastPolling) {
-      // 100ms마다 폴링하여 라운드 상태 변경을 즉시 감지
+      // 100ms?? ???? ??? ?? ??? ?? ??
       const fastPoll = setInterval(fetchCurrentRound, 100);
       return () => clearInterval(fastPoll);
     }
   }, [timeRemaining, round?.status, roundTransitionPending, fetchCurrentRound]);
 
-  // 서버 시간 기반 카운트다운 업데이트 (1초 간격)
+  // ?? ?? ?? ????? ???? (1? ??)
   useEffect(() => {
     const timer = setInterval(() => {
-      // 서버 시간 오프셋을 적용해서 남은 시간 계산
+      // ?? ?? ???? ???? ?? ?? ??
       if (bettingEndTimeRef.current) {
         const adjustedNow = Date.now() + serverTimeOffsetRef.current;
         const remaining = Math.max(
@@ -5965,26 +5997,26 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []); // 의존성 배열 비움 - 마운트 시 1회 설정
+  }, []); // ??? ?? ?? - ??? ? 1? ??
 
-  // 활성 라운드가 없을 때 새 라운드 생성 트리거
+  // ?? ???? ?? ? ? ??? ?? ???
   const noActiveRoundTriggerRef = useRef(false);
   const lastNoActiveRoundTriggerRef = useRef(0);
 
   useEffect(() => {
-    // 로딩 중이면 무시
+    // ?? ??? ??
     if (isLoading) return;
 
-    // 이미 트리거 진행 중이면 무시
+    // ?? ??? ?? ??? ??
     if (triggerProcessingRef.current || noActiveRoundTriggerRef.current) return;
 
-    // 활성 라운드가 없는 경우: round가 null이거나 status가 completed/settled
+    // ?? ???? ?? ??: round? null??? status? completed/settled
     const noActiveRound =
       !round || round.status === "completed" || round.status === "settled";
 
     if (noActiveRound) {
       const now = Date.now();
-      // 5초 이내 중복 호출 방지
+      // 5? ?? ?? ?? ??
       if (now - lastNoActiveRoundTriggerRef.current < 5000) return;
 
       noActiveRoundTriggerRef.current = true;
@@ -6006,7 +6038,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
               created?: any[];
             } | null;
 
-            // 새 라운드 데이터 fetch
+            // ? ??? ??? fetch
             fetchCurrentRound();
           }
         } catch (e) {
@@ -6026,7 +6058,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
     remaining_seconds: timeRemaining,
     isLoading,
     error,
-    roundTransitionPending, // 라운드 전환 감지용 상태
+    roundTransitionPending, // ??? ?? ??? ??
     refetch: fetchCurrentRound,
   };
 }
@@ -6090,7 +6122,7 @@ export function useBettingRoundBetCount(gameType: "powerball" | "ladder") {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "game_rounds" },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const row = (payload.new || payload.old) as any;
           if (row?.game_type !== gameType) return;
           void fetchCount();
@@ -6103,7 +6135,7 @@ export function useBettingRoundBetCount(gameType: "powerball" | "ladder") {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "game_bets" },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const row = (payload.new || payload.old) as any;
           if (!row?.round_id) return;
           if (!currentRoundId) return;
@@ -6122,12 +6154,12 @@ export function useBettingRoundBetCount(gameType: "powerball" | "ladder") {
   return { betCount, isLoading, error, refetch: fetchCount };
 }
 
-// 베팅 실행 (Supabase 직접)
+// ?? ?? (Supabase ??)
 export function usePlaceBet() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const lastBetTimeRef = useRef<number>(0);
-  const THROTTLE_MS = 2000; // 2초 쓰로틀링
+  const THROTTLE_MS = 2000; // 2? ????
 
   const resolveGameSettings = async (gameType: string) => {
     const { data, error: settingsError } = await supabase
@@ -6186,7 +6218,7 @@ export function usePlaceBet() {
     betAmount: number,
     ipAddress?: string,
   ) => {
-    // 쓰로틀링 체크 - 연속 클릭 방지 (조용히 무시)
+    // ???? ?? - ?? ?? ?? (??? ??)
     const now = Date.now();
     if (now - lastBetTimeRef.current < THROTTLE_MS || isLoading) {
       return { success: true, data: null, throttled: true };
@@ -6197,7 +6229,7 @@ export function usePlaceBet() {
     setError(null);
 
     try {
-      // 1. 라운드 상태 확인
+      // 1. ??? ?? ??
       const { data: round, error: roundError } = await supabase
         .from("game_rounds")
         .select("*")
@@ -6205,19 +6237,19 @@ export function usePlaceBet() {
         .single();
 
       if (roundError || !round) {
-        throw new Error("라운드를 찾을 수 없습니다.");
+        throw new Error("???? ?? ? ????.");
       }
 
       if (round.status !== "betting") {
-        throw new Error("현재 베팅이 불가능한 라운드입니다.");
+        throw new Error("?? ??? ???? ??????.");
       }
 
       const now = new Date();
       if (round.betting_end_time && new Date(round.betting_end_time) < now) {
-        throw new Error("베팅 시간이 종료되었습니다.");
+        throw new Error("?? ??? ???????.");
       }
 
-      // 2. 사용자 포인트 확인
+      // 2. ??? ??? ??
       const { data: user, error: userError } = await supabase
         .from("user_profiles")
         .select("points")
@@ -6225,40 +6257,40 @@ export function usePlaceBet() {
         .single();
 
       if (userError || !user) {
-        throw new Error("사용자 정보를 찾을 수 없습니다.");
+        throw new Error("??? ??? ?? ? ????.");
       }
 
       if (user.points < betAmount) {
-        throw new Error("포인트가 부족합니다.");
+        throw new Error("???? ?????.");
       }
 
       const settings = await resolveGameSettings(round.game_type);
       if (!settings.isActive) {
-        throw new Error("현재 발매가 중지되었습니다.");
+        throw new Error("?? ??? ???????.");
       }
       if (settings.minBet != null && betAmount < settings.minBet) {
         throw new Error(
-          `최소 배팅 금액은 ${settings.minBet.toLocaleString()}P 입니다.`,
+          `?? ?? ??? ${settings.minBet.toLocaleString()}P ???.`,
         );
       }
       if (settings.maxBet != null && betAmount > settings.maxBet) {
         throw new Error(
-          `최대 배팅 금액은 ${settings.maxBet.toLocaleString()}P 입니다.`,
+          `?? ?? ??? ${settings.maxBet.toLocaleString()}P ???.`,
         );
       }
 
-      // 3. 배당률 적용
+      // 3. ??? ??
       const betTypes =
         round.game_type === "powerball"
           ? POWERBALL_BET_TYPES
           : LADDER_BET_TYPES;
       const betInfo = betTypes[betType];
       if (!betInfo) {
-        throw new Error("유효하지 않은 베팅 옵션입니다.");
+        throw new Error("???? ?? ?? ?????.");
       }
 
       if (settings.enabledByBetType[betType] === false) {
-        throw new Error("현재 선택한 베팅 옵션이 발매 중지되었습니다.");
+        throw new Error("?? ??? ?? ??? ?? ???????.");
       }
 
       const appliedOdds = settings.oddsByBetType[betType] ?? betInfo.odds;
@@ -6275,7 +6307,7 @@ export function usePlaceBet() {
 
       if (betError || !betId) {
         throw new Error(
-          "베팅 기록 생성에 실패했습니다: " + (betError?.message || "unknown"),
+          "?? ?? ??? ??????: " + (betError?.message || "unknown"),
         );
       }
 
@@ -6303,7 +6335,7 @@ export function usePlaceBet() {
   return { placeBet, isLoading, error };
 }
 
-// Admin: 라운드 생성 (Supabase 직접)
+// Admin: ??? ?? (Supabase ??)
 export function useCreateRound() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -6311,7 +6343,7 @@ export function useCreateRound() {
   const requireAdmin = useCallback(async () => {
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData.user?.id) {
-      throw new Error("관리자 권한이 필요합니다.");
+      throw new Error("??? ??? ?????.");
     }
 
     const { data: adminRow, error: adminError } = await supabase
@@ -6321,7 +6353,7 @@ export function useCreateRound() {
       .maybeSingle();
 
     if (adminError || !adminRow) {
-      throw new Error("관리자 권한이 필요합니다.");
+      throw new Error("??? ??? ?????.");
     }
   }, []);
 
@@ -6425,7 +6457,7 @@ export function useGameSettings(
           table: "game_settings",
           filter: `game_type=eq.${gameType}`,
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const next = (payload as any)?.new;
           if (next && typeof next === "object") {
             gameSettingsCache.set(gameType, next as Tables<"game_settings">);
@@ -6477,11 +6509,11 @@ export function useUpdateGameSettings() {
       setError(null);
 
       try {
-        // 관리자는 supabaseAdmin으로 인증하므로 supabaseAdmin.auth.getUser() 사용
+        // ???? supabaseAdmin?? ????? supabaseAdmin.auth.getUser() ??
         const { data: authData, error: authError } =
           await supabaseAdmin.auth.getUser();
         if (authError || !authData.user?.id) {
-          throw new Error("관리자 권한이 필요합니다.");
+          throw new Error("??? ??? ?????.");
         }
 
         const { data: adminRow, error: adminError } = await supabaseAdmin
@@ -6491,7 +6523,7 @@ export function useUpdateGameSettings() {
           .maybeSingle();
 
         if (adminError || !adminRow) {
-          throw new Error("관리자 권한이 필요합니다.");
+          throw new Error("??? ??? ?????.");
         }
 
         const nextUpdates: Partial<Tables<"game_settings">> = {
@@ -6508,7 +6540,7 @@ export function useUpdateGameSettings() {
           .maybeSingle();
 
         if (updateError) throw updateError;
-        if (!data) throw new Error("설정을 찾을 수 없습니다.");
+        if (!data) throw new Error("??? ?? ? ????.");
 
         return { success: true, data };
       } catch (err) {
@@ -6684,7 +6716,7 @@ export function useRankings(
           table: "gift_transactions",
           filter: "transaction_type=eq.send",
         },
-        (payload) => {
+        (payload: RealtimePostgresPayload) => {
           const row = payload.new as any;
           if (!row) return;
           if (row.sender_type !== "user") return;
@@ -6703,7 +6735,7 @@ export function useRankings(
 }
 
 // ============================================
-// 관리자 결제 요청 관리 Hooks
+// ??? ?? ?? ?? Hooks
 // ============================================
 
 export function useAdminPaymentRequests(adminId?: string) {
@@ -6715,7 +6747,7 @@ export function useAdminPaymentRequests(adminId?: string) {
   const resolveAdminId = useCallback(async () => {
     if (adminId) return adminId;
 
-    // 관리자 클라이언트 사용 (RLS 스코프 준수)
+    // ??? ????? ?? (RLS ??? ??)
     const { data, error } = await supabaseAdmin.auth.getUser();
 
     if (error) {
@@ -6727,13 +6759,13 @@ export function useAdminPaymentRequests(adminId?: string) {
   const fetchRequests = useCallback(async () => {
     setIsLoading(true);
 
-    // 관리자 클라이언트 사용 (RLS 스코프 준수) - 입금 신청 조회
+    // ??? ????? ?? (RLS ??? ??) - ?? ?? ??
     const { data: depositData, error: depositError } = await supabaseAdmin
       .from("deposit_requests")
       .select("*, users:user_profiles(name, nickname, email)")
       .order("created_at", { ascending: false });
 
-    // 관리자 클라이언트 사용 (RLS 스코프 준수) - 출금 신청 조회
+    // ??? ????? ?? (RLS ??? ??) - ?? ?? ??
     const { data: withdrawalData, error: withdrawalError } = await supabaseAdmin
       .from("withdrawal_requests")
       .select("*, users:user_profiles(name, nickname, email)")
@@ -6752,7 +6784,7 @@ export function useAdminPaymentRequests(adminId?: string) {
     fetchRequests();
   }, [fetchRequests]);
 
-  // 실시간 구독 + 폴링 백업 (5초 간격)
+  // ??? ?? + ?? ?? (5? ??)
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let pollingId: ReturnType<typeof setInterval> | null = null;
@@ -6814,7 +6846,7 @@ export function useAdminPaymentRequests(adminId?: string) {
       )
       .subscribe();
 
-    // 폴링 백업: 5초마다 데이터 새로고침 (실시간 구독 실패 시 대비)
+    // ?? ??: 5??? ??? ???? (??? ?? ?? ? ??)
     pollingId = setInterval(() => {
       void fetchRequests();
     }, 5000);
@@ -6836,10 +6868,10 @@ export function useAdminPaymentRequests(adminId?: string) {
     try {
       const processedBy = await resolveAdminId();
       if (!processedBy) {
-        throw new Error("관리자 세션 정보가 없습니다.");
+        throw new Error("??? ?? ??? ????.");
       }
 
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
+      // ??? ????? ?? (RLS ??? ??)
       const { data: approvedRequest, error: approveError } = await supabaseAdmin
         .from("deposit_requests")
         .update({
@@ -6864,27 +6896,27 @@ export function useAdminPaymentRequests(adminId?: string) {
       const depositAmount = approvedRequest.amount || 0;
       const bonusAmount = approvedRequest.bonus_amount ?? 0;
 
-      // 1. 입금액 트랜잭션 생성 (charge 타입)
+      // 1. ??? ???? ?? (charge ??)
       const { error: addPointsError } = await supabaseAdmin.rpc("add_points", {
         p_user_id: approvedRequest.user_id,
         p_amount: depositAmount,
         p_type: "charge",
         p_reference_id: approvedRequest.id,
-        p_description: "입금 승인",
+        p_description: "?? ??",
       });
 
       if (addPointsError) {
         throw addPointsError;
       }
 
-      // 2. 보너스가 있을 경우 별도의 bonus 타입 트랜잭션 생성
+      // 2. ???? ?? ?? ??? bonus ?? ???? ??
       if (bonusAmount > 0) {
         const { error: addBonusError } = await supabaseAdmin.rpc("add_points", {
           p_user_id: approvedRequest.user_id,
           p_amount: bonusAmount,
           p_type: "bonus",
           p_reference_id: approvedRequest.id,
-          p_description: `충전 보너스 (${depositAmount.toLocaleString()}원 충전)`,
+          p_description: `?? ??? (${depositAmount.toLocaleString()}? ??)`,
         });
 
         if (addBonusError) {
@@ -6892,7 +6924,7 @@ export function useAdminPaymentRequests(adminId?: string) {
         }
       }
 
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
+      // ??? ????? ?? (RLS ??? ??)
       await supabaseAdmin.from("admin_action_logs").insert({
         action: "approve_deposit",
         admin_id: processedBy,
@@ -6919,10 +6951,10 @@ export function useAdminPaymentRequests(adminId?: string) {
     try {
       const processedBy = await resolveAdminId();
       if (!processedBy) {
-        throw new Error("관리자 세션 정보가 없습니다.");
+        throw new Error("??? ?? ??? ????.");
       }
 
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
+      // ??? ????? ?? (RLS ??? ??)
       const { error } = await supabaseAdmin
         .from("deposit_requests")
         .update({
@@ -6937,7 +6969,7 @@ export function useAdminPaymentRequests(adminId?: string) {
       if (!error) await fetchRequests();
 
       if (!error) {
-        // 관리자 클라이언트 사용 (RLS 스코프 준수)
+        // ??? ????? ?? (RLS ??? ??)
         await supabaseAdmin.from("admin_action_logs").insert({
           action: "reject_deposit",
           admin_id: processedBy,
@@ -6959,11 +6991,11 @@ export function useAdminPaymentRequests(adminId?: string) {
     try {
       const processedBy = await resolveAdminId();
       if (!processedBy) {
-        throw new Error("관리자 세션 정보가 없습니다.");
+        throw new Error("??? ?? ??? ????.");
       }
 
       const processedAt = new Date().toISOString();
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
+      // ??? ????? ?? (RLS ??? ??)
       const { data: approvedRequest, error: approveError } = await supabaseAdmin
         .from("withdrawal_requests")
         .update({
@@ -6985,8 +7017,8 @@ export function useAdminPaymentRequests(adminId?: string) {
         return { error: null };
       }
 
-      // 포인트는 이미 출금 신청 시 차감되었으므로 상태만 변경
-      // 출금 완료 트랜잭션 기록 (통계 집계용)
+      // ???? ?? ?? ?? ? ??????? ??? ??
+      // ?? ?? ???? ?? (?? ???)
       await supabaseAdmin.from("point_transactions").insert({
         user_id: approvedRequest.user_id,
         type: "withdraw",
@@ -6995,11 +7027,11 @@ export function useAdminPaymentRequests(adminId?: string) {
         balance_after: null,
         related_id: approvedRequest.id,
         related_type: "withdrawal_request",
-        description: "출금 완료",
+        description: "?? ??",
         admin_id: processedBy,
       });
 
-      // 관리자 클라이언트 사용 (RLS 스코프 준수)
+      // ??? ????? ?? (RLS ??? ??)
       await supabaseAdmin.from("admin_action_logs").insert({
         action: "approve_withdrawal",
         admin_id: processedBy,
@@ -7025,10 +7057,10 @@ export function useAdminPaymentRequests(adminId?: string) {
     try {
       const processedBy = await resolveAdminId();
       if (!processedBy) {
-        throw new Error("관리자 세션 정보가 없습니다.");
+        throw new Error("??? ?? ??? ????.");
       }
 
-      // 1. 먼저 출금 신청 정보 조회 (환급할 금액 확인)
+      // 1. ?? ?? ?? ?? ?? (??? ?? ??)
       const { data: withdrawalRequest, error: fetchError } = await supabaseAdmin
         .from("withdrawal_requests")
         .select("*")
@@ -7037,10 +7069,10 @@ export function useAdminPaymentRequests(adminId?: string) {
         .single();
 
       if (fetchError || !withdrawalRequest) {
-        throw fetchError ?? new Error("출금 신청을 찾을 수 없습니다.");
+        throw fetchError ?? new Error("?? ??? ?? ? ????.");
       }
 
-      // 2. 관리자 클라이언트 사용 (RLS 스코프 준수) - 상태 업데이트
+      // 2. ??? ????? ?? (RLS ??? ??) - ?? ????
       const { error } = await supabaseAdmin
         .from("withdrawal_requests")
         .update({
@@ -7056,11 +7088,11 @@ export function useAdminPaymentRequests(adminId?: string) {
         throw error;
       }
 
-      // 3. 포인트 환급 (출금 신청 시 차감된 포인트 복원) - 직접 업데이트
+      // 3. ??? ?? (?? ?? ? ??? ??? ??) - ?? ????
       const refundAmount = withdrawalRequest.amount || 0;
       const userId = withdrawalRequest.user_id;
 
-      // 현재 포인트 조회
+      // ?? ??? ??
       const { data: userProfile, error: userFetchError } = await supabaseAdmin
         .from("user_profiles")
         .select("points")
@@ -7068,7 +7100,7 @@ export function useAdminPaymentRequests(adminId?: string) {
         .single();
 
       if (userFetchError || !userProfile) {
-        // 환급 실패 시 상태 롤백
+        // ?? ?? ? ?? ??
         await supabaseAdmin
           .from("withdrawal_requests")
           .update({
@@ -7078,20 +7110,20 @@ export function useAdminPaymentRequests(adminId?: string) {
             reject_reason: null,
           })
           .eq("id", id);
-        throw userFetchError ?? new Error("사용자 정보를 찾을 수 없습니다.");
+        throw userFetchError ?? new Error("??? ??? ?? ? ????.");
       }
 
       const currentPoints = userProfile.points ?? 0;
       const newPoints = currentPoints + refundAmount;
 
-      // 포인트 업데이트
+      // ??? ????
       const { error: refundError } = await supabaseAdmin
         .from("user_profiles")
         .update({ points: newPoints, updated_at: new Date().toISOString() })
         .eq("id", userId);
 
       if (refundError) {
-        // 환급 실패 시 상태 롤백
+        // ?? ?? ? ?? ??
         await supabaseAdmin
           .from("withdrawal_requests")
           .update({
@@ -7104,7 +7136,7 @@ export function useAdminPaymentRequests(adminId?: string) {
         throw refundError;
       }
 
-      // 포인트 트랜잭션 기록
+      // ??? ???? ??
       await supabaseAdmin.from("point_transactions").insert({
         user_id: userId,
         type: "withdraw_refund",
@@ -7113,13 +7145,13 @@ export function useAdminPaymentRequests(adminId?: string) {
         balance_after: newPoints,
         related_id: id,
         related_type: "withdrawal_request",
-        description: `출금 거절 환급${reason ? ` (사유: ${reason})` : ""}`,
+        description: `?? ?? ??${reason ? ` (??: ${reason})` : ""}`,
         admin_id: processedBy,
       });
 
       await fetchRequests();
 
-      // 4. 관리자 액션 로그 기록
+      // 4. ??? ?? ?? ??
       await supabaseAdmin.from("admin_action_logs").insert({
         action: "reject_withdrawal",
         admin_id: processedBy,
@@ -7154,7 +7186,7 @@ export function useAdminPaymentRequests(adminId?: string) {
   };
 }
 
-// 관리자 충전카드 관리 Hooks (충전 옵션 카드)
+// ??? ???? ?? Hooks (?? ?? ??)
 export function useAdminPointPackages(adminId?: string) {
   const [packages, setPackages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -7217,7 +7249,7 @@ export function useAdminPointPackages(adminId?: string) {
     if (authError || !createdBy) {
       return {
         data: null,
-        error: authError || new Error("관리자 권한이 필요합니다."),
+        error: authError || new Error("??? ??? ?????."),
       };
     }
 
@@ -7227,7 +7259,7 @@ export function useAdminPointPackages(adminId?: string) {
     const { data, error } = await supabaseAdmin
       .from("charging_cards")
       .insert({
-        name: packageData.name || `${packageData.amount}원 충전`,
+        name: packageData.name || `${packageData.amount}? ??`,
         amount,
         bonus_amount: bonusAmount,
         is_active: packageData.is_active ?? true,
@@ -7268,7 +7300,7 @@ export function useAdminPointPackages(adminId?: string) {
   };
 }
 
-// 사용자용 충전 카드 목록 조회 Hook
+// ???? ?? ?? ?? ?? Hook
 export function useChargingCards() {
   const [cards, setCards] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -7289,7 +7321,7 @@ export function useChargingCards() {
   return { cards, isLoading };
 }
 
-// 관리자용 게임 설정 관리 Hook (게임 발매 토글 포함)
+// ???? ?? ?? ?? Hook (?? ?? ?? ??)
 export function useAdminGameSettings() {
   const [settings, setSettings] = useState<Tables<"game_settings">[]>([]);
   const [isLoading, setIsLoading] = useState(true);

@@ -17,7 +17,7 @@ import { useAlert } from "@/contexts/AlertContext";
 import { formatKST, getDisplayRoundNumber } from "@/lib/utils/dateUtils";
 
 export function PowerballGamePage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { profile } = useAuth();
   const { showAlert } = useAlert();
 

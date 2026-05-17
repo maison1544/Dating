@@ -8,14 +8,9 @@ import { ConfirmModal } from "@/components/layout/ConfirmModal";
 import { getPublicUrlForPath } from "@/lib/utils/storage";
 
 export function ProfileEditPage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { profile, user, adminAccount, updateProfile, isLoading } = useAuth();
   const { showAlert } = useAlert();
-
-  if (!isLoading && (!user || adminAccount)) {
-    if (!user) return <>{typeof window !== "undefined" && router.push("/login" replace />;
-    return <>{typeof window !== "undefined" && router.push("/" replace />;
-  }
 
   useEffect(() => {
     if (isLoading) return;
@@ -24,7 +19,11 @@ export function ProfileEditPage() {
       router.push("/login");
       return;
     }
-  }, [isLoading, user, navigate]);
+
+    if (adminAccount) {
+      router.push("/");
+    }
+  }, [isLoading, user, adminAccount, router]);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -196,8 +195,7 @@ export function ProfileEditPage() {
   }
 
   if (!user || adminAccount || !profile) {
-    if (!user) return <>{typeof window !== "undefined" && router.push("/login" replace />;
-    return <>{typeof window !== "undefined" && router.push("/" replace />;
+    return null;
   }
 
   return (

@@ -1,6 +1,7 @@
 ﻿import { Menu, X, LogOut } from "lucide-react";
 import { useState } from "react";
-import Link from "next/link";`nimport { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import Logo from "@/imports/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlert } from "@/contexts/AlertContext";
@@ -8,7 +9,7 @@ import { useAlert } from "@/contexts/AlertContext";
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
-  const navigate = useRouter();
+  const router = useRouter();
   const { user, adminAccount, signOut, isLoading } = useAuth();
   const { showAlert } = useAlert();
 
@@ -64,7 +65,7 @@ export function Header() {
         <div className="flex items-center justify-between h-16 relative">
           {/* Logo */}
           <Link
-            to="/"
+            href="/"
             className="flex items-center h-12 md:static absolute left-1/2 -translate-x-1/2 md:translate-x-0"
           >
             <div className="h-full w-[200px]">
@@ -75,7 +76,7 @@ export function Header() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
             <Link
-              to="/"
+              href="/"
               className={`transition-colors ${
                 isActive("/")
                   ? "text-pink-400"
@@ -85,7 +86,7 @@ export function Header() {
               홈
             </Link>
             <Link
-              to="/realtime-matching"
+              href="/realtime-matching"
               className={`transition-colors ${
                 isActive("/realtime-matching")
                   ? "text-pink-400"
@@ -95,7 +96,7 @@ export function Header() {
               실시간채팅
             </Link>
             <Link
-              to="/notice"
+              href="/notice"
               className={`transition-colors ${
                 isActive("/notice")
                   ? "text-pink-400"
@@ -105,7 +106,7 @@ export function Header() {
               공지사항
             </Link>
             <Link
-              to="/minigame"
+              href="/minigame"
               className={`transition-colors ${
                 isActive("/minigame")
                   ? "text-pink-400"
@@ -115,7 +116,7 @@ export function Header() {
               커플미션
             </Link>
             <Link
-              to="/ranking"
+              href="/ranking"
               className={`transition-colors ${
                 isActive("/ranking")
                   ? "text-pink-400"
@@ -125,7 +126,7 @@ export function Header() {
               랭킹
             </Link>
             <Link
-              to="/point"
+              href="/point"
               className={`transition-colors ${
                 isActive("/point")
                   ? "text-pink-400"
@@ -136,7 +137,7 @@ export function Header() {
             </Link>
             {isLoggedIn && (
               <Link
-                to="/mypage"
+                href="/mypage"
                 className={`transition-colors ${
                   isActive("/mypage")
                     ? "text-pink-400"
@@ -168,13 +169,13 @@ export function Header() {
             ) : (
               <>
                 <Link
-                  to="/login"
+                  href="/login"
                   className="text-white hover:text-pink-400 transition-colors"
                 >
                   로그인
                 </Link>
                 <Link
-                  to="/signup"
+                  href="/signup"
                   className="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 transition-colors"
                 >
                   회원가입
@@ -197,7 +198,7 @@ export function Header() {
           <nav className="md:hidden py-4 border-t border-gray-800">
             <div className="flex flex-col gap-4">
               <Link
-                to="/"
+                href="/"
                 className={`transition-colors ${
                   isActive("/")
                     ? "text-pink-400"
@@ -208,7 +209,7 @@ export function Header() {
                 홈
               </Link>
               <Link
-                to="/realtime-matching"
+                href="/realtime-matching"
                 className={`transition-colors ${
                   isActive("/realtime-matching")
                     ? "text-pink-400"
@@ -219,7 +220,7 @@ export function Header() {
                 실시간채팅
               </Link>
               <Link
-                to="/notice"
+                href="/notice"
                 className={`transition-colors ${
                   isActive("/notice")
                     ? "text-pink-400"
@@ -230,7 +231,7 @@ export function Header() {
                 공지사항
               </Link>
               <Link
-                to="/minigame"
+                href="/minigame"
                 className={`transition-colors ${
                   isActive("/minigame")
                     ? "text-pink-400"
@@ -241,7 +242,7 @@ export function Header() {
                 커플미션
               </Link>
               <Link
-                to="/ranking"
+                href="/ranking"
                 className={`transition-colors ${
                   isActive("/ranking")
                     ? "text-pink-400"
@@ -252,7 +253,7 @@ export function Header() {
                 랭킹
               </Link>
               <Link
-                to="/point"
+                href="/point"
                 className={`transition-colors ${
                   isActive("/point")
                     ? "text-pink-400"
@@ -264,7 +265,7 @@ export function Header() {
               </Link>
               {isLoggedIn && (
                 <Link
-                  to="/mypage"
+                  href="/mypage"
                   className={`transition-colors ${
                     isActive("/mypage")
                       ? "text-pink-400"
@@ -292,7 +293,7 @@ export function Header() {
               ) : (
                 <>
                   <Link
-                    to="/login"
+                    href="/login"
                     className="text-white hover:text-pink-400 transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >

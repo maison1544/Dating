@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { Calendar } from "lucide-react";
 import { DateRangePicker } from "./DateRangePicker";
-import { AdminPagination } from "./common/AdminPagination";
+import { AdminPagination } from "@/components/common/AdminPagination";
 import { formatKST } from "@/lib/utils/dateUtils";
 
 export type GiftHistoryRow = {

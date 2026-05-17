@@ -27,7 +27,7 @@ interface GameRound {
   startTime: string;
   endTime: string;
   countdownEndTime?: string;
-  status: "진행중" | "완료" | "대기";
+  status: "진행중" | "완료" | "완료(예약)" | "대기";
   participants: number;
   date: string;
   betDistribution?: BetOption[];

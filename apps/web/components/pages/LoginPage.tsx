@@ -1,11 +1,12 @@
-﻿import Link from "next/link";`nimport { useRouter } from "next/navigation";
+﻿import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useState } from "react";
 import Logo from "@/imports/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function LoginPage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { signIn } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");

@@ -11,14 +11,14 @@ import {
   X,
 } from "lucide-react";
 import { AdminLayout } from "@/components/layout/AdminLayout";
-import { AdminPagination } from "@/components/layout/common/AdminPagination";
-import { AdminPageLoader } from "@/components/layout/common/AdminPageLoader";
+import { AdminPagination } from "@/components/common/AdminPagination";
+import { AdminPageLoader } from "@/components/common/AdminPageLoader";
 import { useAdminChatProfiles, useAgents } from "@/hooks/useSupabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabaseAdmin } from "@/lib/supabase/client";
 import { CsvDownloadButton } from "@/components/layout/CsvDownloadButton";
 import { getTodayKST } from "@/lib/utils/dateUtils";
-import { ImageWithFallback } from "@/components/layout/common/ImageWithFallback";
+import { ImageWithFallback } from "@/components/common/ImageWithFallback";
 import { getPublicUrlForPath } from "@/lib/utils/storage";
 import { ConfirmModal } from "@/components/layout/ConfirmModal";
 

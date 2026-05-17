@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/", "/notice"];
+const PUBLIC_PATHS = ["/login", "/signup", "/", "/notice", "/admin/login", "/agent/login"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,15 +14,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith("/admin") || pathname.startsWith("/agent")) {
+    return NextResponse.next();
+  }
+
   const { response, user } = await updateSession(request);
 
   if (!user) {
-    if (pathname.startsWith("/admin")) {
-      return NextResponse.redirect(new URL("/admin/login", request.url));
-    }
-    if (pathname.startsWith("/agent")) {
-      return NextResponse.redirect(new URL("/agent/login", request.url));
-    }
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

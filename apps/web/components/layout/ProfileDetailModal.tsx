@@ -35,7 +35,7 @@ export function ProfileDetailModal({
   const imageUrl = getPublicUrlForPath("chat-profile-images", profile.image);
 
   const [showConfirm, setShowConfirm] = useState(false);
-  const navigate = useRouter();
+  const router = useRouter();
   const { user, profile: userProfile } = useAuth();
   const { showAlert } = useAlert();
   const { createOrGetRoom } = useCreateOrGetChatRoom();

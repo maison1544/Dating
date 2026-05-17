@@ -1,4 +1,5 @@
-﻿import Link from "next/link";`nimport { useRouter, usePathname } from "next/navigation";
+﻿import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -31,9 +32,10 @@ interface AdminLayoutProps {
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
-  const navigate = useRouter();
+  const router = useRouter();
   const { user, adminAccount, isAgent, signOut, isLoading } = useAuth();
   const { activeChatId } = useNotification();
+  const isLoginPath = pathname === "/admin/login" || pathname === "/agent/login";
 
   // 관리자 알림 훅 (입금/출금/가입 신청) - returns local notifications state
   const { notifications, dismissNotification } = useAdminNotifications();
@@ -44,13 +46,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     const fromProfiles = (assignedDbProfiles || [])
       .map((profile: { id?: string }) => profile.id)
       .filter(Boolean) as string[];
-    const fromAccount = Array.isArray(adminAccount?.assigned_profile_ids)
-      ? (adminAccount?.assigned_profile_ids as string[])
+    const fromAccount =
+      adminAccount &&
+      "assigned_profile_ids" in adminAccount &&
+      Array.isArray(adminAccount.assigned_profile_ids)
+      ? adminAccount.assigned_profile_ids
       : [];
     return Array.from(new Set([...fromAccount, ...fromProfiles])).filter(
       Boolean,
     );
-  }, [assignedDbProfiles, adminAccount?.assigned_profile_ids]);
+  }, [assignedDbProfiles, adminAccount]);
   const {
     notifications: chatNotifications,
     dismissNotification: dismissChatNotification,
@@ -61,15 +66,18 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    const saved = localStorage.getItem("adminSidebarCollapsed");
+    if (typeof window === "undefined") return false;
+    const saved = window.localStorage.getItem("adminSidebarCollapsed");
     return saved === "true";
   });
 
   const isDevBypass =
-    import.meta.env.DEV &&
-    new URLSearchParams(routerLocation.search).get("dev") === "1";
+    process.env.NODE_ENV === "development" &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("dev") === "1";
 
   useEffect(() => {
+    if (isLoginPath) return;
     if (isDevBypass) return;
     if (isLoading) return;
     if (!user) {
@@ -100,12 +108,13 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     user,
     adminAccount,
     isAgent,
-    navigate,
+    router,
     pathname,
+    isLoginPath,
   ]);
 
   useEffect(() => {
-    localStorage.setItem(
+    window.localStorage.setItem(
       "adminSidebarCollapsed",
       isSidebarCollapsed.toString(),
     );
@@ -171,6 +180,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   ];
 
   const currentMenuItems = isAgent ? agentMenuItems : menuItems;
+
+  if (isLoginPath) {
+    return <>{children}</>;
+  }
 
   // 로딩 중일 때 통일된 로딩 UI 표시
   if (isLoading) {
@@ -259,7 +272,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               return (
                 <Link
                   key={item.path}
-                  to={item.path}
+                  href={item.path}
                   onClick={() => setIsSidebarOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative group ${
                     isActive

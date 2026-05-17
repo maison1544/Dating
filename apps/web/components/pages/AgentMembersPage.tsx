@@ -8,7 +8,7 @@ import { useAgentMembers } from "@/hooks/useSupabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { getPublicUrlForPath } from "@/lib/utils/storage";
 import { formatKST } from "@/lib/utils/dateUtils";
-import { AdminPagination } from "@/components/layout/common/AdminPagination";
+import { AdminPagination } from "@/components/common/AdminPagination";
 
 interface Member {
   id: string;

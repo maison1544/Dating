@@ -20,8 +20,14 @@ const timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 const moduleVersion = Date.now();
 
 // HMR cleanup - clear all timers when module is replaced
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
+const hotModule = (
+  globalThis as typeof globalThis & {
+    module?: { hot?: { dispose: (callback: () => void) => void } };
+  }
+).module?.hot;
+
+if (hotModule) {
+  hotModule.dispose(() => {
     timers.forEach((timerId) => clearTimeout(timerId));
     timers.clear();
   });

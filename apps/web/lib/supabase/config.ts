@@ -1,4 +1,5 @@
 export type AppInstance = "user" | "admin" | "agent";
+export type SupabaseAuthInstance = AppInstance | "backoffice";
 
 export function resolveAppInstance(): AppInstance {
   const raw =
@@ -14,16 +15,16 @@ export function resolveAppInstance(): AppInstance {
 
 const PROJECT_NAME = "dating";
 
-export function getSupabaseAuthCookieName() {
-  return `sb-${PROJECT_NAME}-${resolveAppInstance()}-auth-token`;
+export function getSupabaseAuthCookieName(instance: SupabaseAuthInstance = resolveAppInstance()) {
+  return `sb-${PROJECT_NAME}-${instance}-auth-token`;
 }
 
-export function getSupabaseAuthStorageKey() {
-  return `sb-${PROJECT_NAME}-${resolveAppInstance()}-auth-token`;
+export function getSupabaseAuthStorageKey(instance: SupabaseAuthInstance = resolveAppInstance()) {
+  return `sb-${PROJECT_NAME}-${instance}-auth-token`;
 }
 
-export function getSupabaseCookieOptions() {
+export function getSupabaseCookieOptions(instance: SupabaseAuthInstance = resolveAppInstance()) {
   return {
-    name: getSupabaseAuthCookieName(),
+    name: getSupabaseAuthCookieName(instance),
   };
 }

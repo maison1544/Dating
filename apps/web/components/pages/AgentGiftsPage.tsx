@@ -6,7 +6,7 @@ import { ChevronDown, X, Package, Gift } from "lucide-react";
 import { useGiftItems, useAgentGiftTransactions } from "@/hooks/useSupabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatKST } from "@/lib/utils/dateUtils";
-import { AdminPagination } from "@/components/layout/common/AdminPagination";
+import { AdminPagination } from "@/components/common/AdminPagination";
 
 interface GiftRecord {
   id: string;

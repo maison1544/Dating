@@ -11,7 +11,7 @@ import {
 import { formatDatetime } from "@/lib/utils/dateUtils";
 
 export function PaymentHistoryPage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { user, profile, adminAccount, isLoading: authLoading } = useAuth();
   const { requests: depositRequests, isLoading: depositsLoading } =
     useDepositRequests(profile?.id);
@@ -28,7 +28,7 @@ export function PaymentHistoryPage() {
       router.push("/login");
       return;
     }
-  }, [authLoading, user, navigate]);
+  }, [authLoading, user, router]);
 
   const [activeTab, setActiveTab] = useState<"charge" | "withdraw" | "gift">(
     "charge",
@@ -111,7 +111,7 @@ export function PaymentHistoryPage() {
           .in("id", Array.from(profileIds));
 
         if (!error) {
-          (data || []).forEach((row) => {
+          (data || []).forEach((row: { id: string; name: string | null }) => {
             nextMap[`profile:${row.id}`] = row.name || "프로필";
           });
         }
@@ -124,9 +124,15 @@ export function PaymentHistoryPage() {
           .in("id", Array.from(userIds));
 
         if (!error) {
-          (data || []).forEach((row) => {
-            nextMap[`user:${row.id}`] = row.nickname || row.name || "회원";
-          });
+          (data || []).forEach(
+            (row: {
+              id: string;
+              name: string | null;
+              nickname: string | null;
+            }) => {
+              nextMap[`user:${row.id}`] = row.nickname || row.name || "회원";
+            },
+          );
         }
       }
 
@@ -198,8 +204,7 @@ export function PaymentHistoryPage() {
   }
 
   if (!user || adminAccount || !profile) {
-    if (!user) return <>{typeof window !== "undefined" && router.push("/login" replace />;
-    return <>{typeof window !== "undefined" && router.push("/" replace />;
+    return null;
   }
 
   return (

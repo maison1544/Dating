@@ -1,5 +1,5 @@
 ﻿import { AdminLayout } from "@/components/layout/AdminLayout";
-import { AdminPageLoader } from "@/components/layout/common/AdminPageLoader";
+import { AdminPageLoader } from "@/components/common/AdminPageLoader";
 import { useState, useEffect, FormEvent, useRef } from "react";
 import {
   ToggleLeft,

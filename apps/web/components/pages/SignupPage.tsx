@@ -1,4 +1,5 @@
-﻿import Link from "next/link";`nimport { useRouter } from "next/navigation";
+﻿import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Mail, Lock, User, Eye, EyeOff, Phone, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import Logo from "@/imports/Logo";
@@ -9,7 +10,7 @@ import {
 } from "@/hooks/useSupabase";
 
 export function SignupPage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { showAlert } = useAlert();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);

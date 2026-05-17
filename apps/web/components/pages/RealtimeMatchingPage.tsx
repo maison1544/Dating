@@ -10,7 +10,7 @@ import { getPublicUrlForPath } from "@/lib/utils/storage";
 import { formatKST } from "@/lib/utils/dateUtils";
 
 export function RealtimeMatchingPage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { profile } = useAuth();
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<"realtime" | "chatlist">(

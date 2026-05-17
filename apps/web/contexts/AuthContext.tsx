@@ -7,7 +7,7 @@
   useRef,
   ReactNode,
 } from "react";
-import { User, Session } from "@supabase/supabase-js";
+import { AuthChangeEvent, User, Session } from "@supabase/supabase-js";
 import { supabase, supabaseAdmin } from "@/lib/supabase/client";
 import type { Tables } from "@/lib/types/database.types";
 import { useAlert } from "./AlertContext";
@@ -269,24 +269,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 유저 세션 변경 감지
     const {
       data: { subscription: userSubscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (cancelled) return;
-      // 초기 세션 확인이 완료되기 전에는 무시 (race condition 방지)
-      if (!initSessionCompleted.current) return;
-      // 관리자 세션이 활성화되어 있으면 유저 세션 변경 무시
-      if (adminAccountRef.current) return;
-      void syncUserSession(session);
-    });
+    } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        if (cancelled) return;
+        // 초기 세션 확인이 완료되기 전에는 무시 (race condition 방지)
+        if (!initSessionCompleted.current) return;
+        // 관리자 세션이 활성화되어 있으면 유저 세션 변경 무시
+        if (adminAccountRef.current) return;
+        void syncUserSession(session);
+      },
+    );
 
     // 관리자 세션 변경 감지
     const {
       data: { subscription: adminSubscription },
-    } = supabaseAdmin.auth.onAuthStateChange((_event, session) => {
-      if (cancelled) return;
-      // signInWithUsername 실행 중에는 syncAdminSession 차단 (역할 검증 레이스컨디션 방지)
-      if (isManualSigningIn.current) return;
-      void syncAdminSession(session);
-    });
+    } = supabaseAdmin.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        if (cancelled) return;
+        // signInWithUsername 실행 중에는 syncAdminSession 차단 (역할 검증 레이스컨디션 방지)
+        if (isManualSigningIn.current) return;
+        void syncAdminSession(session);
+      },
+    );
 
     return () => {
       cancelled = true;
@@ -309,7 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           table: "user_profiles",
           filter: `id=eq.${user.id}`,
         },
-        async (payload) => {
+        async (payload: unknown) => {
           const next = (payload as any)?.new;
           if (next && typeof next === "object") {
             const nextProfile = next as UserProfile;
@@ -391,12 +395,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const token = data.session?.access_token;
       if (token) {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as
-          | string
-          | undefined;
-        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
-          | string
-          | undefined;
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
         if (supabaseUrl && anonKey) {
           await fetch(`${supabaseUrl}/functions/v1/user-record-login`, {
@@ -512,12 +512,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const token = data.session?.access_token;
             if (token) {
-              const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as
-                | string
-                | undefined;
-              const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
-                | string
-                | undefined;
+              const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+              const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
               if (supabaseUrl && anonKey) {
                 await fetch(

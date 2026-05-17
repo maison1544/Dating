@@ -1,7 +1,7 @@
 ﻿import { AdminLayout } from "@/components/layout/AdminLayout";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Send, Gift, ChevronLeft, List, Bell, BellOff } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/layout/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   useAgentChatProfiles,
   useAgentChatRooms,
@@ -25,7 +25,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/layout/ui/tooltip";
+} from "@/components/ui/tooltip";
 import {
   checkIsUserOnline,
   OnlineStatusIndicator,
@@ -1006,7 +1006,7 @@ export function AgentChatsPage() {
                               name={conv.userName}
                               src={conv.userImage}
                             />
-                            <OnlineStatusIndicator isOnline={conv.isOnline} />
+                            <OnlineStatusIndicator isOnline={!!conv.isOnline} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
@@ -1056,7 +1056,7 @@ export function AgentChatsPage() {
                         name={selectedChat.userName}
                         src={selectedChat.userImage}
                       />
-                      <OnlineStatusIndicator isOnline={selectedChat.isOnline} />
+                      <OnlineStatusIndicator isOnline={!!selectedChat.isOnline} />
                     </div>
                     <div>
                       <h3 className="text-white font-medium text-sm">
@@ -1193,7 +1193,7 @@ export function AgentChatsPage() {
             >
               <div className="flex items-center gap-2 text-white text-xs font-medium truncate">
                 <OnlineStatusText
-                  isOnline={modal.conversation.isOnline}
+                  isOnline={!!modal.conversation.isOnline}
                   className="text-xs"
                 />
                 <span className="text-gray-500">|</span>

@@ -6,7 +6,7 @@ import { useAlert } from "@/contexts/AlertContext";
 import { useBettingRoundBetCount, useGameSettings } from "@/hooks/useSupabase";
 
 export function MiniGamePage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { user, profile, isLoading: authLoading } = useAuth();
   const { showAlert } = useAlert();
   const {

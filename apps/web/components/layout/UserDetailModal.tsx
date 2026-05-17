@@ -13,7 +13,7 @@ import {
 import { DateRangePicker } from "./DateRangePicker";
 import { GiftHistoryTable } from "./GiftHistoryTable";
 import { GiftInventoryManager } from "./GiftInventoryManager";
-import { AdminPagination } from "./common/AdminPagination";
+import { AdminPagination } from "@/components/common/AdminPagination";
 import { SuspendConfirmModal } from "./SuspendConfirmModal";
 import { supabaseAdmin } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -443,6 +443,7 @@ export function UserDetailModal({
       odds: number;
       status: string;
       win_amount: number | null;
+      ip_address: string | null;
       game_rounds?: { game_type: string; round_number: string | null } | null;
     }>
   >([]);
@@ -1929,8 +1930,9 @@ export function UserDetailModal({
                                   // For unsuspend action, fetch the suspension reason first
                                   if (displayUser.status !== "활성") {
                                     try {
-                                      const { supabaseAdmin } =
-                                        await import("../../lib/supabase");
+                                      const { supabaseAdmin } = await import(
+                                        "@/lib/supabase/client"
+                                      );
                                       const { data } = await supabaseAdmin
                                         .from("admin_action_logs")
                                         .select("changes")

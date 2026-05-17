@@ -27,7 +27,7 @@ import {
 } from "@/contexts/NotificationContext";
 
 export function MyPage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { user, profile, adminAccount, signOut, isLoading, refreshProfile } =
     useAuth();
   const { showAlert } = useAlert();
@@ -42,7 +42,7 @@ export function MyPage() {
       router.push("/login");
       return;
     }
-  }, [isLoading, user, navigate]);
+  }, [isLoading, user, router]);
 
   const [activeTab, setActiveTab] = useState<"menu" | "inventory">("menu");
   const [isGiftProcessing, setIsGiftProcessing] = useState(false);
@@ -214,8 +214,7 @@ export function MyPage() {
   }
 
   if (!user || adminAccount || !profile) {
-    if (!user) return <>{typeof window !== "undefined" && router.push("/login" replace />;
-    return <>{typeof window !== "undefined" && router.push("/" replace />;
+    return null;
   }
 
   const profileImageUrl = getPublicUrlForPath(

@@ -9,6 +9,20 @@ import {
   dismissChatNotification,
 } from "@/stores/chatNotificationStore";
 
+type AgentChatRoom = {
+  id: string;
+  profile_id: string;
+  user_id: string;
+};
+
+type AgentChatMessage = {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  sender_type: string;
+  content: string | null;
+};
+
 export function useAgentChatNotifications(
   assignedProfileIds: string[],
   selectedChatId: string | null,
@@ -67,13 +81,15 @@ export function useAgentChatNotifications(
         .select("id, profile_id, user_id")
         .in("profile_id", assignedProfileIds);
 
-      if (data) {
-        setAgentRoomIds(new Set(data.map((r) => r.id)));
+      const rooms = (data || []) as AgentChatRoom[];
+
+      if (rooms.length > 0) {
+        setAgentRoomIds(new Set(rooms.map((r) => r.id)));
         const roomMap = new Map<
           string,
           { userId: string; profileId: string }
         >();
-        data.forEach((room) => {
+        rooms.forEach((room) => {
           if (room?.id && room.user_id && room.profile_id) {
             roomMap.set(room.id, {
               userId: room.user_id,
@@ -97,12 +113,8 @@ export function useAgentChatNotifications(
           schema: "public",
           table: "chat_rooms",
         },
-        (payload) => {
-          const newRoom = payload.new as {
-            id: string;
-            profile_id: string;
-            user_id: string;
-          };
+        (payload: { new: AgentChatRoom }) => {
+          const newRoom = payload.new;
           if (assignedProfileIdsRef.current.includes(newRoom.profile_id)) {
             setAgentRoomIds((prev) => new Set([...prev, newRoom.id]));
             if (newRoom.id && newRoom.user_id && newRoom.profile_id) {
@@ -136,7 +148,7 @@ export function useAgentChatNotifications(
           schema: "public",
           table: "messages",
         },
-        async (payload) => {
+        async (payload: { new: { id: string } }) => {
           const partialMessage = payload.new as { id: string };
 
           // Realtime에서 모든 필드가 오지 않을 수 있으므로 전체 메시지 조회
@@ -147,10 +159,11 @@ export function useAgentChatNotifications(
             .single();
 
           if (!message) return;
+          const typedMessage = message as AgentChatMessage;
 
           const ensureAgentRoom = async () => {
-            if (agentRoomIdsRef.current.has(message.room_id)) {
-              const cached = roomInfoRef.current.get(message.room_id);
+            if (agentRoomIdsRef.current.has(typedMessage.room_id)) {
+              const cached = roomInfoRef.current.get(typedMessage.room_id);
               if (cached) return cached;
             }
             const assignedIds = assignedProfileIdsRef.current;
@@ -158,22 +171,25 @@ export function useAgentChatNotifications(
             const { data: room } = await supabaseAdmin
               .from("chat_rooms")
               .select("id, profile_id, user_id")
-              .eq("id", message.room_id)
+              .eq("id", typedMessage.room_id)
               .maybeSingle();
-            if (!room || !assignedIds.includes(room.profile_id)) return false;
+            const typedRoom = room as AgentChatRoom | null;
+            if (!typedRoom || !assignedIds.includes(typedRoom.profile_id)) {
+              return false;
+            }
             setAgentRoomIds((prev) => {
-              if (prev.has(message.room_id)) return prev;
+              if (prev.has(typedMessage.room_id)) return prev;
               const next = new Set(prev);
-              next.add(message.room_id);
+              next.add(typedMessage.room_id);
               agentRoomIdsRef.current = next;
               return next;
             });
-            if (room.id && room.user_id && room.profile_id) {
+            if (typedRoom.id && typedRoom.user_id && typedRoom.profile_id) {
               const roomInfo = {
-                userId: room.user_id,
-                profileId: room.profile_id,
+                userId: typedRoom.user_id,
+                profileId: typedRoom.profile_id,
               };
-              roomInfoRef.current.set(room.id, roomInfo);
+              roomInfoRef.current.set(typedRoom.id, roomInfo);
               return roomInfo;
             }
             return false;
@@ -184,16 +200,16 @@ export function useAgentChatNotifications(
           if (!roomInfo) return;
 
           // 유저가 보낸 메시지만 알림 (프로필/에이전트가 보낸 메시지 제외)
-          if (message.sender_type !== "user") return;
+          if (typedMessage.sender_type !== "user") return;
 
           // 해당 채팅이 음소거 상태인지 확인
-          if (isChatMutedRef.current(message.room_id, true)) return;
+          if (isChatMutedRef.current(typedMessage.room_id, true)) return;
 
           // 현재 선택된 채팅이면 알림 발생 안함
-          if (selectedChatIdRef.current === message.room_id) return;
+          if (selectedChatIdRef.current === typedMessage.room_id) return;
 
           // 해당 대화가 모달로 열려있으면 알림 발생 안함
-          if (openChatModalIdsRef.current.has(message.room_id)) return;
+          if (openChatModalIdsRef.current.has(typedMessage.room_id)) return;
 
           const resolveUserName = async (userId: string) => {
             if (!userId) return "회원";
@@ -224,8 +240,8 @@ export function useAgentChatNotifications(
             return agentName;
           };
 
-          if (processedMessageIdsRef.current.has(message.id)) return;
-          processedMessageIdsRef.current.set(message.id, Date.now());
+          if (processedMessageIdsRef.current.has(typedMessage.id)) return;
+          processedMessageIdsRef.current.set(typedMessage.id, Date.now());
           if (processedMessageIdsRef.current.size > 200) {
             const oldest = processedMessageIdsRef.current.keys().next().value;
             if (oldest) {
@@ -247,9 +263,9 @@ export function useAgentChatNotifications(
           addChatNotification({
             message: `${userName} · ${agentName}`,
             description:
-              message.content && message.content.length > 30
-                ? message.content.slice(0, 30) + "..."
-                : message.content || "",
+              typedMessage.content && typedMessage.content.length > 30
+                ? typedMessage.content.slice(0, 30) + "..."
+                : typedMessage.content || "",
           });
         },
       )

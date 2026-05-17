@@ -10,8 +10,20 @@ import {
   dismissChatNotification,
 } from "@/stores/chatNotificationStore";
 
+type UserChatRoom = {
+  id: string;
+};
+
+type UserChatMessage = {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  sender_type: string;
+  content: string | null;
+};
+
 export function useUserChatNotifications() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { settings, playSound, activeChatId, openChatModalIds, isChatMuted } =
     useNotification();
   const { user, profile, adminAccount } = useAuth();
@@ -33,7 +45,7 @@ export function useUserChatNotifications() {
   const activeChatIdRef = useRef(activeChatId);
   const openChatModalIdsRef = useRef(openChatModalIds);
   const isChatMutedRef = useRef(isChatMuted);
-  const navigateRef = useRef(navigate);
+  const routerRef = useRef(router);
   const userRoomIdsRef = useRef(userRoomIds);
   const profileIdRef = useRef(profile?.id ?? null);
 
@@ -43,7 +55,7 @@ export function useUserChatNotifications() {
     activeChatIdRef.current = activeChatId;
     openChatModalIdsRef.current = openChatModalIds;
     isChatMutedRef.current = isChatMuted;
-    navigateRef.current = navigate;
+    routerRef.current = router;
     userRoomIdsRef.current = userRoomIds;
     profileIdRef.current = profile?.id ?? null;
     userDisplayNameRef.current = profile?.nickname || profile?.name || null;
@@ -53,7 +65,7 @@ export function useUserChatNotifications() {
     activeChatId,
     openChatModalIds,
     isChatMuted,
-    navigate,
+    router,
     userRoomIds,
     profile?.id,
     profile?.nickname,
@@ -71,8 +83,10 @@ export function useUserChatNotifications() {
         .select("id")
         .eq("user_id", profile.id);
 
-      if (data) {
-        setUserRoomIds(new Set(data.map((r) => r.id)));
+      const rooms = (data || []) as UserChatRoom[];
+
+      if (rooms.length > 0) {
+        setUserRoomIds(new Set(rooms.map((r) => r.id)));
       }
     };
 
@@ -89,8 +103,8 @@ export function useUserChatNotifications() {
           table: "chat_rooms",
           filter: `user_id=eq.${profile.id}`,
         },
-        (payload) => {
-          const newRoom = payload.new as { id: string };
+        (payload: { new: UserChatRoom }) => {
+          const newRoom = payload.new;
           setUserRoomIds((prev) => new Set([...prev, newRoom.id]));
         },
       )
@@ -116,8 +130,8 @@ export function useUserChatNotifications() {
           schema: "public",
           table: "messages",
         },
-        async (payload) => {
-          const partialMessage = payload.new as { id: string };
+        async (payload: { new: { id: string } }) => {
+          const partialMessage = payload.new;
 
           // Realtime에서 모든 필드가 오지 않을 수 있으므로 전체 메시지 조회
           const { data: message } = await supabase
@@ -127,22 +141,23 @@ export function useUserChatNotifications() {
             .single();
 
           if (!message) return;
+          const typedMessage = message as UserChatMessage;
 
           const ensureUserRoom = async () => {
-            if (userRoomIdsRef.current.has(message.room_id)) return true;
+            if (userRoomIdsRef.current.has(typedMessage.room_id)) return true;
             const profileId = profileIdRef.current;
             if (!profileId) return false;
             const { data: room } = await supabase
               .from("chat_rooms")
               .select("id")
-              .eq("id", message.room_id)
+              .eq("id", typedMessage.room_id)
               .eq("user_id", profileId)
               .maybeSingle();
             if (!room) return false;
             setUserRoomIds((prev) => {
-              if (prev.has(message.room_id)) return prev;
+              if (prev.has(typedMessage.room_id)) return prev;
               const next = new Set(prev);
-              next.add(message.room_id);
+              next.add(typedMessage.room_id);
               userRoomIdsRef.current = next;
               return next;
             });
@@ -153,16 +168,16 @@ export function useUserChatNotifications() {
           if (!(await ensureUserRoom())) return;
 
           // 프로필(에이전트)이 보낸 메시지만 알림 (유저 자신이 보낸 메시지 제외)
-          if (message.sender_type !== "profile") return;
+          if (typedMessage.sender_type !== "profile") return;
 
           // 해당 채팅이 음소거 상태인지 확인
-          if (isChatMutedRef.current(message.room_id)) return;
+          if (isChatMutedRef.current(typedMessage.room_id)) return;
 
           // 현재 채팅창이 열려있으면 알림 발생 안함
-          if (activeChatIdRef.current === message.room_id) return;
+          if (activeChatIdRef.current === typedMessage.room_id) return;
 
           // 해당 대화가 모달로 열려있으면 알림 발생 안함
-          if (openChatModalIdsRef.current.has(message.room_id)) return;
+          if (openChatModalIdsRef.current.has(typedMessage.room_id)) return;
 
           const resolveAgentName = async (agentId: string) => {
             if (!agentId) return "에이전트";
@@ -178,8 +193,8 @@ export function useUserChatNotifications() {
             return agentName;
           };
 
-          if (processedMessageIdsRef.current.has(message.id)) return;
-          processedMessageIdsRef.current.set(message.id, Date.now());
+          if (processedMessageIdsRef.current.has(typedMessage.id)) return;
+          processedMessageIdsRef.current.set(typedMessage.id, Date.now());
           if (processedMessageIdsRef.current.size > 200) {
             const oldest = processedMessageIdsRef.current.keys().next().value;
             if (oldest) {
@@ -188,7 +203,7 @@ export function useUserChatNotifications() {
           }
 
           const userName = userDisplayNameRef.current || "회원";
-          const agentName = await resolveAgentName(message.sender_id);
+          const agentName = await resolveAgentName(typedMessage.sender_id);
 
           // 소리 재생
           if (settingsRef.current.globalEnabled) {
@@ -199,12 +214,12 @@ export function useUserChatNotifications() {
           addChatNotification({
             message: `${userName} · ${agentName}`,
             description:
-              message.content && message.content.length > 30
-                ? message.content.slice(0, 30) + "..."
-                : message.content || "",
+              typedMessage.content && typedMessage.content.length > 30
+                ? typedMessage.content.slice(0, 30) + "..."
+                : typedMessage.content || "",
             action: {
               label: "확인하기",
-              onClick: () => navigateRef.current("/chat"),
+              onClick: () => routerRef.current.push("/chat"),
             },
           });
         },

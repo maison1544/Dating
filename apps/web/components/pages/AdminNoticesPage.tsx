@@ -2,8 +2,8 @@
 import { useDebounce } from "@/hooks/useDebounce";
 import { useState, useEffect, useMemo } from "react";
 import { Search, Plus, Edit, Trash2, Pin, PinOff, X } from "lucide-react";
-import { AdminPagination } from "@/components/layout/common/AdminPagination";
-import { AdminPageLoader } from "@/components/layout/common/AdminPageLoader";
+import { AdminPagination } from "@/components/common/AdminPagination";
+import { AdminPageLoader } from "@/components/common/AdminPageLoader";
 import { useAdminNotices } from "@/hooks/useSupabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDatetime, formatKST, getTodayKST } from "@/lib/utils/dateUtils";

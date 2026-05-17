@@ -25,7 +25,7 @@ import {
 import { formatDatetime } from "@/lib/utils/dateUtils";
 
 export function PointPage() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { showAlert } = useAlert();
   const {
     user,
@@ -61,7 +61,7 @@ export function PointPage() {
       router.push("/login");
       return;
     }
-  }, [authLoading, user, navigate]);
+  }, [authLoading, user, router]);
 
   const [activeTab, setActiveTab] = useState<"charge" | "withdraw" | "gift">(
     "charge",
@@ -441,8 +441,7 @@ export function PointPage() {
   }
 
   if (!user || adminAccount || !profile) {
-    if (!user) return <>{typeof window !== "undefined" && router.push("/login" replace />;
-    return <>{typeof window !== "undefined" && router.push("/" replace />;
+    return null;
   }
 
   return (

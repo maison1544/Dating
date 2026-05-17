@@ -31,8 +31,10 @@ interface GiftItem {
 }
 
 export function ChatRoomPage() {
-  const navigate = useRouter();
-  const { chatId } = useParams(); // chatId는 room_id (UUID)
+  const router = useRouter();
+  const params = useParams(); // chatId는 room_id (UUID)
+  const chatIdParam = params.chatId;
+  const chatId = Array.isArray(chatIdParam) ? chatIdParam[0] : chatIdParam;
   const {
     user,
     profile,
@@ -94,7 +96,7 @@ export function ChatRoomPage() {
       router.push("/login");
       return;
     }
-  }, [authLoading, user, adminAccount, isAgent, navigate]);
+  }, [authLoading, user, adminAccount, isAgent, router]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -309,8 +311,7 @@ export function ChatRoomPage() {
   }
 
   if (!user || adminAccount || !profile?.id) {
-    if (!user) return <>{typeof window !== "undefined" && router.push("/login" replace />;
-    return <>{typeof window !== "undefined" && router.push("/" replace />;
+    return null;
   }
 
   if (!chatPartner) {

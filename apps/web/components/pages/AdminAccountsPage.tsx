@@ -22,14 +22,14 @@ import { DateRangePicker } from "@/components/layout/DateRangePicker";
 import { GiftHistoryTable } from "@/components/layout/GiftHistoryTable";
 import { GiftInventoryManager } from "@/components/layout/GiftInventoryManager";
 import { AdminLayout } from "@/components/layout/AdminLayout";
-import { AdminPageLoader } from "@/components/layout/common/AdminPageLoader";
+import { AdminPageLoader } from "@/components/common/AdminPageLoader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { formatDatetime, formatKST, getTodayKST } from "@/lib/utils/dateUtils";
 import { supabase, supabaseAdmin } from "@/lib/supabase/client";
 import { CsvDownloadButton } from "@/components/layout/CsvDownloadButton";
 import { UserDetailModal } from "@/components/layout/UserDetailModal";
-import { AdminPagination } from "@/components/layout/common/AdminPagination";
+import { AdminPagination } from "@/components/common/AdminPagination";
 import { SuspendConfirmModal } from "@/components/layout/SuspendConfirmModal";
 import {
   useAdminAccounts,
@@ -334,9 +334,10 @@ export function AdminAccountsPage() {
     );
   };
 
-  const formatRevenue = (amount: number) => {
-    const sign = amount >= 0 ? "+" : "";
-    return `${sign}${Number(amount || 0).toLocaleString()}P`;
+  const formatRevenue = (amount: number | null | undefined) => {
+    const normalizedAmount = amount || 0;
+    const sign = normalizedAmount >= 0 ? "+" : "";
+    return `${sign}${normalizedAmount.toLocaleString()}P`;
   };
 
   useEffect(() => {
@@ -386,7 +387,8 @@ export function AdminAccountsPage() {
                   ? formatKST(a.last_login_at, "datetime")
                   : "-",
                 status: a.is_active ? "활성" : "비활성",
-                referralCode: a.referral_code || "-",
+                referralCode:
+                  a.kind === "agent" ? a.referral_code || "-" : "-",
               }))}
               columns={[
                 { key: "id", label: "ID" },

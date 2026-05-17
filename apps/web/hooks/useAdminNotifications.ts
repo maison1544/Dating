@@ -13,8 +13,24 @@ import {
 const ADMIN_NOTIFIED_IDS_KEY = "adminNotifications.notifiedIds";
 const MAX_STORED_NOTIFIED_IDS = 200;
 
+type AdminPaymentNotificationRequest = {
+  id: string;
+  amount: number;
+  status: string;
+  user_id?: string | null;
+  created_at?: string | null;
+};
+
+type AdminRegistrationNotificationProfile = {
+  id: string;
+  status: string;
+  nickname?: string | null;
+  name?: string | null;
+  created_at?: string | null;
+};
+
 export function useAdminNotifications() {
-  const navigate = useRouter();
+  const router = useRouter();
   const { settings, playSound } = useNotification();
   const { adminAccount, isAgent } = useAuth();
 
@@ -28,15 +44,15 @@ export function useAdminNotifications() {
   // Use refs for settings to avoid stale closures
   const settingsRef = useRef(settings);
   const playSoundRef = useRef(playSound);
-  const navigateRef = useRef(navigate);
+  const routerRef = useRef(router);
   const notifiedIdsRef = useRef<Set<string>>(new Set());
   const notifiedIdsLoadedRef = useRef(false);
   const userNameCacheRef = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     settingsRef.current = settings;
     playSoundRef.current = playSound;
-    navigateRef.current = navigate;
-  }, [settings, playSound, navigate]);
+    routerRef.current = router;
+  }, [settings, playSound, router]);
 
   const ensureNotifiedIdsLoaded = () => {
     if (notifiedIdsLoadedRef.current) return;
@@ -100,13 +116,7 @@ export function useAdminNotifications() {
       return displayName;
     };
 
-    const notifyDeposit = async (request: {
-      id: string;
-      amount: number;
-      status: string;
-      user_id?: string | null;
-      created_at?: string | null;
-    }) => {
+    const notifyDeposit = async (request: AdminPaymentNotificationRequest) => {
       if (request.status !== "pending") return;
       if (!markNotified(`deposit:${request.id}`)) return;
 
@@ -120,18 +130,14 @@ export function useAdminNotifications() {
         description: `${displayName}님이 ${amount}원 입금 신청을 하였습니다.`,
         action: {
           label: "확인하기",
-          onClick: () => navigateRef.current("/admin/points"),
+          onClick: () => routerRef.current.push("/admin/points"),
         },
       });
     };
 
-    const notifyWithdrawal = async (request: {
-      id: string;
-      amount: number;
-      status: string;
-      user_id?: string | null;
-      created_at?: string | null;
-    }) => {
+    const notifyWithdrawal = async (
+      request: AdminPaymentNotificationRequest,
+    ) => {
       if (request.status !== "pending") return;
       if (!markNotified(`withdrawal:${request.id}`)) return;
 
@@ -145,18 +151,14 @@ export function useAdminNotifications() {
         description: `${displayName}님이 ${amount}원 출금 신청을 하였습니다.`,
         action: {
           label: "확인하기",
-          onClick: () => navigateRef.current("/admin/points"),
+          onClick: () => routerRef.current.push("/admin/points"),
         },
       });
     };
 
-    const notifyRegistration = (profile: {
-      id: string;
-      status: string;
-      nickname?: string;
-      name?: string;
-      created_at?: string | null;
-    }) => {
+    const notifyRegistration = (
+      profile: AdminRegistrationNotificationProfile,
+    ) => {
       if (profile.status !== "pending") return;
       if (!markNotified(`registration:${profile.id}`)) {
         return;
@@ -171,7 +173,7 @@ export function useAdminNotifications() {
         description: `${displayName}님이 가입 신청을 하였습니다.`,
         action: {
           label: "확인하기",
-          onClick: () => navigateRef.current("/admin/users"),
+          onClick: () => routerRef.current.push("/admin/users"),
         },
       });
     };
@@ -193,12 +195,16 @@ export function useAdminNotifications() {
           withdrawalQuery,
         ]);
 
-        depositResult.data?.forEach((request) => {
-          void notifyDeposit(request);
-        });
-        withdrawalResult.data?.forEach((request) => {
-          void notifyWithdrawal(request);
-        });
+        depositResult.data?.forEach(
+          (request: AdminPaymentNotificationRequest) => {
+            void notifyDeposit(request);
+          },
+        );
+        withdrawalResult.data?.forEach(
+          (request: AdminPaymentNotificationRequest) => {
+            void notifyWithdrawal(request);
+          },
+        );
       }
 
       if (settingsRef.current.registrationEnabled) {
@@ -210,15 +216,19 @@ export function useAdminNotifications() {
         const { data: registrations, error: registrationError } =
           await registrationQuery;
         void registrationError;
-        registrations?.forEach((profile) => notifyRegistration(profile));
+        registrations?.forEach(
+          (profile: AdminRegistrationNotificationProfile) =>
+            notifyRegistration(profile),
+        );
       }
     };
 
     void fetchPending();
+    const channelSuffix = `${adminAccount.id}-${crypto.randomUUID()}`;
 
     // 입금 신청 알림 구독
     const depositChannel = supabaseAdmin
-      .channel("admin-deposit-notifications")
+      .channel(`admin-deposit-notifications-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -226,17 +236,10 @@ export function useAdminNotifications() {
           schema: "public",
           table: "deposit_requests",
         },
-        (payload) => {
+        (payload: { new: AdminPaymentNotificationRequest }) => {
           if (!settingsRef.current.depositWithdrawEnabled) return;
 
-          const request = payload.new as {
-            id: string;
-            amount: number;
-            status: string;
-            user_id?: string | null;
-            created_at?: string | null;
-          };
-
+          const request = payload.new;
           void notifyDeposit(request);
         },
       )
@@ -244,7 +247,7 @@ export function useAdminNotifications() {
 
     // 출금 신청 알림 구독
     const withdrawalChannel = supabaseAdmin
-      .channel("admin-withdrawal-notifications")
+      .channel(`admin-withdrawal-notifications-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -252,17 +255,10 @@ export function useAdminNotifications() {
           schema: "public",
           table: "withdrawal_requests",
         },
-        (payload) => {
+        (payload: { new: AdminPaymentNotificationRequest }) => {
           if (!settingsRef.current.depositWithdrawEnabled) return;
 
-          const request = payload.new as {
-            id: string;
-            amount: number;
-            status: string;
-            user_id?: string | null;
-            created_at?: string | null;
-          };
-
+          const request = payload.new;
           void notifyWithdrawal(request);
         },
       )
@@ -270,7 +266,7 @@ export function useAdminNotifications() {
 
     // 가입 신청 알림 구독
     const registrationChannel = supabaseAdmin
-      .channel("admin-registration-notifications")
+      .channel(`admin-registration-notifications-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -278,16 +274,10 @@ export function useAdminNotifications() {
           schema: "public",
           table: "user_profiles",
         },
-        (payload) => {
+        (payload: { new: AdminRegistrationNotificationProfile }) => {
           if (!settingsRef.current.registrationEnabled) return;
 
-          const profile = payload.new as {
-            id: string;
-            status: string;
-            nickname?: string;
-            name?: string;
-            created_at?: string | null;
-          };
+          const profile = payload.new;
 
           notifyRegistration(profile);
         },

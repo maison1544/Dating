@@ -1,5 +1,5 @@
 ﻿import { AdminLayout } from "@/components/layout/AdminLayout";
-import { AdminPageLoader } from "@/components/layout/common/AdminPageLoader";
+import { AdminPageLoader } from "@/components/common/AdminPageLoader";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,

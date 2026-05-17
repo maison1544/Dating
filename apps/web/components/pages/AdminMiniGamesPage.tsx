@@ -3,7 +3,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Search, Filter, RefreshCw, X } from "lucide-react";
 import { DateRangePicker } from "@/components/layout/DateRangePicker";
-import { AdminPagination } from "@/components/layout/common/AdminPagination";
+import { AdminPagination } from "@/components/common/AdminPagination";
 import { CountdownTimer } from "@/components/layout/CountdownTimer";
 import { AdminMiniGamesSettingsTab } from "./AdminMiniGamesSettingsTab";
 import { RoundDetailModal } from "@/components/layout/RoundDetailModal";
@@ -49,7 +49,7 @@ interface GameRound {
   wasReserved?: boolean;
   date: string;
   betDistribution?: BetOption[];
-  reservedResult?: string | null;
+  reservedResult?: string;
   isReservationPending?: boolean;
 }
 
@@ -555,7 +555,7 @@ export function AdminMiniGamesPage() {
         wasReserved,
         date: formatKST(r.start_time || new Date().toISOString()).split(" ")[0],
         betDistribution,
-        reservedResult: resolvedReservedResult,
+        reservedResult: resolvedReservedResult ?? undefined,
         isReservationPending,
       };
     });

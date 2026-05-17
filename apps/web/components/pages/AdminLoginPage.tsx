@@ -1,4 +1,5 @@
-﻿import Link from "next/link";`nimport { useRouter, usePathname } from "next/navigation";
+﻿import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import { User, Lock, Eye, EyeOff, Shield, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Logo from "@/imports/Logo";
@@ -11,7 +12,7 @@ export function AdminLoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const pathname = usePathname();
-  const navigate = useRouter();
+  const router = useRouter();
   const {
     signInWithUsername,
     user,
@@ -28,7 +29,7 @@ export function AdminLoginPage() {
     if (!adminAccount) return;
 
     router.push(isAgent ? "/agent" : "/admin");
-  }, [authLoading, user, adminAccount, isAgent, navigate]);
+  }, [authLoading, user, adminAccount, isAgent, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

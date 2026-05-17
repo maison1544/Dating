@@ -2,7 +2,7 @@
 import { useDebounce } from "@/hooks/useDebounce";
 import { UserDetailModal } from "@/components/layout/UserDetailModal";
 import { SuspendConfirmModal } from "@/components/layout/SuspendConfirmModal";
-import { AdminPagination } from "@/components/layout/common/AdminPagination";
+import { AdminPagination } from "@/components/common/AdminPagination";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Search,
@@ -889,8 +889,9 @@ export function AdminUsersPage() {
                               setSuspensionReason(null);
                               // Fetch suspension/rejection reason from admin_action_logs
                               try {
-                                const { supabaseAdmin } =
-                                  await import("../../lib/supabase");
+                                const { supabaseAdmin } = await import(
+                                  "@/lib/supabase/client"
+                                );
                                 // For rejected users, check reject_user action; for suspended, check suspend_user
                                 const actionType =
                                   user.status === "승인거절"

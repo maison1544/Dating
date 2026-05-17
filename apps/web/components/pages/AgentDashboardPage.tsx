@@ -9,7 +9,7 @@ import {
 import { DollarSign, Calendar } from "lucide-react";
 import { DateRangePicker } from "@/components/layout/DateRangePicker";
 import { formatKST } from "@/lib/utils/dateUtils";
-import { AdminPagination } from "@/components/layout/common/AdminPagination";
+import { AdminPagination } from "@/components/common/AdminPagination";
 
 interface AssignedProfile {
   id: string;
