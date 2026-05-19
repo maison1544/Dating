@@ -1,7 +1,7 @@
 ﻿import { X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAllGameBets } from "@/hooks/useSupabase";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, supabaseAdmin } from "@/lib/supabase/client";
 import { UserDetailModal } from "./UserDetailModal";
 import { formatKST } from "@/lib/utils/dateUtils";
 import { GameResultDisplay } from "./GameResultDisplay";
@@ -59,17 +59,16 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isUserLoading, setIsUserLoading] = useState(false);
-
-  if (!round) return null;
+  const roundDbId = round?.dbId;
 
   const { bets: dbBets, refetch: refetchBets } = useAllGameBets(
-    round.dbId ? { roundId: round.dbId } : undefined,
+    roundDbId ? { enabled: true, roundId: roundDbId } : { enabled: false },
   );
 
   const realtimeRefetchTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!round.dbId) return;
+    if (!roundDbId) return;
 
     const scheduleRefetch = () => {
       if (realtimeRefetchTimerRef.current) {
@@ -81,14 +80,14 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
     };
 
     const channel = supabase
-      .channel(`round-detail-${round.dbId}`)
+      .channel(`round-detail-${roundDbId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "game_bets",
-          filter: `round_id=eq.${round.dbId}`,
+          filter: `round_id=eq.${roundDbId}`,
         },
         scheduleRefetch,
       )
@@ -98,7 +97,7 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
           event: "UPDATE",
           schema: "public",
           table: "game_rounds",
-          filter: `id=eq.${round.dbId}`,
+          filter: `id=eq.${roundDbId}`,
         },
         scheduleRefetch,
       )
@@ -110,7 +109,7 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
       }
       void supabase.removeChannel(channel);
     };
-  }, [refetchBets, round.dbId]);
+  }, [refetchBets, roundDbId]);
 
   const totalPayout = useMemo(() => {
     return (dbBets || []).reduce((sum: number, b: any) => {
@@ -127,7 +126,7 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
     }, 0);
   }, [dbBets]);
 
-  const siteProfitLoss = round.totalAmount - totalPayout;
+  const siteProfitLoss = round ? round.totalAmount - totalPayout : 0;
 
   const mapBetTypeToOption = useMemo(() => {
     const mapPowerball: Record<string, string> = {
@@ -170,7 +169,7 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
   }, []);
 
   const modalDbGameType: "powerball" | "ladder" =
-    round.dbGameType || (round.gameType === "사다리" ? "ladder" : "powerball");
+    round?.dbGameType || (round?.gameType === "사다리" ? "ladder" : "powerball");
 
   const betUsers: BetUser[] = useMemo(() => {
     return (dbBets || []).map((b: any, idx: number) => {
@@ -210,7 +209,7 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
   const openUserDetail = async (userId: string) => {
     if (!userId) return;
     setIsUserLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("user_profiles")
       .select(
         "id, name, nickname, email, phone, created_at, last_login_at, join_ip, last_login_ip, status, points, bank, account_number, account_holder, profile_image",
@@ -246,6 +245,8 @@ export function RoundDetailModal({ round, onClose }: RoundDetailModalProps) {
   const selectedOptionUsers = selectedBetOption
     ? betUsers.filter((user) => user.betType === selectedBetOption.option)
     : [];
+
+  if (!round) return null;
 
   return (
     <>

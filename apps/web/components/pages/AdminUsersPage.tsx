@@ -577,8 +577,8 @@ export function AdminUsersPage() {
   };
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <AdminLayout contentClassName="w-full max-w-[1600px]">
+      <div className="space-y-6 w-full">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -687,12 +687,12 @@ export function AdminUsersPage() {
         </div>
 
         {/* Users Table */}
-        <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-          <div className="w-full">
-            <table className="w-full table-fixed admin-users-table">
+        <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden w-full">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1180px] admin-users-table">
               <thead className="bg-gray-800">
                 <tr>
-                  <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                  <th className="px-4 py-2 text-center text-xs text-gray-400 uppercase min-w-[320px]">
                     <button
                       type="button"
                       onClick={() => toggleSort("name")}
@@ -702,7 +702,7 @@ export function AdminUsersPage() {
                       <SortIcon column="name" />
                     </button>
                   </th>
-                  <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                  <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase min-w-[210px]">
                     <button
                       type="button"
                       onClick={() => toggleSort("joined")}
@@ -715,7 +715,7 @@ export function AdminUsersPage() {
                       마지막 로그인
                     </div>
                   </th>
-                  <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                  <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase min-w-[210px]">
                     <button
                       type="button"
                       onClick={() => toggleSort("joinIp")}
@@ -728,7 +728,7 @@ export function AdminUsersPage() {
                       마지막 IP
                     </div>
                   </th>
-                  <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                  <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase min-w-[120px]">
                     <button
                       type="button"
                       onClick={() => toggleSort("status")}
@@ -738,7 +738,7 @@ export function AdminUsersPage() {
                       <SortIcon column="status" />
                     </button>
                   </th>
-                  <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                  <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase min-w-[150px]">
                     <button
                       type="button"
                       onClick={() => toggleSort("points")}
@@ -748,7 +748,7 @@ export function AdminUsersPage() {
                       <SortIcon column="points" />
                     </button>
                   </th>
-                  <th className="px-2 py-2 text-center text-xs text-gray-400 uppercase">
+                  <th className="px-3 py-2 text-center text-xs text-gray-400 uppercase min-w-[120px]">
                     작업
                   </th>
                 </tr>
@@ -801,13 +801,13 @@ export function AdminUsersPage() {
                           </div>
                         </div>
                         <div className="text-left min-w-0">
-                          <p className="text-white text-sm leading-tight">
+                          <p className="text-white text-sm leading-tight whitespace-nowrap">
                             {user.nickname}{" "}
                             <span className="text-white text-sm">
                               ({user.name})
                             </span>
                           </p>
-                          <p className="text-gray-400 text-xs mt-1">
+                          <p className="text-gray-400 text-xs mt-1 whitespace-nowrap">
                             {user.email}
                           </p>
                         </div>
@@ -816,8 +816,8 @@ export function AdminUsersPage() {
                     <td className="px-2 text-center h-16">
                       <div className="text-gray-300 text-sm h-full flex items-center justify-center">
                         <div>
-                          <p>{user.joined}</p>
-                          <p className="text-gray-500 text-sm mt-0.5">
+                          <p className="whitespace-nowrap">{user.joined}</p>
+                          <p className="text-gray-500 text-sm mt-0.5 whitespace-nowrap">
                             {user.lastLogin}
                           </p>
                         </div>
@@ -826,8 +826,8 @@ export function AdminUsersPage() {
                     <td className="px-2 text-center h-16">
                       <div className="text-gray-300 text-sm h-full flex items-center justify-center">
                         <div>
-                          <p>{user.joinIp}</p>
-                          <p className="text-gray-500 text-sm mt-0.5">
+                          <p className="whitespace-nowrap">{user.joinIp}</p>
+                          <p className="text-gray-500 text-sm mt-0.5 whitespace-nowrap">
                             {user.lastIp}
                           </p>
                         </div>
@@ -844,7 +844,7 @@ export function AdminUsersPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-2 text-center h-16 text-white text-sm">
+                    <td className="px-3 text-center h-16 text-white text-sm">
                       <div className="h-full flex flex-col items-center justify-center gap-1">
                         <span className="text-indigo-400 font-semibold">
                           {user.points.toLocaleString()} P
@@ -863,7 +863,7 @@ export function AdminUsersPage() {
                         </button>
                       </div>
                     </td>
-                    <td className="px-2 h-16">
+                    <td className="px-3 h-16">
                       <div className="flex items-center justify-center gap-1">
                         {user.status === "활성" ? (
                           <button

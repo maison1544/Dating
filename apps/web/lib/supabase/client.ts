@@ -2,12 +2,14 @@ import { createBrowserClient } from "@supabase/ssr";
 import {
   getSupabaseCookieOptions,
   getSupabaseAuthStorageKey,
+  resolveBrowserAppInstance,
+  resolveBackofficeAuthInstance,
   type SupabaseAuthInstance,
 } from "./config";
 
 type SupabaseBrowserClient = ReturnType<typeof createBrowserClient>;
 
-const browserClients = new Map<SupabaseAuthInstance, SupabaseBrowserClient>();
+const browserClients = new Map<Exclude<SupabaseAuthInstance, "backoffice">, SupabaseBrowserClient>();
 
 function getRequiredSupabaseEnv() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,7 +24,13 @@ function getRequiredSupabaseEnv() {
   return { supabaseUrl, supabaseAnonKey };
 }
 
-export function createClient(instance: SupabaseAuthInstance = "user") {
+function resolveClientInstance(instance?: SupabaseAuthInstance) {
+  if (!instance) return resolveBrowserAppInstance();
+  return instance === "backoffice" ? resolveBackofficeAuthInstance() : instance;
+}
+
+export function createClient(instance?: SupabaseAuthInstance) {
+  const resolvedInstance = resolveClientInstance(instance);
   const { supabaseUrl, supabaseAnonKey } = getRequiredSupabaseEnv();
 
   return createBrowserClient(
@@ -30,34 +38,36 @@ export function createClient(instance: SupabaseAuthInstance = "user") {
     supabaseAnonKey,
     {
       isSingleton: false,
-      cookieOptions: getSupabaseCookieOptions(instance),
+      cookieOptions: getSupabaseCookieOptions(resolvedInstance),
       auth: {
-        storageKey: getSupabaseAuthStorageKey(instance),
+        storageKey: getSupabaseAuthStorageKey(resolvedInstance),
       },
     },
   );
 }
 
-function getClient(instance: SupabaseAuthInstance) {
-  const existing = browserClients.get(instance);
+export function getSupabaseBrowserClient(instance?: SupabaseAuthInstance) {
+  const resolvedInstance = resolveClientInstance(instance);
+  const existing = browserClients.get(resolvedInstance);
   if (existing) {
     return existing;
   }
-  const client = createClient(instance);
-  browserClients.set(instance, client);
+  const client = createClient(resolvedInstance);
+  browserClients.set(resolvedInstance, client);
   return client;
 }
 
-function createLazyClient(instance: SupabaseAuthInstance): SupabaseBrowserClient {
+function createLazyClient(instance?: SupabaseAuthInstance): SupabaseBrowserClient {
   return new Proxy({} as SupabaseBrowserClient, {
     get(_target, prop) {
-      const client = getClient(instance);
+      const client = getSupabaseBrowserClient(instance);
       const value = client[prop as keyof SupabaseBrowserClient];
       return typeof value === "function" ? value.bind(client) : value;
     },
   });
 }
 
-// Legacy named exports for compatibility with existing components
-export const supabase = createLazyClient("user");
-export const supabaseAdmin = createLazyClient("backoffice");
+const supabase = createLazyClient();
+const supabaseAdmin = createLazyClient("backoffice");
+
+export { supabase, supabaseAdmin };

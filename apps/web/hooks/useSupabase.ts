@@ -19,6 +19,29 @@ type RealtimePostgresPayload = {
   old?: unknown;
 };
 
+type GameRoundSecure = Tables<"game_rounds_secure">;
+
+async function fetchSecureGameRounds(args: {
+  p_game_type?: string | null;
+  p_statuses?: string[] | null;
+  p_round_id?: string | null;
+  p_limit?: number;
+  p_betting_open_only?: boolean;
+}) {
+  const { data, error } = await supabase.rpc("game_rounds_secure_list", {
+    p_game_type: args.p_game_type ?? null,
+    p_statuses: args.p_statuses ?? null,
+    p_round_id: args.p_round_id ?? null,
+    p_limit: args.p_limit ?? 20,
+    p_betting_open_only: args.p_betting_open_only ?? false,
+  });
+
+  return {
+    data: (data || []) as GameRoundSecure[],
+    error,
+  };
+}
+
 // Hook for fetching chat profiles
 export function useChatProfiles() {
   const [profiles, setProfiles] = useState<Tables<"chat_profiles">[]>([]);
@@ -223,41 +246,36 @@ export function useNotices() {
 // Hook for game rounds
 export function useGameRounds(gameType: "powerball" | "ladder") {
   const [currentRound, setCurrentRound] =
-    useState<Tables<"game_rounds"> | null>(null);
-  const [history, setHistory] = useState<Tables<"game_rounds">[]>([]);
+    useState<Tables<"game_rounds_secure"> | null>(null);
+  const [history, setHistory] = useState<Tables<"game_rounds_secure">[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchCurrentRound = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("game_rounds")
-      .select("*")
-      .eq("game_type", gameType)
-      .in("status", ["betting", "playing"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (error && error.code !== "PGRST116") {
-      setError(error);
-    } else {
-      setCurrentRound(data);
-    }
-  }, [gameType]);
-
-  const fetchHistory = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("game_rounds")
-      .select("*")
-      .eq("game_type", gameType)
-      .in("status", ["completed", "settled"])
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const { data, error } = await fetchSecureGameRounds({
+      p_game_type: gameType,
+      p_statuses: ["betting", "playing"],
+      p_limit: 1,
+    });
 
     if (error) {
       setError(error);
     } else {
-      setHistory(data || []);
+      setCurrentRound(data[0] || null);
+    }
+  }, [gameType]);
+
+  const fetchHistory = useCallback(async () => {
+    const { data, error } = await fetchSecureGameRounds({
+      p_game_type: gameType,
+      p_statuses: ["completed", "settled"],
+      p_limit: 20,
+    });
+
+    if (error) {
+      setError(error);
+    } else {
+      setHistory(data);
     }
   }, [gameType]);
 
@@ -302,7 +320,7 @@ export function useGameRounds(gameType: "powerball" | "ladder") {
 }
 
 export function useGameHistory(gameType: "powerball" | "ladder") {
-  const [history, setHistory] = useState<Tables<"game_rounds">[]>([]);
+  const [history, setHistory] = useState<Tables<"game_rounds_secure">[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -310,19 +328,17 @@ export function useGameHistory(gameType: "powerball" | "ladder") {
     setIsLoading(true);
     setError(null);
 
-    const { data, error } = await supabase
-      .from("game_rounds")
-      .select("*")
-      .eq("game_type", gameType)
-      .in("status", ["completed", "settled"])
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const { data, error } = await fetchSecureGameRounds({
+      p_game_type: gameType,
+      p_statuses: ["completed", "settled"],
+      p_limit: 20,
+    });
 
     if (error) {
       setError(error);
       setHistory([]);
     } else {
-      setHistory(data || []);
+      setHistory(data);
     }
 
     setIsLoading(false);
@@ -499,8 +515,8 @@ export function useUserBets(
     setIsLoading(true);
     // gameType? ??? inner join?? ???, ??? ?? ??
     const selectQuery = gameType
-      ? "*, game_rounds!inner(*)"
-      : "*, game_rounds(*)";
+      ? "*, game_rounds!inner(id, game_type, round_number, status, start_time, betting_end_time, end_time, created_at, updated_at)"
+      : "*, game_rounds(id, game_type, round_number, status, start_time, betting_end_time, end_time, created_at, updated_at)";
 
     let query = supabase
       .from("game_bets")
@@ -833,8 +849,9 @@ export function useChatMessages(roomId: string | undefined) {
     if (!authedUserId) return;
 
     // Subscribe to realtime updates
+    const channelSuffix = crypto.randomUUID();
     const channel = supabase
-      .channel(`chat-messages-${roomId}`)
+      .channel(`chat-messages-${roomId}-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -1013,8 +1030,9 @@ export function useRealtimeChat(
 
     // Use supabaseAdmin for agent mode to bypass RLS
     const client = useAdmin ? supabaseAdmin : supabase;
+    const channelSuffix = crypto.randomUUID();
     const channel = client
-      .channel(`realtime-chat-${roomId}`)
+      .channel(`realtime-chat-${roomId}-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -1335,7 +1353,7 @@ export function useAgents() {
       const rows = (data || []) as Tables<"agents">[];
       const enriched = await Promise.all(
         rows.map(async (agent) => {
-          const [profilesCountRes, membersCountRes, membersRes] =
+          const [profilesCountRes, membersCountRes, revenueRes] =
             await Promise.all([
               supabaseAdmin
                 .from("chat_profiles")
@@ -1345,126 +1363,25 @@ export function useAgents() {
                 .from("user_profiles")
                 .select("id", { count: "exact", head: true })
                 .eq("agent_id", agent.id),
-              supabaseAdmin
-                .from("user_profiles")
-                .select("id, agent_assigned_at")
-                .eq("agent_id", agent.id),
+              (supabaseAdmin as any).rpc("get_agent_revenue_transactions", {
+                p_agent_id: agent.id,
+                p_types: ["charge", "withdraw"],
+                p_from: null,
+                p_to: null,
+              }),
             ]);
 
-          // Calculate total_revenue including HISTORICAL members using RPC
-          let totalRevenue = 0;
-          const currentMembers = membersRes.data || [];
+          if (revenueRes.error) throw revenueRes.error;
 
-          // Get historical members from referral code change logs
-          const { data: historyLogs } = await supabaseAdmin.rpc(
-            "get_agent_referral_code_logs",
-            { p_agent_id: agent.id },
-          );
-
-          const currentIds = new Set(currentMembers.map((m: any) => m.id));
-          const historyIds = ((historyLogs as any[]) || [])
-            .filter(
-              (log: any) => (log.changes as any)?.fromAgentId === agent.id,
-            )
-            .map(
-              (log: any) =>
-                (log.target_id as string | null) ??
-                ((log.changes as any)?.userId as string | null),
-            )
-            .filter(
-              (id: any): id is string => Boolean(id) && !currentIds.has(id),
-            );
-
-          // Fetch historical member data
-          let historicalMembers: any[] = [];
-          if (historyIds.length > 0) {
-            const { data: histMembers } = await supabaseAdmin
-              .from("user_profiles")
-              .select("id, agent_assigned_at")
-              .in("id", historyIds);
-            historicalMembers = histMembers || [];
-          }
-
-          // Merge all members
-          const allMembers = [...currentMembers, ...historicalMembers];
-          if (allMembers.length > 0) {
-            const memberIds = allMembers.map((m: any) => m.id);
-
-            // Build assignment windows for filtering
-            const historyLogsByUser = new Map<string, any[]>();
-            ((historyLogs as any[]) || []).forEach((log: any) => {
-              const userId =
-                (log.target_id as string | null) ??
-                ((log.changes as any)?.userId as string | null);
-              if (!userId) return;
-              const existing = historyLogsByUser.get(userId) || [];
-              existing.push(log);
-              historyLogsByUser.set(userId, existing);
-            });
-
-            const memberAssignmentWindows = new Map<
-              string,
-              { start: Date | null; end: Date | null }[]
-            >();
-
-            allMembers.forEach((member: any) => {
-              const logs = (historyLogsByUser.get(member.id) || []).slice();
-              logs.sort((a: any, b: any) => {
-                const aTime =
-                  (a.changes as any)?.toAssignedAt || a.created_at || "";
-                const bTime =
-                  (b.changes as any)?.toAssignedAt || b.created_at || "";
-                return new Date(aTime).getTime() - new Date(bTime).getTime();
-              });
-
-              const windows: { start: Date | null; end: Date | null }[] = [];
-              logs.forEach((log: any) => {
-                const changes = log.changes as any;
-                if (changes?.fromAgentId === agent.id) {
-                  const start = changes?.fromAssignedAt
-                    ? new Date(changes.fromAssignedAt)
-                    : null;
-                  const end = changes?.toAssignedAt
-                    ? new Date(changes.toAssignedAt)
-                    : new Date(log.created_at);
-                  windows.push({ start, end });
-                }
-              });
-
-              if (currentIds.has(member.id)) {
-                const start = member.agent_assigned_at
-                  ? new Date(member.agent_assigned_at)
-                  : null;
-                windows.push({ start, end: null });
-              }
-              memberAssignmentWindows.set(member.id, windows);
-            });
-
-            const isWithinWindow = (userId: string, date: Date) => {
-              const windows = memberAssignmentWindows.get(userId) || [];
-              if (windows.length === 0) return true;
-              return windows.some((w) => {
-                const afterStart = w.start ? date >= w.start : true;
-                const beforeEnd = w.end ? date < w.end : true;
-                return afterStart && beforeEnd;
-              });
-            };
-
-            // Fetch transactions using RPC (bypasses RLS)
-            const { data: txData } = await supabaseAdmin.rpc(
-              "get_agent_member_transactions",
-              { p_member_ids: memberIds, p_types: ["charge", "withdraw"] },
-            );
-
-            ((txData as any[]) || []).forEach((t: any) => {
-              const txDate = new Date(t.created_at || Date.now());
-              if (!isWithinWindow(t.user_id, txDate)) return;
+          const totalRevenue = ((revenueRes.data as any[]) || []).reduce(
+            (sum: number, t: any) => {
               const rawAmount = Number(t.amount || 0);
               const amount =
                 t.type === "charge" ? rawAmount : -Math.abs(rawAmount);
-              totalRevenue += amount;
-            });
-          }
+              return sum + amount;
+            },
+            0,
+          );
 
           return {
             ...agent,
@@ -2259,7 +2176,7 @@ export function useAdminGifts(adminId?: string) {
       }, 300);
     };
 
-    const channel = supabase
+    const channel = supabaseAdmin
       .channel("admin-gifts")
       .on(
         "postgres_changes",
@@ -2275,12 +2192,12 @@ export function useAdminGifts(adminId?: string) {
 
     return () => {
       if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
+      supabaseAdmin.removeChannel(channel);
     };
   }, [fetchGifts]);
 
   const createGift = async (gift: TablesInsert<"gifts">) => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("gifts")
       .insert(gift)
       .select()
@@ -2288,14 +2205,17 @@ export function useAdminGifts(adminId?: string) {
 
     if (!error) {
       if (adminId) {
-        await supabase.from("admin_action_logs").insert({
-          action: "create_gift",
-          admin_id: adminId,
-          target_id: (data as any)?.id || null,
-          target_type: "gifts",
-          ip_address: null,
-          changes: gift,
-        });
+        const { error: logError } = await supabaseAdmin
+          .from("admin_action_logs")
+          .insert({
+            action: "create_gift",
+            admin_id: adminId,
+            target_id: (data as any)?.id || null,
+            target_type: "gifts",
+            ip_address: null,
+            changes: gift,
+          });
+        if (logError) setError(logError);
       }
       await fetchGifts();
     }
@@ -2303,7 +2223,7 @@ export function useAdminGifts(adminId?: string) {
   };
 
   const updateGift = async (id: string, updates: Partial<Tables<"gifts">>) => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("gifts")
       .update({ ...updates })
       .eq("id", id)
@@ -2312,7 +2232,7 @@ export function useAdminGifts(adminId?: string) {
 
     if (!error) {
       if (adminId) {
-        await supabase.from("admin_action_logs").insert({
+        await supabaseAdmin.from("admin_action_logs").insert({
           action: "update_gift",
           admin_id: adminId,
           target_id: id,
@@ -2332,7 +2252,7 @@ export function useAdminGifts(adminId?: string) {
   };
 
   const reclaimGiftInventory = async (giftId: string) => {
-    const { error: rpcError } = await supabase.rpc(
+    const { error: rpcError } = await supabaseAdmin.rpc(
       "admin_reclaim_gift_inventory",
       {
         p_gift_id: giftId,
@@ -2341,7 +2261,7 @@ export function useAdminGifts(adminId?: string) {
     if (rpcError) throw rpcError;
 
     if (adminId) {
-      await supabase.from("admin_action_logs").insert({
+      await supabaseAdmin.from("admin_action_logs").insert({
         action: "reclaim_gift_inventory",
         admin_id: adminId,
         target_id: giftId,
@@ -2360,7 +2280,7 @@ export function useAdminGifts(adminId?: string) {
       if (opts?.reclaim) {
         await reclaimGiftInventory(giftId);
       }
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("gifts")
         .update({ is_active: false })
         .eq("id", giftId);
@@ -2368,7 +2288,7 @@ export function useAdminGifts(adminId?: string) {
       if (error) throw error;
 
       if (adminId) {
-        await supabase.from("admin_action_logs").insert({
+        await supabaseAdmin.from("admin_action_logs").insert({
           action: "deactivate_gift",
           admin_id: adminId,
           target_id: giftId,
@@ -3624,10 +3544,10 @@ export function useAdminDashboardData(
 
       // ?? ??/??/??/???? ?? ??
       const memberActionLabels: Record<string, string> = {
-        approve_user: "???? ??",
-        reject_user: "???? ??",
-        suspend_user: "?? ??",
-        unsuspend_user: "?? ????",
+        approve_user: "회원 승인",
+        reject_user: "회원 거절",
+        suspend_user: "회원 정지",
+        unsuspend_user: "회원 정지 해제",
       };
       (recentMemberActions.data || []).forEach((a: any) => {
         if (a.target_type !== "user_profiles") return;
@@ -3651,7 +3571,7 @@ export function useAdminDashboardData(
           created_at: u.created_at,
           type: "signup",
           userName: u.nickname || u.name || "-",
-          meta: "???? ??",
+          meta: "회원 가입",
         });
       });
       (recentPoints.data || []).forEach((p: any) => {
@@ -3661,15 +3581,15 @@ export function useAdminDashboardData(
 
         const userName = p.users?.nickname || p.users?.name || "-";
         const typeLabels: Record<string, string> = {
-          charge: "?? ??",
-          withdraw: "?? ??",
-          withdraw_pending: "?? ?? (??)",
-          withdraw_refund: "?? ?? (??)",
-          admin_adjust: "??? ??",
-          bonus: "??? ??",
-          chat_start: "?? ??",
-          gift_buy: "?? ??",
-          gift_sell: "?? ??",
+          charge: "입금",
+          withdraw: "출금",
+          withdraw_pending: "출금 신청",
+          withdraw_refund: "출금 환불",
+          admin_adjust: "관리자 조정",
+          bonus: "보너스",
+          chat_start: "채팅 시작",
+          gift_buy: "기프트 구매",
+          gift_sell: "기프트 판매",
         };
         activities.push({
           id: `point:${p.id}`,
@@ -3682,8 +3602,13 @@ export function useAdminDashboardData(
       });
       (recentBets.data || []).forEach((b: any) => {
         const userName = b.users?.nickname || b.users?.name || "-";
+        const dbGameType =
+          b.game_rounds?.game_type === "ladder" ? "ladder" : "powerball";
         const gameType =
-          b.game_rounds?.game_type === "ladder" ? "???" : "???";
+          dbGameType === "ladder" ? "사다리" : "파워볼";
+        const betTypes =
+          dbGameType === "ladder" ? LADDER_BET_TYPES : POWERBALL_BET_TYPES;
+        const betTypeLabel = betTypes[b.bet_type]?.name || b.bet_type;
         const betAmount = Number(b.bet_amount || 0);
         const winAmount = Number(b.win_amount || 0);
 
@@ -3694,7 +3619,7 @@ export function useAdminDashboardData(
           type: "bet",
           userName,
           amount: -betAmount,
-          meta: `${gameType} ??`,
+          meta: `${gameType} ${betTypeLabel} 배팅`,
         });
 
         // ?? ? ?? ?? ??
@@ -3705,7 +3630,7 @@ export function useAdminDashboardData(
             type: "bet_win",
             userName,
             amount: winAmount,
-            meta: `${gameType} ?? ??`,
+            meta: `${gameType} ${betTypeLabel} 당첨`,
           });
         }
       });
@@ -3962,36 +3887,33 @@ export function useAgentMembers(agentId: string | undefined) {
       // Fetch financial data for all members
       const memberIds = (currentMembers || []).map((m: any) => m.id);
 
-      let depositsByUser: Record<string, number> = {};
-      let withdrawalsByUser: Record<string, number> = {};
+      const depositsByUser: Record<string, number> = {};
+      const withdrawalsByUser: Record<string, number> = {};
 
       if (memberIds.length > 0) {
-        // Fetch charge transactions (deposits) - using point_transactions with type 'charge'
-        const { data: chargeData } = await supabaseAdmin
-          .from("point_transactions")
-          .select("user_id, amount")
-          .in("user_id", memberIds)
-          .eq("type", "charge");
-
-        // Fetch approved withdrawals
-        const { data: withdrawalData } = await supabaseAdmin
-          .from("withdrawal_requests")
-          .select("user_id, amount")
-          .in("user_id", memberIds)
-          .eq("status", "approved");
-
-        // Aggregate deposits by user
-        (chargeData || []).forEach((tx: any) => {
-          const userId = tx.user_id;
-          const amount = Number(tx.amount || 0);
-          depositsByUser[userId] = (depositsByUser[userId] || 0) + amount;
+        const { data: txData, error: txError } = await (
+          supabaseAdmin as any
+        ).rpc("get_agent_revenue_transactions", {
+          p_agent_id: agentId,
+          p_types: ["charge", "withdraw"],
+          p_from: null,
+          p_to: null,
         });
 
-        // Aggregate withdrawals by user
-        (withdrawalData || []).forEach((tx: any) => {
+        if (txError) throw txError;
+
+        ((txData as any[]) || [])
+          .filter((tx: any) => memberIds.includes(tx.user_id))
+          .forEach((tx: any) => {
           const userId = tx.user_id;
           const amount = Number(tx.amount || 0);
-          withdrawalsByUser[userId] = (withdrawalsByUser[userId] || 0) + amount;
+          if (tx.type === "charge") {
+            depositsByUser[userId] = (depositsByUser[userId] || 0) + amount;
+          }
+          if (tx.type === "withdraw") {
+            withdrawalsByUser[userId] =
+              (withdrawalsByUser[userId] || 0) + Math.abs(amount);
+          }
         });
       }
 
@@ -4200,11 +4122,13 @@ export function useAgentChatRooms(agentId: string | undefined) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [profileIds, setProfileIds] = useState<string[]>([]);
+  const [userIds, setUserIds] = useState<string[]>([]);
 
   const fetchRooms = useCallback(async () => {
     if (!agentId) {
       setRooms([]);
       setProfileIds([]);
+      setUserIds([]);
       setIsLoading(false);
       return;
     }
@@ -4220,15 +4144,21 @@ export function useAgentChatRooms(agentId: string | undefined) {
       setError(profilesError);
       setRooms([]);
       setProfileIds([]);
+      setUserIds([]);
       setIsLoading(false);
       return;
     }
 
     const pIds = ((profiles || []) as Array<{ id: string }>).map((p) => p.id);
-    setProfileIds(pIds);
+    setProfileIds((prev) =>
+      prev.length === pIds.length && prev.every((id, index) => id === pIds[index])
+        ? prev
+        : pIds,
+    );
 
     if (pIds.length === 0) {
       setRooms([]);
+      setUserIds([]);
       setIsLoading(false);
       return;
     }
@@ -4244,20 +4174,34 @@ export function useAgentChatRooms(agentId: string | undefined) {
     if (roomsError) {
       setError(roomsError);
       setRooms([]);
+      setUserIds([]);
       setIsLoading(false);
       return;
     }
 
     // Fetch user profiles using RPC function that bypasses RLS
-    const userIds = [
-      ...new Set((roomsData || []).map((r: any) => r.user_id).filter(Boolean)),
-    ];
+    const fetchedUserIds = Array.from(
+      new Set<string>(
+        (roomsData || [])
+          .map((r: any) => r.user_id)
+          .filter(
+            (id: unknown): id is string =>
+              typeof id === "string" && id.length > 0,
+          ),
+      ),
+    );
+    setUserIds((prev) =>
+      prev.length === fetchedUserIds.length &&
+      prev.every((id, index) => id === fetchedUserIds[index])
+        ? prev
+        : fetchedUserIds,
+    );
     let usersMap = new Map<string, any>();
 
-    if (userIds.length > 0) {
+    if (fetchedUserIds.length > 0) {
       const { data: usersData } = await supabaseAdmin.rpc(
         "get_chat_room_user_profiles",
-        { user_ids: userIds },
+        { user_ids: fetchedUserIds },
       );
 
       (usersData || []).forEach((u: any) => {
@@ -4297,8 +4241,9 @@ export function useAgentChatRooms(agentId: string | undefined) {
   useEffect(() => {
     if (profileIds.length === 0) return;
 
+    const channelSuffix = crypto.randomUUID();
     const channel = supabase
-      .channel(`agent-chat-rooms-${agentId}`)
+      .channel(`agent-chat-rooms-${agentId}-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -4350,12 +4295,27 @@ export function useAgentChatRooms(agentId: string | undefined) {
           }
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_profiles",
+        },
+        (payload: RealtimePostgresPayload) => {
+          const newRecord = payload.new as any;
+          const oldRecord = payload.old as any;
+          const userId = newRecord?.id || oldRecord?.id;
+          if (!userIds.includes(userId)) return;
+          fetchRooms();
+        },
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [profileIds, agentId, fetchRooms]);
+  }, [profileIds, userIds, agentId, fetchRooms]);
 
   return { rooms, isLoading, error, refetch: fetchRooms };
 }
@@ -4584,34 +4544,23 @@ export function useAgentDashboardStats(agentId: string | undefined) {
 
       if (membersError) throw membersError;
 
-      // Fetch referral code change logs using RPC function (bypasses RLS)
-      let historyLogs: any[] = [];
-      const { data: rpcLogs, error: historyError } = await supabaseAdmin.rpc(
-        "get_agent_referral_code_logs",
-        { p_agent_id: agentId },
-      );
-
-      if (historyError) {
-        console.warn(
-          "Failed to fetch referral code logs via RPC:",
-          historyError,
-        );
-      } else {
-        historyLogs = rpcLogs || [];
-      }
-
       const currentIds = new Set(
         (currentMembers || []).map((member: any) => member.id),
       );
-      // Get user IDs from logs where this agent was the FROM agent (user left this agent)
-      const historyIds = historyLogs
-        .filter((log: any) => (log.changes as any)?.fromAgentId === agentId)
-        .map(
-          (log: any) =>
-            (log.target_id as string | null) ??
-            ((log.changes as any)?.userId as string | null),
-        )
-        .filter((id: any): id is string => Boolean(id));
+      const { data: ownershipRows, error: ownershipError } = await supabaseAdmin
+        .from("user_agent_ownership_history" as any)
+        .select("user_id")
+        .eq("agent_id", agentId);
+
+      if (ownershipError) throw ownershipError;
+
+      const historyIds = Array.from(
+        new Set(
+          ((ownershipRows as any[]) || [])
+            .map((row: any) => row.user_id)
+            .filter((id: any): id is string => Boolean(id)),
+        ),
+      );
 
       const missingIds = historyIds.filter((id) => !currentIds.has(id));
       let historicalMembers: any[] = [];
@@ -4638,289 +4587,119 @@ export function useAgentDashboardStats(agentId: string | undefined) {
       }));
       setMembers(membersList);
 
-      const historyLogsByUser = new Map<string, any[]>();
-      (historyLogs || []).forEach((log: any) => {
-        const userId =
-          (log.target_id as string | null) ??
-          ((log.changes as any)?.userId as string | null);
-        if (!userId) return;
-        const existing = historyLogsByUser.get(userId) || [];
-        existing.push(log);
-        historyLogsByUser.set(userId, existing);
-      });
-
-      const memberAssignmentWindows = new Map<
-        string,
-        { start: Date | null; end: Date | null }[]
-      >();
-      membersList.forEach((member: any) => {
-        const logs = (historyLogsByUser.get(member.id) || []).slice();
-        logs.sort((a: any, b: any) => {
-          const aTime = (a.changes as any)?.toAssignedAt || a.created_at || "";
-          const bTime = (b.changes as any)?.toAssignedAt || b.created_at || "";
-          return new Date(aTime).getTime() - new Date(bTime).getTime();
-        });
-
-        const windows: { start: Date | null; end: Date | null }[] = [];
-
-        // Build windows from assignment history logs
-        // Each log where fromAgentId === agentId represents when user LEFT this agent
-        logs.forEach((log: any) => {
-          const changes = log.changes as any;
-          if (changes?.fromAgentId !== agentId) return;
-          // Window: from when user was assigned to this agent until they left
-          const startValue = changes?.fromAssignedAt;
-          const endValue = changes?.toAssignedAt || log.created_at;
-          const start = startValue ? new Date(startValue) : null;
-          const end = endValue ? new Date(endValue) : null;
-          // Even if start is null (user was always with this agent), include the window
-          windows.push({ start, end });
-        });
-
-        // If user is currently assigned to this agent, add open-ended window
-        if (member.agent_id === agentId) {
-          const start = member.agent_assigned_at
-            ? new Date(member.agent_assigned_at)
-            : null;
-          windows.push({ start, end: null });
-        }
-
-        memberAssignmentWindows.set(member.id, windows);
-      });
-
-      // Check if a transaction date falls within any assignment window for the user
-      const isWithinAssignmentWindow = (userId: string, date: Date) => {
-        const windows = memberAssignmentWindows.get(userId) || [];
-        // If no windows defined, include all transactions (defensive fallback)
-        if (windows.length === 0) return true;
-        return windows.some((window) => {
-          // If start is null, treat as beginning of time
-          const afterStart = window.start ? date >= window.start : true;
-          // If end is null, treat as end of time (current assignment)
-          const beforeEnd = window.end ? date < window.end : true;
-          return afterStart && beforeEnd;
-        });
-      };
-
       const profileCount = profileIds.length;
+      const now = new Date();
+      const today = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+      );
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const pageSize = 1000;
+      const maxRows = 20000;
 
-      // Calculate revenue from members' point transactions
-      const memberIds = membersList.map((m) => m.id);
+      const newMembersThisMonth = (membersList || []).filter((m: any) => {
+        if (!m.created_at) return false;
+        return new Date(m.created_at) >= monthStart;
+      }).length;
 
-      if (memberIds.length > 0) {
-        const now = new Date();
-        const today = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-        );
-        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      let totalRevenue = 0;
+      let monthlyRevenue = 0;
+      let weeklyRevenue = 0;
+      let todayRevenue = 0;
 
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const { data: txData, error: txErr } = await (supabaseAdmin as any).rpc(
+        "get_agent_revenue_transactions",
+        {
+          p_agent_id: agentId,
+          p_types: ["charge", "withdraw"],
+          p_from: null,
+          p_to: null,
+        },
+      );
 
-        const newMembersThisMonth = (membersList || []).filter((m: any) => {
-          if (!m.created_at) return false;
-          return new Date(m.created_at) >= monthStart;
-        }).length;
+      if (txErr) throw txErr;
 
-        let totalRevenue = 0;
-        let monthlyRevenue = 0;
-        let weeklyRevenue = 0;
-        let todayRevenue = 0;
+      const mergedTx = (((txData as any[]) || []).map((t: any) => ({
+        ...t,
+        users: { name: t.user_name, nickname: t.user_nickname },
+      }))).sort((a: any, b: any) => {
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTime - aTime;
+      });
 
-        // Fetch transactions using RPC function (bypasses RLS for historical members)
-        const { data: txData, error: txErr } = await supabaseAdmin.rpc(
-          "get_agent_member_transactions",
-          { p_member_ids: memberIds, p_types: ["charge", "withdraw"] },
-        );
+      mergedTx.forEach((t: any) => {
+        const rawAmount = Number(t.amount || 0);
+        const amount = t.type === "charge" ? rawAmount : -Math.abs(rawAmount);
+        const date = new Date(t.created_at || Date.now());
 
-        if (txErr) throw txErr;
+        totalRevenue += amount;
+        if (date >= monthAgo) monthlyRevenue += amount;
+        if (date >= weekAgo) weeklyRevenue += amount;
+        if (date >= today) todayRevenue += amount;
+      });
 
-        // Map RPC result to expected format
-        const allTx = (txData || []).map((t: any) => ({
-          ...t,
-          users: { name: t.user_name, nickname: t.user_nickname },
-        }));
+      setRevenueRecords(mergedTx);
 
-        // Filter transactions to only include those during the assignment window
-        const filteredTx = (allTx || []).filter((t: any) => {
-          if (!t.user_id) return false;
-          const txDate = new Date(t.created_at || Date.now());
-          return isWithinAssignmentWindow(t.user_id, txDate);
-        });
-
-        const pageSize = 1000;
-        const maxRows = 20000;
-        const withdrawalRows: any[] = [];
+      let chatRevenueTotal = 0;
+      let chatRevenueMonth = 0;
+      if (profileIds.length > 0) {
+        const allGiftTx: any[] = [];
         for (let from = 0; from < maxRows; from += pageSize) {
-          const { data: page, error: wErr } = await supabaseAdmin
-            .from("withdrawal_requests")
-            .select("id, user_id, amount, processed_at, created_at")
-            .in("user_id", memberIds)
-            .eq("status", "approved")
-            .order("processed_at", { ascending: false })
+          const { data: page, error: gtErr } = await supabaseAdmin
+            .from("gift_transactions")
+            .select(
+              "receiver_id, receiver_type, transaction_type, points_amount, created_at",
+            )
+            .eq("receiver_type", "profile")
+            .eq("transaction_type", "send")
+            .in("receiver_id", profileIds)
+            .order("created_at", { ascending: false })
             .range(from, from + pageSize - 1);
 
-          if (wErr) throw wErr;
+          if (gtErr) throw gtErr;
           const rows = page || [];
-          withdrawalRows.push(...rows);
+          allGiftTx.push(...rows);
           if (rows.length < pageSize) break;
         }
 
-        const existingWithdrawalIds = new Set(
-          filteredTx
-            .filter(
-              (t: any) =>
-                t.type === "withdraw" &&
-                t.related_type === "withdrawal_request" &&
-                t.related_id,
-            )
-            .map((t: any) => t.related_id as string),
-        );
-        const existingWithdrawalKeys = new Set(
-          filteredTx
-            .filter((t: any) => t.type === "withdraw")
-            .map((t: any) => {
-              const day = (t.created_at || "").split("T")[0] || "";
-              return `${t.user_id}:${Math.abs(Number(t.amount || 0))}:${day}`;
-            }),
-        );
-        const memberNameMap = new Map(
-          membersList.map((m: any) => [
-            m.id,
-            { name: m.name, nickname: m.nickname },
-          ]),
-        );
-
-        const supplementalWithdrawals = withdrawalRows
-          .filter((row: any) => {
-            if (existingWithdrawalIds.has(row.id)) return false;
-            const day = (row.processed_at || row.created_at || "").split(
-              "T",
-            )[0];
-            const key = `${row.user_id}:${Math.abs(Number(row.amount || 0))}:${day}`;
-            if (existingWithdrawalKeys.has(key)) return false;
-            const txDate = new Date(
-              row.processed_at || row.created_at || Date.now(),
-            );
-            if (!isWithinAssignmentWindow(row.user_id, txDate)) {
-              return false;
-            }
-            return true;
-          })
-          .map((row: any) => {
-            const names = memberNameMap.get(row.user_id) || {
-              name: null,
-              nickname: null,
-            };
-            return {
-              id: `withdrawal-${row.id}`,
-              user_id: row.user_id,
-              type: "withdraw",
-              amount: -Math.abs(Number(row.amount || 0)),
-              created_at: row.processed_at || row.created_at,
-              related_id: row.id,
-              related_type: "withdrawal_request",
-              users: names,
-            };
-          });
-
-        const mergedTx = [...filteredTx, ...supplementalWithdrawals].sort(
-          (a: any, b: any) => {
-            const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-            const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-            return bTime - aTime;
-          },
-        );
-
-        mergedTx.forEach((t: any) => {
-          const rawAmount = Number(t.amount || 0);
-          const amount = t.type === "charge" ? rawAmount : -Math.abs(rawAmount);
+        (allGiftTx || []).forEach((t: any) => {
+          const amt = Number(t.points_amount || 0);
           const date = new Date(t.created_at || Date.now());
-
-          totalRevenue += amount;
-          if (date >= monthAgo) monthlyRevenue += amount;
-          if (date >= weekAgo) weeklyRevenue += amount;
-          if (date >= today) todayRevenue += amount;
-        });
-
-        // Only show filtered transactions in revenue records
-        setRevenueRecords(mergedTx);
-
-        let chatRevenueTotal = 0;
-        let chatRevenueMonth = 0;
-        if (profileIds.length > 0) {
-          const allGiftTx: any[] = [];
-          for (let from = 0; from < maxRows; from += pageSize) {
-            const { data: page, error: gtErr } = await supabase
-              .from("gift_transactions")
-              .select(
-                "receiver_id, receiver_type, transaction_type, points_amount, created_at",
-              )
-              .eq("receiver_type", "profile")
-              .eq("transaction_type", "send")
-              .in("receiver_id", profileIds)
-              .order("created_at", { ascending: false })
-              .range(from, from + pageSize - 1);
-
-            if (gtErr) throw gtErr;
-            const rows = page || [];
-            allGiftTx.push(...rows);
-            if (rows.length < pageSize) break;
-          }
-
-          (allGiftTx || []).forEach((t: any) => {
-            const amt = Number(t.points_amount || 0);
-            const date = new Date(t.created_at || Date.now());
-            chatRevenueTotal += amt;
-            if (date >= monthAgo) chatRevenueMonth += amt;
-          });
-        }
-
-        // currentMembers = only members currently assigned to this agent
-        // Filter explicitly by agent_id because RLS may return extra users from chat_room policy
-        const trulyCurrentMembers = (currentMembers || []).filter(
-          (m: any) => m.agent_id === agentId,
-        );
-        const currentMembersCount = trulyCurrentMembers.length;
-        // activeMembers = only currently assigned members with active status
-        const activeMembersCount = trulyCurrentMembers.filter(
-          (m: any) => m.status === "active",
-        ).length;
-
-        setStats({
-          totalRevenue,
-          monthlyRevenue,
-          weeklyRevenue,
-          todayRevenue,
-          totalMembers: membersList.length,
-          currentMembers: currentMembersCount,
-          activeMembers: activeMembersCount,
-          assignedProfiles: profileCount || 0,
-          onlineProfiles,
-          referralCode,
-          newMembersThisMonth,
-          chatRevenueTotal,
-          chatRevenueMonth,
-        });
-      } else {
-        setStats({
-          totalRevenue: 0,
-          monthlyRevenue: 0,
-          weeklyRevenue: 0,
-          todayRevenue: 0,
-          totalMembers: 0,
-          currentMembers: 0,
-          activeMembers: 0,
-          assignedProfiles: profileCount || 0,
-          onlineProfiles,
-          referralCode,
-          newMembersThisMonth: 0,
-          chatRevenueTotal: 0,
-          chatRevenueMonth: 0,
+          chatRevenueTotal += amt;
+          if (date >= monthAgo) chatRevenueMonth += amt;
         });
       }
+
+      // currentMembers = only members currently assigned to this agent
+      // Filter explicitly by agent_id because RLS may return extra users from chat_room policy
+      const trulyCurrentMembers = (currentMembers || []).filter(
+        (m: any) => m.agent_id === agentId,
+      );
+      const currentMembersCount = trulyCurrentMembers.length;
+      // activeMembers = only currently assigned members with active status
+      const activeMembersCount = trulyCurrentMembers.filter(
+        (m: any) => m.status === "active",
+      ).length;
+
+      setStats({
+        totalRevenue,
+        monthlyRevenue,
+        weeklyRevenue,
+        todayRevenue,
+        totalMembers: membersList.length,
+        currentMembers: currentMembersCount,
+        activeMembers: activeMembersCount,
+        assignedProfiles: profileCount || 0,
+        onlineProfiles,
+        referralCode,
+        newMembersThisMonth,
+        chatRevenueTotal,
+        chatRevenueMonth,
+      });
     } catch (err) {
       setError(err as Error);
       setStats({
@@ -4961,8 +4740,9 @@ export function useAgentDashboardStats(agentId: string | undefined) {
       }, 300);
     };
 
+    const channelSuffix = crypto.randomUUID();
     const channel = supabaseAdmin
-      .channel(`agent-dashboard-realtime-${agentId}`)
+      .channel(`agent-dashboard-realtime-${agentId}-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -5069,7 +4849,7 @@ export function useAllGameRounds(filters?: {
   page?: number;
   pageSize?: number;
 }) {
-  const [rounds, setRounds] = useState<Tables<"game_rounds">[]>([]);
+  const [rounds, setRounds] = useState<Tables<"game_rounds_secure">[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -5095,47 +4875,38 @@ export function useAllGameRounds(filters?: {
       endDateTime = `${dateOnly}T${filters.endTime}:59+09:00`;
     }
 
-    // ?? ? ?? ??
-    let countQuery = supabaseAdmin
-      .from("game_rounds")
-      .select("*", { count: "exact", head: true });
+    const gameTypeParam =
+      filters?.gameType && filters.gameType !== "all" ? filters.gameType : null;
 
-    if (filters?.gameType && filters.gameType !== "all") {
-      countQuery = countQuery.eq("game_type", filters.gameType);
-    }
-    if (startDateTime) {
-      countQuery = countQuery.gte("start_time", startDateTime);
-    }
-    if (endDateTime) {
-      countQuery = countQuery.lte("start_time", endDateTime);
-    }
+    const { data: countData, error: countError } = await supabaseAdmin.rpc(
+      "admin_game_rounds_count",
+      {
+        p_game_type: gameTypeParam,
+        p_start_time: startDateTime ?? null,
+        p_end_time: endDateTime ?? null,
+      },
+    );
 
-    const { count } = await countQuery;
-    setTotalCount(count || 0);
-
-    // ??? ????? ?? (RLS ??? ??)
-    let query = supabaseAdmin
-      .from("game_rounds")
-      .select("*")
-      .order("start_time", { ascending: false })
-      .range((page - 1) * pageSize, page * pageSize - 1);
-
-    if (filters?.gameType && filters.gameType !== "all") {
-      query = query.eq("game_type", filters.gameType);
-    }
-    if (startDateTime) {
-      query = query.gte("start_time", startDateTime);
-    }
-    if (endDateTime) {
-      query = query.lte("start_time", endDateTime);
+    if (countError) {
+      setError(countError);
+      setIsLoading(false);
+      return;
     }
 
-    const { data, error } = await query;
+    setTotalCount(Number(countData || 0));
+
+    const { data, error } = await supabaseAdmin.rpc("admin_game_rounds_list", {
+      p_game_type: gameTypeParam,
+      p_start_time: startDateTime ?? null,
+      p_end_time: endDateTime ?? null,
+      p_limit: pageSize,
+      p_offset: (page - 1) * pageSize,
+    });
 
     if (error) {
       setError(error);
     } else {
-      setRounds(data || []);
+      setRounds((data || []) as Tables<"game_rounds_secure">[]);
     }
     setIsLoading(false);
   }, [
@@ -5212,12 +4983,27 @@ export function useAllGameBets(filters?: {
   status?: string;
   startDate?: string;
   endDate?: string;
+  enabled?: boolean;
 }) {
   const [bets, setBets] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchBets = useCallback(async () => {
+    if (filters?.enabled === false) {
+      setBets([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    if (filters?.roundIds && filters.roundIds.length === 0 && !filters.roundId) {
+      setBets([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -5227,11 +5013,14 @@ export function useAllGameBets(filters?: {
 
       for (let from = 0; from < maxRows; from += pageSize) {
         // ??? ????? ?? (RLS ??? ??)
+        const selectQuery =
+          filters?.gameType && filters.gameType !== "all"
+            ? "*, user_profiles(name, nickname, phone, points, email, last_login_ip, join_ip), game_rounds!inner(game_type, round_number)"
+            : "*, user_profiles(name, nickname, phone, points, email, last_login_ip, join_ip), game_rounds(game_type, round_number)";
+
         let query = supabaseAdmin
           .from("game_bets")
-          .select(
-            "*, user_profiles(name, nickname, phone, points, email, last_login_ip, join_ip), game_rounds(game_type, round_number)",
-          )
+          .select(selectQuery)
           .order("created_at", { ascending: false })
           .range(from, from + pageSize - 1);
 
@@ -5254,7 +5043,6 @@ export function useAllGameBets(filters?: {
         }
 
         if (filters?.gameType && filters.gameType !== "all") {
-          // Prefer round_id filters for accuracy; this is a best-effort filter
           query = query.eq("game_rounds.game_type", filters.gameType);
         }
 
@@ -5282,6 +5070,7 @@ export function useAllGameBets(filters?: {
     filters?.status,
     filters?.startDate,
     filters?.endDate,
+    filters?.enabled,
   ]);
 
   useEffect(() => {
@@ -5290,6 +5079,8 @@ export function useAllGameBets(filters?: {
 
   // ??? ?? - game_bets ?? ??
   useEffect(() => {
+    if (filters?.enabled === false) return;
+
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefetch = () => {
       if (timeoutId) clearTimeout(timeoutId);
@@ -5299,8 +5090,9 @@ export function useAllGameBets(filters?: {
       }, 100);
     };
 
+    const channelSuffix = crypto.randomUUID();
     const channel = supabaseAdmin
-      .channel("admin-game-bets-realtime")
+      .channel(`admin-game-bets-realtime-${channelSuffix}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "game_bets" },
@@ -5315,7 +5107,7 @@ export function useAllGameBets(filters?: {
       }
       void supabaseAdmin.removeChannel(channel);
     };
-  }, [fetchBets]);
+  }, [fetchBets, filters?.enabled]);
 
   return { bets, isLoading, error, refetch: fetchBets };
 }
@@ -5430,27 +5222,27 @@ export function useReserveResult() {
 
 // ?? ??? ??? ??
 const POWERBALL_BET_TYPES: Record<string, { name: string; odds: number }> = {
-  "normal-odd": { name: "???", odds: 1.95 },
-  "normal-even": { name: "???", odds: 1.95 },
-  "normal-under": { name: "????", odds: 1.95 },
-  "normal-over": { name: "????", odds: 1.95 },
-  "powerball-odd": { name: "???", odds: 1.95 },
-  "powerball-even": { name: "???", odds: 1.95 },
-  "powerball-under": { name: "????", odds: 1.95 },
-  "powerball-over": { name: "????", odds: 1.95 },
+  "normal-odd": { name: "일반볼 홀", odds: 1.95 },
+  "normal-even": { name: "일반볼 짝", odds: 1.95 },
+  "normal-under": { name: "일반볼 언더", odds: 1.95 },
+  "normal-over": { name: "일반볼 오버", odds: 1.95 },
+  "powerball-odd": { name: "파워볼 홀", odds: 1.95 },
+  "powerball-even": { name: "파워볼 짝", odds: 1.95 },
+  "powerball-under": { name: "파워볼 언더", odds: 1.95 },
+  "powerball-over": { name: "파워볼 오버", odds: 1.95 },
 };
 
 const LADDER_BET_TYPES: Record<string, { name: string; odds: number }> = {
-  leftStart: { name: "???", odds: 1.95 },
-  rightStart: { name: "???", odds: 1.95 },
-  line3: { name: "3?", odds: 1.95 },
-  line4: { name: "4?", odds: 1.95 },
-  oddEnd: { name: "?", odds: 1.95 },
-  evenEnd: { name: "?", odds: 1.95 },
-  left3Even: { name: "?3?", odds: 3.8 },
-  left4Odd: { name: "?4?", odds: 3.8 },
-  right3Odd: { name: "?3?", odds: 3.8 },
-  right4Even: { name: "?4?", odds: 3.8 },
+  leftStart: { name: "좌출발", odds: 1.95 },
+  rightStart: { name: "우출발", odds: 1.95 },
+  line3: { name: "3줄", odds: 1.95 },
+  line4: { name: "4줄", odds: 1.95 },
+  oddEnd: { name: "홀", odds: 1.95 },
+  evenEnd: { name: "짝", odds: 1.95 },
+  left3Even: { name: "좌3짝", odds: 3.8 },
+  left4Odd: { name: "좌4홀", odds: 3.8 },
+  right3Odd: { name: "우3홀", odds: 3.8 },
+  right4Even: { name: "우4짝", odds: 3.8 },
 };
 
 export const normalizeGameSettingsOdds = (
@@ -5538,29 +5330,22 @@ export const normalizeGameSettingsOdds = (
 
 // ?? ??? ?? ?? (Supabase ??)
 export function useGameRoundsEdge(gameType?: string) {
-  const [rounds, setRounds] = useState<Tables<"game_rounds">[]>([]);
+  const [rounds, setRounds] = useState<Tables<"game_rounds_secure">[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchRounds = useCallback(async () => {
     setIsLoading(true);
     try {
-      let query = supabase
-        .from("game_rounds")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (gameType) {
-        query = query.eq("game_type", gameType);
-      }
-
-      const { data, error: fetchError } = await query;
+      const { data, error: fetchError } = await fetchSecureGameRounds({
+        p_game_type: gameType ?? null,
+        p_limit: 20,
+      });
 
       if (fetchError) {
         setError(fetchError);
       } else {
-        setRounds(data || []);
+        setRounds(data);
       }
     } catch (err) {
       setError(err as Error);
@@ -5594,8 +5379,8 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
   const fetchInFlightRef = useRef(false);
   const pendingRefetchRef = useRef(false); // ?? ?? refetch ??
   const bettingEndTimeRef = useRef<number | null>(null);
-  const previousRoundNumberRef = useRef<number | null>(null);
-  const previousCompletedRoundRef = useRef<number | null>(null);
+  const previousRoundNumberRef = useRef<string | null>(null);
+  const previousCompletedRoundRef = useRef<string | null>(null);
 
   const fetchCurrentRound = useCallback(async () => {
     if (fetchInFlightRef.current) {
@@ -5621,22 +5406,16 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
 
       // ?? ??? ?? (betting/playing/completed) + ?? ??? ?? ?? ??
       // ?? ? ?? - result/reserved_result ?? ??
-      const currentRoundPromise = supabase
-        .from("game_rounds_secure")
-        .select("*")
-        .eq("game_type", gameType)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const currentRoundPromise = fetchSecureGameRounds({
+        p_game_type: gameType,
+        p_limit: 1,
+      });
 
-      const completedRoundPromise = supabase
-        .from("game_rounds_secure")
-        .select("*")
-        .eq("game_type", gameType)
-        .in("status", ["completed", "settled"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const completedRoundPromise = fetchSecureGameRounds({
+        p_game_type: gameType,
+        p_statuses: ["completed", "settled"],
+        p_limit: 1,
+      });
 
       const [currentRoundResult, completedResult, serverNowResult] =
         await Promise.all([
@@ -5654,7 +5433,8 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         }
       }
 
-      const { data, error: fetchError } = currentRoundResult;
+      const { error: fetchError } = currentRoundResult;
+      const data = currentRoundResult.data[0] || null;
 
       if (fetchError) {
         setError(fetchError);
@@ -5706,9 +5486,10 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
         setTimeRemaining(0);
       }
 
-      const { data: completed, error: completedError } = completedResult;
+      const { error: completedError } = completedResult;
+      const completed = completedResult.data[0] || null;
 
-      if (completedError && (completedError as any).code !== "PGRST116") {
+      if (completedError) {
         setError(completedError);
       } else if (completed) {
         // ?? ??? ?? ?? - ?? ???? ??? ?? ????
@@ -5831,7 +5612,7 @@ export function useCurrentRoundEdge(gameType: string = "powerball") {
   // ???? 0? ?? ?? ?? ?? + ?? ?? ??
   const triggerProcessingRef = useRef(false);
   const lastTriggerTimeRef = useRef(0);
-  const lastProcessedRoundRef = useRef<number | null>(null);
+  const lastProcessedRoundRef = useRef<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -6074,15 +5855,13 @@ export function useBettingRoundBetCount(gameType: "powerball" | "ladder") {
     setError(null);
 
     try {
-      const { data: round, error: roundError } = await supabase
-        .from("game_rounds")
-        .select("id")
-        .eq("game_type", gameType)
-        .eq("status", "betting")
-        .gte("betting_end_time", new Date().toISOString())
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: rounds, error: roundError } = await fetchSecureGameRounds({
+        p_game_type: gameType,
+        p_statuses: ["betting"],
+        p_limit: 1,
+        p_betting_open_only: true,
+      });
+      const round = rounds[0] || null;
 
       if (roundError) throw roundError;
 
@@ -6230,11 +6009,11 @@ export function usePlaceBet() {
 
     try {
       // 1. ??? ?? ??
-      const { data: round, error: roundError } = await supabase
-        .from("game_rounds")
-        .select("*")
-        .eq("id", roundId)
-        .single();
+      const { data: rounds, error: roundError } = await fetchSecureGameRounds({
+        p_round_id: roundId,
+        p_limit: 1,
+      });
+      const round = rounds[0] || null;
 
       if (roundError || !round) {
         throw new Error("???? ?? ? ????.");
@@ -6373,14 +6152,12 @@ export function useCreateRound() {
       });
       if (tickError) throw tickError;
 
-      const { data, error: fetchError } = await supabase
-        .from("game_rounds")
-        .select("*")
-        .eq("game_type", gameType)
-        .eq("status", "betting")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: rounds, error: fetchError } = await fetchSecureGameRounds({
+        p_game_type: gameType,
+        p_statuses: ["betting"],
+        p_limit: 1,
+      });
+      const data = rounds[0] || null;
 
       if (fetchError) {
         throw new Error(fetchError.message);

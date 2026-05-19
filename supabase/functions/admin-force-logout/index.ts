@@ -106,9 +106,6 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json().catch(() => null);
     const userId = body?.userId;
-    const reason =
-      typeof body?.reason === "string" ? body.reason : "forced_logout";
-
     if (typeof userId !== "string" || userId.length < 1) {
       return jsonResponse({ error: "Invalid userId" }, 400);
     }
@@ -119,26 +116,6 @@ Deno.serve(async (req: Request) => {
       serviceRoleKey,
       userId
     );
-
-    // Broadcast forced logout over Realtime.
-    const topic = `private:force-logout:${userId}`;
-    const payload = {
-      type: "forced_logout",
-      userId,
-      reason,
-      at: new Date().toISOString(),
-    };
-
-    const { error: sendErr } = await supabaseAdmin.rpc("realtime.send", {
-      topic,
-      event: "forced_logout",
-      payload,
-      private: true,
-    });
-
-    if (sendErr) {
-      return jsonResponse({ error: sendErr.message }, 400);
-    }
 
     return jsonResponse({ success: true, revocation }, 200);
   } catch (e) {

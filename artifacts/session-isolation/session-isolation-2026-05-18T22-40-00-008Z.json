@@ -1,0 +1,1782 @@
+{
+  "generatedAt": "2026-05-18T22:40:00.314Z",
+  "chromePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "cases": {
+    "agentLogin": {
+      "label": "agent login",
+      "url": "http://localhost:3000/agent",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 에이전트 모드(testagent / 테스트 에이전트) 로그아웃 에이전트 대시보드 회원 관리 채팅 관리 선물 관리 에이전트 대시보드 안녕하세요, testagent님 총 매출 ₩40,000 | 활성 회원 1명 | 배정 프로필 1개 | 온라인 프로필 1개 | 추천코드 TESTAGENT 매출 현황 ~ 총 매출 +40,000 입금액 +50,000 출금액 -10,000 전체 회원 1명 | 배정 프로필 1개 | 추천코드 TESTAGENT 매출 목록 전체 입금 출금 일시 회원명 유형 금액 2026-05-19 05:07 테스트유저 (user테스트) 충전 +50,000원 2026-05-18 19:35 테스트유저 (user테스트) 출금 -10,000원",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": true,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:agent:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/agent",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case1AgentThenUserRoot": {
+      "label": "agent then user root",
+      "url": "http://localhost:3000/",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 홈 실시간채팅 공지사항 커플미션 랭킹 포인트 로그인 회원가입 ✨ 달콤한 만남 설레는 채팅으로 시작해요 💕 마음에 드는 분을 찾으셨나요? 💝 지금 바로 대화를 시작하고 특별한 인연을 만들어보세요! SOLUTION STUDIO PREMIUM SOLUTION 법인명(상호) : 솔루션 스튜디오 대표자(성명) : 솔루션 스튜디오 전화 : 010-9999-9999 주소 : 서울특별시 은평구 35678 사업자 등록번호 안내 : 999-99-99999 통신판매업 신고 : 제2025-서울은평-9999호 개인정보보호책임 : 솔루션 스튜디오 (solution@gmail.com) © 2025 솔루션스튜디오. All rights reserved.",
+      "markers": {
+        "userLoggedIn": false,
+        "userSessionUi": false,
+        "userLoggedOutHome": true,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:agent:notification_settings": "<present>",
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "adminLogin": {
+      "label": "admin login",
+      "url": "http://localhost:3000/admin",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 관리자 모드(testadmin / 테스트 관리자) 로그아웃 통계 회원 관리 관리자 계정 입출금 관리 공지사항 채팅 프로필 관리 기프트 관리 미니게임 관리 통계 매출 전체 현황을 확인하세요 오늘 이번 주 이번 달 기간 설정 신규 회원 0명 +0 (+0.0%) 입금 50,000원 +50,000 (+100.0%) 출금 0원 -10,000 (-100.0%) 전체 매출 50,000원 +60,000 (-600.0%) 오늘 입/출금 추이 입금(인디고) / 출금(로즈) 05-19 +50,000 -0 오늘 게임 베팅 분포 사다리 / 파워볼 사다리 0원 파워볼 0원 회원 상태 활성 1명 대기 0명 정지 0명 승인거절 0명 최근 활동 최근 10건 새로고침 시간 유형 사용자 금액 2026-05-19 05:07 보너스 테스트유저 10,000 2026-05-19 05:07 입금 테스트유저 +50,000 2026-05-18 21:04 기프트 판매 테스트유저 100 2026-05-18 21:04 기프트 구매 테스트유저 -1,000 2026-05-18 21:04 기프트 구매 테스트유저 -1,000 2026-05-18 21:04 기",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": true,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:admin:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/admin",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case2AdminThenAgent": {
+      "label": "admin then agent",
+      "url": "http://localhost:3000/agent/login",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 에이전트 페이지 에이전트 로그인 에이전트 아이디 비밀번호 로그인",
+      "markers": {
+        "userLoggedIn": false,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": true,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:admin:notification_settings": "<present>",
+          "dating:agent:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/agent/login",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "userLogin": {
+      "label": "user login",
+      "url": "http://localhost:3000/",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 홈 실시간채팅 공지사항 커플미션 랭킹 포인트 마이페이지 로그아웃 ✨ 달콤한 만남 설레는 채팅으로 시작해요 💕 마음에 드는 분을 찾으셨나요? 💝 지금 바로 대화를 시작하고 특별한 인연을 만들어보세요! 111 20세 접속중 111cm • 111kg • 111 #1 프로필보기 SOLUTION STUDIO PREMIUM SOLUTION 법인명(상호) : 솔루션 스튜디오 대표자(성명) : 솔루션 스튜디오 전화 : 010-9999-9999 주소 : 서울특별시 은평구 35678 사업자 등록번호 안내 : 999-99-99999 통신판매업 신고 : 제2025-서울은평-9999호 개인정보보호책임 : 솔루션 스튜디오 (solution@gmail.com) © 2025 솔루션스튜디오. All rights reserved.",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": true,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case3UserThenAdmin": {
+      "label": "user then admin",
+      "url": "http://localhost:3000/admin/login",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 관리자 페이지 관리자 로그인 관리자 아이디 비밀번호 로그인",
+      "markers": {
+        "userLoggedIn": false,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": true,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "dating:admin:notification_settings": "<present>",
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/admin/login",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case4MultiTabUser": {
+      "label": "multi-tab user",
+      "url": "http://localhost:3000/mypage",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 홈 실시간채팅 공지사항 커플미션 랭킹 포인트 마이페이지 로그아웃 user테스트 테스트유저 testuser@dating.local 보유 포인트 190,700 P 보유 선물 1개 메뉴 선물 인벤토리 프로필 수정 › 포인트 충전 › 충전/출금 내역 › 알림 설정 로그아웃 › SOLUTION STUDIO PREMIUM SOLUTION 법인명(상호) : 솔루션 스튜디오 대표자(성명) : 솔루션 스튜디오 전화 : 010-9999-9999 주소 : 서울특별시 은평구 35678 사업자 등록번호 안내 : 999-99-99999 통신판매업 신고 : 제2025-서울은평-9999호 개인정보보호책임 : 솔루션 스튜디오 (solution@gmail.com) © 2025 솔루션스튜디오. All rights reserved.",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": true,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:agent:notification_settings": "<present>",
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/mypage",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          },
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          },
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case4MultiTabAgent": {
+      "label": "multi-tab agent",
+      "url": "http://localhost:3000/agent",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 에이전트 모드(testagent / 테스트 에이전트) 로그아웃 에이전트 대시보드 회원 관리 채팅 관리 선물 관리 에이전트 대시보드 안녕하세요, testagent님 총 매출 ₩40,000 | 활성 회원 1명 | 배정 프로필 1개 | 온라인 프로필 1개 | 추천코드 TESTAGENT 매출 현황 ~ 총 매출 +40,000 입금액 +50,000 출금액 -10,000 전체 회원 1명 | 배정 프로필 1개 | 추천코드 TESTAGENT 매출 목록 전체 입금 출금 일시 회원명 유형 금액 2026-05-19 05:07 테스트유저 (user테스트) 충전 +50,000원 2026-05-18 19:35 테스트유저 (user테스트) 출금 -10,000원",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": true,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:agent:notification_settings": "<present>",
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/agent",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          },
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          },
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case5HardRefreshAgent": {
+      "label": "hard refresh agent",
+      "url": "http://localhost:3000/agent",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 에이전트 모드(testagent / 테스트 에이전트) 로그아웃 에이전트 대시보드 회원 관리 채팅 관리 선물 관리 에이전트 대시보드 안녕하세요, testagent님 총 매출 ₩40,000 | 활성 회원 1명 | 배정 프로필 1개 | 온라인 프로필 1개 | 추천코드 TESTAGENT 매출 현황 ~ 총 매출 +40,000 입금액 +50,000 출금액 -10,000 전체 회원 1명 | 배정 프로필 1개 | 추천코드 TESTAGENT 매출 목록 전체 입금 출금 일시 회원명 유형 금액 2026-05-19 05:07 테스트유저 (user테스트) 충전 +50,000원 2026-05-18 19:35 테스트유저 (user테스트) 출금 -10,000원",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": true,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:agent:notification_settings": "<present>",
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/agent",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          },
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          },
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case6AgentLogoutClicked": true,
+    "case6AgentAfterLogout": {
+      "label": "agent after logout",
+      "url": "http://localhost:3000/agent/login",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 에이전트 페이지 에이전트 로그인 에이전트 아이디 비밀번호 로그인",
+      "markers": {
+        "userLoggedIn": false,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": true,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:agent:notification_settings": "<present>",
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/agent/login",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case6UserAfterAgentLogout": {
+      "label": "user after agent logout",
+      "url": "http://localhost:3000/mypage",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 홈 실시간채팅 공지사항 커플미션 랭킹 포인트 마이페이지 로그아웃 user테스트 테스트유저 testuser@dating.local 보유 포인트 190,700 P 보유 선물 1개 메뉴 선물 인벤토리 프로필 수정 › 포인트 충전 › 충전/출금 내역 › 알림 설정 로그아웃 › SOLUTION STUDIO PREMIUM SOLUTION 법인명(상호) : 솔루션 스튜디오 대표자(성명) : 솔루션 스튜디오 전화 : 010-9999-9999 주소 : 서울특별시 은평구 35678 사업자 등록번호 안내 : 999-99-99999 통신판매업 신고 : 제2025-서울은평-9999호 개인정보보호책임 : 솔루션 스튜디오 (solution@gmail.com) © 2025 솔루션스튜디오. All rights reserved.",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": true,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:agent:notification_settings": "<present>",
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://localhost:3000/mypage",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "subdomainAdminLogin": {
+      "label": "subdomain admin login",
+      "url": "http://admin.localhost:3000/admin",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 관리자 모드(testadmin / 테스트 관리자) 로그아웃 통계 회원 관리 관리자 계정 입출금 관리 공지사항 채팅 프로필 관리 기프트 관리 미니게임 관리 통계 매출 전체 현황을 확인하세요 오늘 이번 주 이번 달 기간 설정 신규 회원 0명 +0 (+0.0%) 입금 50,000원 +50,000 (+100.0%) 출금 0원 -10,000 (-100.0%) 전체 매출 50,000원 +60,000 (-600.0%) 오늘 입/출금 추이 입금(인디고) / 출금(로즈) 05-19 +50,000 -0 오늘 게임 베팅 분포 사다리 / 파워볼 사다리 0원 파워볼 0원 회원 상태 활성 1명 대기 0명 정지 0명 승인거절 0명 최근 활동 최근 10건 새로고침 시간 유형 사용자 금액 2026-05-19 05:07 보너스 테스트유저 10,000 2026-05-19 05:07 입금 테스트유저 +50,000 2026-05-18 21:04 기프트 판매 테스트유저 100 2026-05-18 21:04 기프트 구매 테스트유저 -1,000 2026-05-18 21:04 기프트 구매 테스트유저 -1,000 2026-05-18 21:04 기",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": true,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:admin:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://admin.localhost:3000/admin",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "admin.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "admin.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "subdomainAdminThenAgent": {
+      "label": "subdomain admin then agent",
+      "url": "http://agent.localhost:3000/login",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 에이전트 페이지 에이전트 로그인 에이전트 아이디 비밀번호 로그인",
+      "markers": {
+        "userLoggedIn": false,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": true,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "dating:agent:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://agent.localhost:3000/login",
+        "currentHostCookies": [],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "admin.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "subdomainAdminPersistence": {
+      "label": "subdomain admin persistence",
+      "url": "http://admin.localhost:3000/",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 관리자 모드(testadmin / 테스트 관리자) 로그아웃 통계 회원 관리 관리자 계정 입출금 관리 공지사항 채팅 프로필 관리 기프트 관리 미니게임 관리 통계 매출 전체 현황을 확인하세요 오늘 이번 주 이번 달 기간 설정 신규 회원 0명 +0 (+0.0%) 입금 50,000원 +50,000 (+100.0%) 출금 0원 -10,000 (-100.0%) 전체 매출 50,000원 +60,000 (-600.0%) 오늘 입/출금 추이 입금(인디고) / 출금(로즈) 05-19 +50,000 -0 오늘 게임 베팅 분포 사다리 / 파워볼 사다리 0원 파워볼 0원 회원 상태 활성 1명 대기 0명 정지 0명 승인거절 0명 최근 활동 최근 10건 새로고침 시간 유형 사용자 금액 2026-05-19 05:07 보너스 테스트유저 10,000 2026-05-19 05:07 입금 테스트유저 +50,000 2026-05-18 21:04 기프트 판매 테스트유저 100 2026-05-18 21:04 기프트 구매 테스트유저 -1,000 2026-05-18 21:04 기프트 구매 테스트유저 -1,000 2026-05-18 21:04 기",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": true,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:admin:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://admin.localhost:3000/",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "admin.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-admin-auth-token",
+            "domain": "admin.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "subdomainAgentLogin": {
+      "label": "subdomain agent login",
+      "url": "http://agent.localhost:3000/agent",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 에이전트 모드(testagent / 테스트 에이전트) 로그아웃 에이전트 대시보드 회원 관리 채팅 관리 선물 관리 에이전트 대시보드 안녕하세요, testagent님 총 매출 ₩40,000 | 활성 회원 1명 | 배정 프로필 1개 | 온라인 프로필 1개 | 추천코드 TESTAGENT 매출 현황 ~ 총 매출 +40,000 입금액 +50,000 출금액 -10,000 전체 회원 1명 | 배정 프로필 1개 | 추천코드 TESTAGENT 매출 목록 전체 입금 출금 일시 회원명 유형 금액 2026-05-19 05:07 테스트유저 (user테스트) 충전 +50,000원 2026-05-18 19:35 테스트유저 (user테스트) 출금 -10,000원",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": true,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "adminSidebarCollapsed": "<present>",
+          "dating:agent:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://agent.localhost:3000/agent",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "agent.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "agent.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "subdomainAgentThenApp": {
+      "label": "subdomain agent then app",
+      "url": "http://app.localhost:3000/",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 홈 실시간채팅 공지사항 커플미션 랭킹 포인트 로그인 회원가입 ✨ 달콤한 만남 설레는 채팅으로 시작해요 💕 마음에 드는 분을 찾으셨나요? 💝 지금 바로 대화를 시작하고 특별한 인연을 만들어보세요! SOLUTION STUDIO PREMIUM SOLUTION 법인명(상호) : 솔루션 스튜디오 대표자(성명) : 솔루션 스튜디오 전화 : 010-9999-9999 주소 : 서울특별시 은평구 35678 사업자 등록번호 안내 : 999-99-99999 통신판매업 신고 : 제2025-서울은평-9999호 개인정보보호책임 : 솔루션 스튜디오 (solution@gmail.com) © 2025 솔루션스튜디오. All rights reserved.",
+      "markers": {
+        "userLoggedIn": false,
+        "userSessionUi": false,
+        "userLoggedOutHome": true,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://app.localhost:3000/",
+        "currentHostCookies": [],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-agent-auth-token",
+            "domain": "agent.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "subdomainUserLogin": {
+      "label": "subdomain user login",
+      "url": "http://app.localhost:3000/",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 홈 실시간채팅 공지사항 커플미션 랭킹 포인트 마이페이지 로그아웃 ✨ 달콤한 만남 설레는 채팅으로 시작해요 💕 마음에 드는 분을 찾으셨나요? 💝 지금 바로 대화를 시작하고 특별한 인연을 만들어보세요! 111 20세 접속중 111cm • 111kg • 111 #1 프로필보기 SOLUTION STUDIO PREMIUM SOLUTION 법인명(상호) : 솔루션 스튜디오 대표자(성명) : 솔루션 스튜디오 전화 : 010-9999-9999 주소 : 서울특별시 은평구 35678 사업자 등록번호 안내 : 999-99-99999 통신판매업 신고 : 제2025-서울은평-9999호 개인정보보호책임 : 솔루션 스튜디오 (solution@gmail.com) © 2025 솔루션스튜디오. All rights reserved.",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": true,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://app.localhost:3000/",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "app.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "app.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "subdomainUserThenAdmin": {
+      "label": "subdomain user then admin",
+      "url": "http://admin.localhost:3000/login",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 관리자 페이지 관리자 로그인 관리자 아이디 비밀번호 로그인",
+      "markers": {
+        "userLoggedIn": false,
+        "userSessionUi": false,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": true,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "dating:admin:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://admin.localhost:3000/login",
+        "currentHostCookies": [],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "app.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    },
+    "case10BrowserRestartPersistence": {
+      "label": "browser restart persistence simulation",
+      "url": "http://app.localhost:3000/mypage",
+      "textHead": "SOLUTION STUDIO PREMIUM SOLUTION 홈 실시간채팅 공지사항 커플미션 랭킹 포인트 마이페이지 로그아웃 user테스트 테스트유저 testuser@dating.local 보유 포인트 190,700 P 보유 선물 1개 메뉴 선물 인벤토리 프로필 수정 › 포인트 충전 › 충전/출금 내역 › 알림 설정 로그아웃 › SOLUTION STUDIO PREMIUM SOLUTION 법인명(상호) : 솔루션 스튜디오 대표자(성명) : 솔루션 스튜디오 전화 : 010-9999-9999 주소 : 서울특별시 은평구 35678 사업자 등록번호 안내 : 999-99-99999 통신판매업 신고 : 제2025-서울은평-9999호 개인정보보호책임 : 솔루션 스튜디오 (solution@gmail.com) © 2025 솔루션스튜디오. All rights reserved.",
+      "markers": {
+        "userLoggedIn": true,
+        "userSessionUi": true,
+        "userLoggedOutHome": false,
+        "adminDashboard": false,
+        "adminLogin": false,
+        "agentDashboard": false,
+        "agentLogin": false,
+        "roleLeakage": false
+      },
+      "storage": {
+        "localStorage": {
+          "dating:user:notification_settings": "<present>"
+        },
+        "sessionStorage": {}
+      },
+      "cookies": {
+        "currentUrl": "http://app.localhost:3000/mypage",
+        "currentHostCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "app.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ],
+        "allScopedCookies": [
+          {
+            "name": "sb-dating-user-auth-token",
+            "domain": "app.localhost",
+            "path": "/",
+            "secure": false,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "hasValue": true
+          }
+        ]
+      }
+    }
+  },
+  "network": [
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admin_action_logs?select=id%2Caction%2Ccreated_at%2Ctarget_id%2Ctarget_type&action=in.%28approve_user%2Creject_user%2Csuspend_user%2Cunsuspend_user%29&order=created_at.desc&limit=10",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/game_bets?select=bet_amount%2Cwin_amount%2Cgame_rounds%28game_type%29&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A11.860Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/game_bets?select=bet_amount%2Cwin_amount%2Cgame_rounds%28game_type%29&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A11.860Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/gift_transactions?select=points_amount%2Ctransaction_type%2Ccreated_at&transaction_type=eq.buy&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A11.860Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/gift_transactions?select=points_amount%2Ctransaction_type%2Ccreated_at&transaction_type=eq.buy&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A11.860Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id&created_at=gte.2026-05-18T07%3A18%3A43.375Z&created_at=lte.2026-05-18T15%3A00%3A00.000Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id&created_at=gte.2026-05-18T07%3A18%3A43.375Z&created_at=lte.2026-05-18T15%3A00%3A00.000Z",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=type%2Camount%2Ccreated_at&type=eq.charge&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=type%2Camount%2Ccreated_at&type=eq.charge&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=type%2Camount%2Ccreated_at&type=eq.charge&created_at=gte.2026-05-18T07%3A18%3A43.375Z&created_at=lte.2026-05-18T15%3A00%3A00.000Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=amount%2Cprocessed_at&status=eq.approved&processed_at=gte.2026-05-18T15%3A00%3A00.000Z&processed_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=type%2Camount%2Ccreated_at&type=eq.charge&created_at=gte.2026-05-18T07%3A18%3A43.375Z&created_at=lte.2026-05-18T15%3A00%3A00.000Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=amount%2Cprocessed_at&status=eq.approved&processed_at=gte.2026-05-18T07%3A18%3A43.375Z&processed_at=lte.2026-05-18T15%3A00%3A00.000Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=amount%2Cprocessed_at&status=eq.approved&processed_at=gte.2026-05-18T15%3A00%3A00.000Z&processed_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id&status=eq.active",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id&status=eq.pending",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=amount%2Cprocessed_at&status=eq.approved&processed_at=gte.2026-05-18T07%3A18%3A43.375Z&processed_at=lte.2026-05-18T15%3A00%3A00.000Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id&status=eq.suspended",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id&status=eq.rejected",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admins?select=*&id=eq.d9b0f0a0-f2cd-4de5-ae53-90a857cb9828",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admins?select=*&id=eq.d9b0f0a0-f2cd-4de5-ae53-90a857cb9828",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&status=eq.active&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&status=eq.active&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=amount%2Ccreated_at&type=eq.charge&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=amount%2Ccreated_at&type=eq.charge&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=amount%2Cprocessed_at&status=eq.approved&processed_at=gte.2026-05-18T15%3A00%3A00.000Z&processed_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&status=eq.rejected&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&status=eq.rejected&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "HEAD",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/deposit_requests?select=id%2Camount%2Cstatus%2Cuser_id%2Ccreated_at&status=eq.pending",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=id%2Camount%2Cstatus%2Cuser_id%2Ccreated_at&status=eq.pending",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/deposit_requests?select=id%2Camount%2Cstatus%2Cuser_id%2Ccreated_at&status=eq.pending",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=id%2Camount%2Cstatus%2Cuser_id%2Ccreated_at&status=eq.pending",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=amount%2Ctype%2Ccreated_at&type=eq.charge&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=amount%2Ctype%2Ccreated_at&type=eq.charge&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/game_bets?select=bet_amount%2Ccreated_at%2Cgame_rounds%28game_type%29&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/game_bets?select=bet_amount%2Ccreated_at%2Cgame_rounds%28game_type%29&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.625Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id%2Cstatus%2Cnickname%2Cname%2Ccreated_at&status=eq.pending",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id%2Cstatus%2Cnickname%2Cname%2Ccreated_at&status=eq.pending",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=amount%2Cprocessed_at&status=eq.approved&processed_at=gte.2026-05-18T15%3A00%3A00.000Z&processed_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=amount%2Cprocessed_at&status=eq.approved&processed_at=gte.2026-05-18T15%3A00%3A00.000Z&processed_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=id%2Cname%2Cnickname%2Ccreated_at&order=created_at.desc&limit=10",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/point_transactions?select=id%2Ctype%2Camount%2Ccreated_at%2Cusers%3Auser_profiles%28name%2Cnickname%29&order=created_at.desc&limit=10",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/game_bets?select=id%2Cbet_amount%2Cbet_type%2Cstatus%2Cwin_amount%2Ccreated_at%2Cusers%3Auser_profiles%28name%2Cnickname%29%2Cgame_rounds%28game_type%2Cround_number%29&order=created_at.desc&limit=20",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admin_action_logs?select=id%2Caction%2Ccreated_at%2Ctarget_id%2Ctarget_type&action=in.%28approve_user%2Creject_user%2Csuspend_user%2Cunsuspend_user%29&order=created_at.desc&limit=10",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/game_bets?select=bet_amount%2Cwin_amount%2Cgame_rounds%28game_type%29&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/game_bets?select=bet_amount%2Cwin_amount%2Cgame_rounds%28game_type%29&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/gift_transactions?select=points_amount%2Ctransaction_type%2Ccreated_at&transaction_type=eq.buy&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "d9b0f0a0-f2cd-4de5-ae53-90a857cb9828"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/gift_transactions?select=points_amount%2Ctransaction_type%2Ccreated_at&transaction_type=eq.buy&created_at=gte.2026-05-18T15%3A00%3A00.000Z&created_at=lte.2026-05-18T22%3A41%3A16.620Z",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/auth/v1/token?grant_type=password",
+      "method": "POST",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admins?select=*&id=eq.25874f89-09e1-4b5a-8a7d-7c9f1f938dd1",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/agents?select=*&id=eq.25874f89-09e1-4b5a-8a7d-7c9f1f938dd1",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/functions/v1/backoffice-record-login",
+      "method": "POST",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/functions/v1/backoffice-record-login",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&assigned_agent_id=eq.25874f89-09e1-4b5a-8a7d-7c9f1f938dd1&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_rooms?select=id%2Cprofile_id%2Cuser_id&profile_id=in.%2803669fcd-23f3-433c-80be-60315a71eaa2%29",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/agents?select=referral_code&id=eq.25874f89-09e1-4b5a-8a7d-7c9f1f938dd1",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&assigned_agent_id=eq.25874f89-09e1-4b5a-8a7d-7c9f1f938dd1&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_rooms?select=id%2Cprofile_id%2Cuser_id&profile_id=in.%2803669fcd-23f3-433c-80be-60315a71eaa2%29",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=id%2Cis_online&assigned_agent_id=eq.25874f89-09e1-4b5a-8a7d-7c9f1f938dd1&is_active=eq.true",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&agent_id=eq.25874f89-09e1-4b5a-8a7d-7c9f1f938dd1",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/rpc/get_agent_referral_code_logs",
+      "method": "POST",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/rpc/get_agent_member_transactions",
+      "method": "POST",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/withdrawal_requests?select=id%2Cuser_id%2Camount%2Cprocessed_at%2Ccreated_at&user_id=in.%285654868a-597b-4895-b659-70b9bd2287d6%29&status=eq.approved&order=processed_at.desc&offset=0&limit=1000",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/gift_transactions?select=receiver_id%2Creceiver_type%2Ctransaction_type%2Cpoints_amount%2Ccreated_at&receiver_type=eq.profile&transaction_type=eq.send&receiver_id=in.%2803669fcd-23f3-433c-80be-60315a71eaa2%29&order=created_at.desc&offset=0&limit=1000",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "25874f89-09e1-4b5a-8a7d-7c9f1f938dd1"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/auth/v1/token?grant_type=password",
+      "method": "POST",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admins?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admins?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/agents?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/agents?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/functions/v1/user-record-login",
+      "method": "POST",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/functions/v1/user-record-login",
+      "method": "OPTIONS",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "PATCH",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admins?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/storage/v1/object/public/chat-profile-images/chat_profiles/f3f443a2-a2bc-4894-aad1-8dce9ffac3ca.jpg",
+      "method": "GET",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/agents?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_profiles?select=*&is_active=eq.true&order=created_at.desc",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/admins?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/agents?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/user_profiles?select=*&id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/storage/v1/object/public/profile-images/5654868a-597b-4895-b659-70b9bd2287d6/1779057845805.jpg",
+      "method": "GET",
+      "hasAuthorization": false,
+      "hasApiKey": false,
+      "authorizationSub": null
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/chat_rooms?select=id&user_id=eq.5654868a-597b-4895-b659-70b9bd2287d6",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    },
+    {
+      "url": "https://diwrjedpfyndhggbgdls.supabase.co/rest/v1/gift_inventory?select=*%2Cgifts%28*%29&owner_id=eq.5654868a-597b-4895-b659-70b9bd2287d6&owner_type=eq.user&quantity=gt.0",
+      "method": "GET",
+      "hasAuthorization": true,
+      "hasApiKey": true,
+      "authorizationSub": "5654868a-597b-4895-b659-70b9bd2287d6"
+    }
+  ],
+  "assertions": {
+    "case1AgentDoesNotPolluteUserRoot": true,
+    "case2AdminDoesNotAuthenticateAgent": true,
+    "case3UserDoesNotAuthenticateAdmin": true,
+    "case4MultiTabBothSessionsIndependent": true,
+    "case5HardRefreshNoHydrationContamination": true,
+    "case6AgentLogoutKeepsUserSession": true,
+    "case7LocalStorageNoAuthKeyCollision": true,
+    "case8CookieNamespacesSeparate": true,
+    "case9SsrCsrNoMismatchOnProtectedRoutes": true,
+    "case10BrowserRestartPersistence": true,
+    "subdomainAdminCleanPathWorks": true,
+    "subdomainAgentCleanPathWorks": true,
+    "subdomainCrossScopeIsolation": true
+  }
+}

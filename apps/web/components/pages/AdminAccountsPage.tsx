@@ -153,6 +153,7 @@ export function AdminAccountsPage() {
     members: agentMembers,
     revenueRecords: agentRevenueRecords,
     isLoading: isAgentStatsLoading,
+    error: agentStatsError,
   } = useAgentDashboardStats(detailTarget?.id);
 
   const {
@@ -1464,6 +1465,10 @@ export function AdminAccountsPage() {
               {isAgentStatsLoading ? (
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+                </div>
+              ) : agentStatsError ? (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-300 text-sm">
+                  {agentStatsError.message}
                 </div>
               ) : (
                 <>

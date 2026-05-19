@@ -1,7 +1,54 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
+import {
+  resolveAppInstance,
+  resolveAppInstanceFromHost,
+  resolveAppInstanceFromPathname,
+  type AppInstance,
+} from "@/lib/supabase/config";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/", "/notice", "/admin/login", "/agent/login"];
+const PUBLIC_PATHS_BY_SCOPE: Record<AppInstance, string[]> = {
+  user: [
+    "/login",
+    "/signup",
+    "/",
+    "/notice",
+    "/realtime-matching",
+    "/minigame",
+    "/ladder-game",
+    "/powerball",
+    "/ranking",
+  ],
+  admin: ["/admin/login", "/login"],
+  agent: ["/agent/login", "/login"],
+};
+
+const LOGIN_PATH_BY_SCOPE: Record<AppInstance, string> = {
+  user: "/login",
+  admin: "/admin/login",
+  agent: "/agent/login",
+};
+
+function isPublicPath(pathname: string, appScope: AppInstance) {
+  return PUBLIC_PATHS_BY_SCOPE[appScope].some((path) => pathname === path);
+}
+
+function resolveScopedPathname(pathname: string, appScope: AppInstance) {
+  if (appScope === "user") return pathname;
+  if (pathname === "/") return `/${appScope}`;
+  if (pathname === "/login") return `/${appScope}/login`;
+  if (pathname === `/${appScope}` || pathname.startsWith(`/${appScope}/`)) {
+    return pathname;
+  }
+  return `/${appScope}${pathname}`;
+}
+
+function copySessionCookies(target: NextResponse, source: NextResponse) {
+  source.cookies.getAll().forEach((cookie) => {
+    target.cookies.set(cookie);
+  });
+  return target;
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -10,18 +57,58 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (PUBLIC_PATHS.some((p) => pathname === p)) {
+  const hostname = request.headers.get("host") ?? request.nextUrl.hostname;
+  const hostScope = resolveAppInstanceFromHost(hostname);
+  const appScope = resolveAppInstance({
+    hostname,
+    pathname,
+  });
+  const originalPathScope = resolveAppInstanceFromPathname(pathname);
+  if (
+    hostScope &&
+    originalPathScope !== "user" &&
+    originalPathScope !== appScope
+  ) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  const scopedPathname = hostScope
+    ? resolveScopedPathname(pathname, appScope)
+    : pathname;
+  const pathScope = resolveAppInstanceFromPathname(scopedPathname);
+  const needsRewrite = scopedPathname !== pathname;
+
+  if (
+    !hostScope &&
+    appScope !== "user" &&
+    pathScope !== "user" &&
+    appScope !== pathScope
+  ) {
+    return NextResponse.redirect(
+      new URL(LOGIN_PATH_BY_SCOPE[appScope], request.url),
+    );
+  }
+
+  if (isPublicPath(scopedPathname, appScope)) {
+    if (needsRewrite) {
+      const rewriteUrl = request.nextUrl.clone();
+      rewriteUrl.pathname = scopedPathname;
+      return NextResponse.rewrite(rewriteUrl);
+    }
     return NextResponse.next();
   }
 
-  if (pathname.startsWith("/admin") || pathname.startsWith("/agent")) {
-    return NextResponse.next();
-  }
-
-  const { response, user } = await updateSession(request);
+  const { response, user } = await updateSession(request, appScope);
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const loginPath = hostScope ? "/login" : LOGIN_PATH_BY_SCOPE[appScope];
+    return NextResponse.redirect(new URL(loginPath, request.url));
+  }
+
+  if (needsRewrite) {
+    const rewriteUrl = request.nextUrl.clone();
+    rewriteUrl.pathname = scopedPathname;
+    return copySessionCookies(NextResponse.rewrite(rewriteUrl), response);
   }
 
   return response;

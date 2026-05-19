@@ -4,6 +4,7 @@ import { User, Lock, Eye, EyeOff, Shield, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Logo from "@/imports/Logo";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppScope } from "@/contexts/AppScopeContext";
 
 export function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -13,6 +14,7 @@ export function AdminLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const { appScope } = useAppScope();
   const {
     signInWithUsername,
     user,
@@ -21,7 +23,7 @@ export function AdminLoginPage() {
     isLoading: authLoading,
   } = useAuth();
 
-  const isAgentLogin = pathname.startsWith("/agent");
+  const isAgentLogin = appScope === "agent" || pathname.startsWith("/agent");
 
   useEffect(() => {
     if (authLoading) return;

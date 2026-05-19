@@ -180,7 +180,7 @@ export function ProfileDetailModal({
             </p>
           </div>
 
-          {!hideStartChat && (
+          {!hideStartChat && user && (
             <button
               onClick={() => setShowConfirm(true)}
               className="w-full bg-pink-500 text-white py-3 rounded-lg hover:bg-pink-600 transition-colors flex items-center justify-center gap-2"
@@ -193,7 +193,7 @@ export function ProfileDetailModal({
             </button>
           )}
 
-          {!hideStartChat && (
+          {!hideStartChat && user && (
             <p className="text-gray-500 text-xs text-center mt-4">
               신규 채팅 시작 시 {profile.chatPoints || 0}P가 차감됩니다
             </p>

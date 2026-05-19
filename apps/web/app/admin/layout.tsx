@@ -1,11 +1,9 @@
-"use client";
-
-import { AdminLayout } from "@/components/layout/AdminLayout";
+import { ScopedProviders } from "../providers";
 
 export default function AdminRouteLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <AdminLayout>{children}</AdminLayout>;
+  return <ScopedProviders appScope="admin">{children}</ScopedProviders>;
 }

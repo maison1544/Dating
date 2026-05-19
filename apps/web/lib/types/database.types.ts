@@ -487,7 +487,7 @@ export type Database = {
           reserved_by: string | null;
           reserved_result: Json | null;
           result: Json | null;
-          round_number: number | null;
+          round_number: string | null;
           settled_at: string | null;
           start_time: string | null;
           status: string;
@@ -507,7 +507,7 @@ export type Database = {
           reserved_by?: string | null;
           reserved_result?: Json | null;
           result?: Json | null;
-          round_number?: number | null;
+          round_number?: string | null;
           settled_at?: string | null;
           start_time?: string | null;
           status?: string;
@@ -527,7 +527,7 @@ export type Database = {
           reserved_by?: string | null;
           reserved_result?: Json | null;
           result?: Json | null;
-          round_number?: number | null;
+          round_number?: string | null;
           settled_at?: string | null;
           start_time?: string | null;
           status?: string;
@@ -1098,7 +1098,31 @@ export type Database = {
       };
     };
     Views: {
-      [_ in never]: never;
+      game_rounds_secure: {
+        Row: {
+          betting_end_time: string | null;
+          created_at: string | null;
+          end_time: string | null;
+          game_type: string;
+          id: string;
+          is_settled: boolean | null;
+          profit: number | null;
+          reserved_at: string | null;
+          reserved_by: string | null;
+          reserved_result: Json | null;
+          result: Json | null;
+          round_number: string | null;
+          settled_at: string | null;
+          start_time: string | null;
+          status: string;
+          total_bet_amount: number | null;
+          total_win_amount: number | null;
+          updated_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
     };
     Functions: {
       add_points: {
@@ -1117,6 +1141,40 @@ export type Database = {
           p_result: Json | null;
         };
         Returns: Json;
+      };
+      admin_game_tick: {
+        Args: {
+          p_game_type?: string | null;
+        };
+        Returns: Json;
+      };
+      admin_game_rounds_count: {
+        Args: {
+          p_game_type?: string | null;
+          p_start_time?: string | null;
+          p_end_time?: string | null;
+        };
+        Returns: number;
+      };
+      admin_game_rounds_list: {
+        Args: {
+          p_game_type?: string | null;
+          p_start_time?: string | null;
+          p_end_time?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: Database["public"]["Tables"]["game_rounds"]["Row"][];
+      };
+      game_rounds_secure_list: {
+        Args: {
+          p_game_type?: string | null;
+          p_statuses?: string[] | null;
+          p_round_id?: string | null;
+          p_limit?: number;
+          p_betting_open_only?: boolean;
+        };
+        Returns: Database["public"]["Views"]["game_rounds_secure"]["Row"][];
       };
       admin_gift_grant: {
         Args: {
@@ -1137,18 +1195,6 @@ export type Database = {
           p_admin_id?: string | null;
         };
         Returns: string;
-      };
-      admin_game_tick: {
-        Args: {
-          p_game_type: string | null;
-        };
-        Returns: Json;
-      };
-      admin_reclaim_gift_inventory: {
-        Args: {
-          p_gift_id: string;
-        };
-        Returns: Json;
       };
       game_tick_client: {
         Args: {
@@ -1294,10 +1340,46 @@ export type Database = {
         };
         Returns: boolean;
       };
+      check_session_valid: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json;
+      };
       create_or_get_chat_room: {
         Args: {
           p_profile_id: string;
         };
+        Returns: Json;
+      };
+      get_agent_member_transactions: {
+        Args: {
+          p_member_ids: string[];
+          p_types: string[];
+        };
+        Returns: {
+          id: string;
+          user_id: string;
+          type: string;
+          amount: number;
+          created_at: string;
+          related_id: string | null;
+          related_type: string | null;
+          user_name: string | null;
+          user_nickname: string | null;
+        }[];
+      };
+      get_agent_referral_code_logs: {
+        Args: {
+          p_agent_id: string;
+        };
+        Returns: {
+          id: string;
+          target_id: string | null;
+          changes: Json | null;
+          created_at: string;
+        }[];
+      };
+      heartbeat_session: {
+        Args: Record<PropertyKey, never>;
         Returns: Json;
       };
       place_bet: {
@@ -1307,6 +1389,7 @@ export type Database = {
           p_bet_type: string;
           p_amount: number;
           p_odds: number;
+          p_ip_address?: string | null;
         };
         Returns: string;
       };

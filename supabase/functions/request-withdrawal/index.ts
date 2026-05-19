@@ -26,46 +26,44 @@ function json(
 function getBearer(req: Request): string | null {
   const auth = req.headers.get("Authorization") || "";
   if (!auth) return null;
-  if (auth.toLowerCase().startsWith("bearer "))
+  if (auth.toLowerCase().startsWith("bearer ")) {
     return auth.slice("bearer ".length);
+  }
   return auth;
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS")
+  if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST")
+  }
+  if (req.method !== "POST") {
     return json({ success: false, error: "Method not allowed" }, 405);
+  }
 
   const url = Deno.env.get("SUPABASE_URL") || "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
-  if (!url || !serviceKey || !anonKey)
+  if (!url || !anonKey) {
     return json({ success: false, error: "Missing env" }, 500);
+  }
 
   const jwt = getBearer(req);
-  if (!jwt)
+  if (!jwt) {
     return json({ success: false, error: "Missing authorization" }, 401);
+  }
 
-  // 사용자 인증 확인 (anon key 사용)
   const userClient = createClient(url, anonKey, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
 
-  const { data: userData, error: userError } =
-    await userClient.auth.getUser(jwt);
+  const { data: userData, error: userError } = await userClient.auth.getUser(jwt);
   if (userError || !userData?.user?.id) {
     return json({ success: false, error: "Invalid token" }, 401);
   }
 
   const userId = userData.user.id;
-
-  // 서비스 롤 클라이언트 (포인트 차감용)
-  const adminClient = createClient(url, serviceKey);
-
   const body = await req.json().catch(() => ({}) as any);
-  const amount = body?.amount;
+  const amount = Math.floor(Number(body?.amount) || 0);
   const bank = body?.bank;
   const accountNumber = body?.account_number;
   const accountHolder = body?.account_holder;
@@ -82,8 +80,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // RPC 함수를 통해 모든 작업을 하나의 트랜잭션으로 처리 (속도 최적화)
-    const { data: rpcResult, error: rpcError } = await adminClient.rpc(
+    const { data: rpcResult, error: rpcError } = await userClient.rpc(
       "request_withdrawal_v2",
       {
         p_user_id: userId,
@@ -104,7 +101,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // RPC 결과 처리
     const result = rpcResult as {
       success: boolean;
       data?: any;

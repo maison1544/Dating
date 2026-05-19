@@ -210,11 +210,24 @@ export function AdminGiftsPage() {
       is_active: !!formData.isActive,
     };
 
-    if (editingId) {
-      await updateGift(editingId, payload);
-    } else {
-      await createGift(payload as any);
+    const { error: saveError } = editingId
+      ? await updateGift(editingId, payload)
+      : await createGift(payload as any);
+
+    if (saveError) {
+      showAlert({
+        title: "오류",
+        message: saveError.message || "기프트 저장에 실패했습니다.",
+        type: "error",
+      });
+      return;
     }
+
+    showAlert({
+      title: "처리 완료",
+      message: editingId ? "기프트가 수정되었습니다." : "기프트가 생성되었습니다.",
+      type: "success",
+    });
 
     closeModal();
   };
@@ -228,7 +241,24 @@ export function AdminGiftsPage() {
 
   const confirmDelete = async () => {
     if (!deleteTargetId) return;
-    await deleteGift(deleteTargetId, { reclaim: deleteReclaim });
+    const { error: deleteError } = await deleteGift(deleteTargetId, {
+      reclaim: deleteReclaim,
+    });
+
+    if (deleteError) {
+      showAlert({
+        title: "오류",
+        message: deleteError.message || "기프트 삭제에 실패했습니다.",
+        type: "error",
+      });
+      return;
+    }
+
+    showAlert({
+      title: "처리 완료",
+      message: "기프트가 비활성화되었습니다.",
+      type: "success",
+    });
     setIsDeleteModalOpen(false);
     setDeleteTargetId(null);
   };

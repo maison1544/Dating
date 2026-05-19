@@ -3,12 +3,17 @@
   useContext,
   useCallback,
   useEffect,
+  useMemo,
   useState,
   useRef,
   ReactNode,
 } from "react";
 import { AuthChangeEvent, User, Session } from "@supabase/supabase-js";
-import { supabase, supabaseAdmin } from "@/lib/supabase/client";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  getSupabaseAuthStorageKey,
+  type AppInstance,
+} from "@/lib/supabase/config";
 import type { Tables } from "@/lib/types/database.types";
 import { useAlert } from "./AlertContext";
 
@@ -43,7 +48,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  appScope = "user",
+  children,
+}: {
+  appScope?: AppInstance;
+  children: ReactNode;
+}) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -54,6 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const initSessionCompleted = useRef(false);
   const isManualSigningIn = useRef(false);
   const { showAlert } = useAlert();
+  const userClient = useMemo(() => getSupabaseBrowserClient("user"), []);
+  const scopedClient = useMemo(
+    () => getSupabaseBrowserClient(appScope),
+    [appScope],
+  );
+  const activeClient = appScope === "user" ? userClient : scopedClient;
+  const supabase = userClient;
+  const supabaseAdmin = activeClient;
 
   const isAdmin = !!(
     adminAccount &&
@@ -204,14 +223,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 관리자 세션 동기화 (관리자 클라이언트용)
     const syncAdminSession = async (nextSession: Session | null) => {
       if (!nextSession?.user) {
-        // 관리자 세션이 사라졌으면 상태 초기화 (signOut 후 호출 시)
-        if (adminAccountRef.current) {
-          setSession(null);
-          setUser(null);
-          setAdminAccount(null);
-          setProfile(null);
-          setIsLoading(false);
-        }
+        setSession(null);
+        setUser(null);
+        setAdminAccount(null);
+        setProfile(null);
+        setIsLoading(false);
         return;
       }
 
@@ -219,6 +235,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const account = await fetchAdminAccount(authUser.id);
 
       if (account) {
+        const isAgentAccount = "referral_code" in account;
+        if (
+          (appScope === "admin" && isAgentAccount) ||
+          (appScope === "agent" && !isAgentAccount)
+        ) {
+          await supabaseAdmin.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setAdminAccount(null);
+          setProfile(null);
+          setIsLoading(false);
+          return;
+        }
+
         // Check if account is suspended
         if (account.is_active === false) {
           // Sign out suspended account
@@ -236,27 +266,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAdminAccount(account);
         setProfile(null);
         setIsLoading(false);
+        return;
       }
+
+      await supabaseAdmin.auth.signOut();
+      setSession(null);
+      setUser(null);
+      setAdminAccount(null);
+      setProfile(null);
+      setIsLoading(false);
     };
 
-    // 초기 세션 가져오기 - 먼저 관리자 세션 확인, 없으면 유저 세션 확인
     const initSession = async () => {
       try {
-        // 관리자 세션 확인
-        const {
-          data: { session: adminSession },
-        } = await supabaseAdmin.auth.getSession();
-        if (adminSession?.user) {
-          await syncAdminSession(adminSession);
+        if (appScope === "user") {
+          const {
+            data: { session: userSession },
+          } = await supabase.auth.getSession();
+          if (!cancelled) {
+            await syncUserSession(userSession);
+          }
           return;
         }
 
-        // 유저 세션 확인
         const {
-          data: { session: userSession },
-        } = await supabase.auth.getSession();
+          data: { session: adminSession },
+        } = await supabaseAdmin.auth.getSession();
         if (!cancelled) {
-          await syncUserSession(userSession);
+          await syncAdminSession(adminSession);
         }
       } finally {
         // 초기 세션 확인 완료 표시
@@ -266,36 +303,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initSession();
 
-    // 유저 세션 변경 감지
     const {
-      data: { subscription: userSubscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
-        if (cancelled) return;
-        // 초기 세션 확인이 완료되기 전에는 무시 (race condition 방지)
-        if (!initSessionCompleted.current) return;
-        // 관리자 세션이 활성화되어 있으면 유저 세션 변경 무시
-        if (adminAccountRef.current) return;
-        void syncUserSession(session);
-      },
-    );
-
-    // 관리자 세션 변경 감지
-    const {
-      data: { subscription: adminSubscription },
-    } = supabaseAdmin.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
-        if (cancelled) return;
-        // signInWithUsername 실행 중에는 syncAdminSession 차단 (역할 검증 레이스컨디션 방지)
-        if (isManualSigningIn.current) return;
-        void syncAdminSession(session);
-      },
-    );
+      data: { subscription },
+    } =
+      appScope === "user"
+        ? supabase.auth.onAuthStateChange(
+            (_event: AuthChangeEvent, session: Session | null) => {
+              if (cancelled) return;
+              // 초기 세션 확인이 완료되기 전에는 무시 (race condition 방지)
+              if (!initSessionCompleted.current) return;
+              void syncUserSession(session);
+            },
+          )
+        : supabaseAdmin.auth.onAuthStateChange(
+            (_event: AuthChangeEvent, session: Session | null) => {
+              if (cancelled) return;
+              // signInWithUsername 실행 중에는 syncAdminSession 차단 (역할 검증 레이스컨디션 방지)
+              if (isManualSigningIn.current) return;
+              void syncAdminSession(session);
+            },
+          );
 
     return () => {
       cancelled = true;
-      userSubscription.unsubscribe();
-      adminSubscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -583,7 +614,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (adminAccount) {
         // 관리자/에이전트 로그아웃
         await supabaseAdmin.auth.signOut();
-        localStorage.removeItem("sb-admin-auth-token");
+        localStorage.removeItem(getSupabaseAuthStorageKey(appScope));
       } else {
         // Set is_online = false before logout (if user exists)
         if (user?.id) {
@@ -613,7 +644,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
           }
         }
-        localStorage.removeItem("sb-user-auth-token");
+        localStorage.removeItem(getSupabaseAuthStorageKey("user"));
       }
     } finally {
       setUser(null);
@@ -622,7 +653,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAdminAccount(null);
       setIsLoading(false);
     }
-  }, [showAlert, adminAccount, user?.id]);
+  }, [appScope, showAlert, adminAccount, user?.id]);
 
   // 유저 계정 강제 로그아웃 구독
   useEffect(() => {

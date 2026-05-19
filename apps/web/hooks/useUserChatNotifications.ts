@@ -93,8 +93,9 @@ export function useUserChatNotifications() {
     fetchUserRooms();
 
     // 새 채팅방 생성 시 목록 갱신
+    const roomChannelSuffix = crypto.randomUUID();
     const roomChannel = supabase
-      .channel("user-rooms-watch")
+      .channel(`user-rooms-watch-${roomChannelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -121,8 +122,9 @@ export function useUserChatNotifications() {
     if (!user || !profile?.id) return;
     if (!settings.globalEnabled) return;
 
+    const channelSuffix = crypto.randomUUID();
     const channel = supabase
-      .channel("user-chat-notifications")
+      .channel(`user-chat-notifications-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -219,7 +221,8 @@ export function useUserChatNotifications() {
                 : typedMessage.content || "",
             action: {
               label: "확인하기",
-              onClick: () => routerRef.current.push("/chat"),
+              onClick: () =>
+                routerRef.current.push(`/chat/${typedMessage.room_id}`),
             },
           });
         },

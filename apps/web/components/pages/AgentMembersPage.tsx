@@ -102,7 +102,7 @@ export function AgentMembersPage() {
     lastIp: m.last_login_ip || "",
     profileImage: getPublicUrlForPath("profile-images", m.profile_image) || "",
     recentPurchases: [],
-    referralCode: m.agents?.referral_code || "",
+    referralCode: m.agents?.referral_code || m.referral_code || "",
   }));
 
   const getStatusColor = (status: string) => {

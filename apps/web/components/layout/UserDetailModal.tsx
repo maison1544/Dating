@@ -170,6 +170,69 @@ export function UserDetailModal({
     setLocalUser(user);
   }, [user]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      const { data, error } = await supabaseAdmin
+        .from("user_profiles")
+        .select(
+          "name, nickname, email, phone, status, points, bank, account_number, account_holder, is_online, profile_image, join_ip, last_login_ip, created_at, last_login_at, agent_id, agents:agent_id(referral_code)",
+        )
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (error || !data || !isMounted) return;
+
+      setLocalUser((prev) => {
+        const current = prev || user;
+        const agentRow = Array.isArray((data as any).agents)
+          ? (data as any).agents[0]
+          : (data as any).agents;
+        const statusLabel =
+          data.status === "active"
+            ? "활성"
+            : data.status === "suspended"
+              ? "정지"
+              : data.status === "rejected"
+                ? "승인거절"
+                : data.status === "pending"
+                  ? "대기"
+                  : data.status || current.status;
+
+        return {
+          ...current,
+          name: data.name || current.name,
+          nickname: data.nickname || current.nickname,
+          email: data.email || current.email,
+          phone: data.phone || current.phone,
+          status: statusLabel,
+          points: data.points ?? current.points,
+          online: data.is_online ?? current.online,
+          bank: data.bank || current.bank,
+          accountNumber: data.account_number || current.accountNumber,
+          accountHolder: data.account_holder || current.accountHolder,
+          joinIp: data.join_ip || current.joinIp,
+          lastIp: data.last_login_ip || current.lastIp,
+          joined: data.created_at
+            ? formatKST(data.created_at, "datetime")
+            : current.joined,
+          lastLogin: data.last_login_at
+            ? formatKST(data.last_login_at, "datetime")
+            : current.lastLogin,
+          referralCode: data.agent_id
+            ? agentRow?.referral_code || current.referralCode || ""
+            : "",
+          profileImage: data.profile_image || current.profileImage,
+        };
+      });
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
   const displayUser = localUser || user;
 
   const profileImageUrl = getPublicUrlForPath(

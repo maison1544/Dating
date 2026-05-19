@@ -18,7 +18,7 @@ import { formatKST, getDisplayRoundNumber } from "@/lib/utils/dateUtils";
 
 export function LadderGamePage() {
   const router = useRouter();
-  const { profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { showAlert } = useAlert();
 
   const [showResultOverlay, setShowResultOverlay] = useState(false);
@@ -453,7 +453,7 @@ export function LadderGamePage() {
     );
 
     if (result.success) {
-      await refetchBets();
+      await Promise.all([refetchBets(), refreshProfile()]);
       showAlert({
         title: "배팅 완료",
         message: `${selectedBet.label}에 ${parseInt(
@@ -742,32 +742,34 @@ export function LadderGamePage() {
                 </div>
               </div>
 
-              {/* Bet Amount */}
-              <div className="mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-yellow-500">💰</span>
-                  <span className="text-white">보유 포인트</span>
-                  <span className="text-yellow-500 ml-auto">
-                    {currentPoints.toLocaleString()}P
-                  </span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={betAmount}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/[^0-9]/g, "");
-                      setBetAmount(value);
-                    }}
-                    placeholder="배팅 금액 입력"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-                <QuickAmountButtons
-                  onAmountSelect={handleQuickAmount}
-                  currentPoints={currentPoints}
-                />
-              </div>
+              {user && (
+                <>
+                  {/* Bet Amount */}
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-yellow-500">💰</span>
+                      <span className="text-white">보유 포인트</span>
+                      <span className="text-yellow-500 ml-auto">
+                        {currentPoints.toLocaleString()}P
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={betAmount}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, "");
+                          setBetAmount(value);
+                        }}
+                        placeholder="배팅 금액 입력"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500"
+                      />
+                    </div>
+                    <QuickAmountButtons
+                      onAmountSelect={handleQuickAmount}
+                      currentPoints={currentPoints}
+                    />
+                  </div>
 
               {/* 출발방향 배팅 */}
               <div className="mb-4">
@@ -974,6 +976,8 @@ export function LadderGamePage() {
                   </button>
                 </div>
               </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -1040,21 +1044,24 @@ export function LadderGamePage() {
           </div>
         </div>
 
-        {/* Floating Chat Button */}
-        <button
-          onClick={() => setShowChat(true)}
-          className="fixed bottom-24 left-6 bg-pink-500 text-white p-4 rounded-full shadow-lg hover:bg-pink-600 transition-all hover:scale-110 z-40"
-        >
-          <MessageCircle size={24} />
-        </button>
+        {user && (
+          <button
+            onClick={() => setShowChat(true)}
+            className="fixed bottom-24 left-6 bg-pink-500 text-white p-4 rounded-full shadow-lg hover:bg-pink-600 transition-all hover:scale-110 z-40"
+          >
+            <MessageCircle size={24} />
+          </button>
+        )}
 
         {/* Floating Bet History Button */}
-        <button
-          onClick={() => setShowBetHistory(true)}
-          className="fixed bottom-6 left-6 bg-blue-500 text-white p-4 rounded-full shadow-lg hover:bg-blue-600 transition-all hover:scale-110 z-40"
-        >
-          <History size={24} />
-        </button>
+        {user && (
+          <button
+            onClick={() => setShowBetHistory(true)}
+            className="fixed bottom-6 left-6 bg-blue-500 text-white p-4 rounded-full shadow-lg hover:bg-blue-600 transition-all hover:scale-110 z-40"
+          >
+            <History size={24} />
+          </button>
+        )}
       </div>
 
       {/* Bet Confirmation Modal */}

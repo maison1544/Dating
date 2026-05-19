@@ -76,6 +76,7 @@ export function ChatProfileProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from("chat_profiles")
       .select("*")
+      .eq("is_active", true)
       .order("created_at", { ascending: false });
 
     if (error) {

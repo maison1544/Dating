@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/client";
 import { useNotification } from "@/contexts/NotificationContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +28,7 @@ export function useAgentChatNotifications(
   assignedProfileIds: string[],
   selectedChatId: string | null,
 ) {
+  const router = useRouter();
   const { settings, playSound, openChatModalIds, isChatMuted } =
     useNotification();
   const { adminAccount, isAgent } = useAuth();
@@ -51,6 +53,7 @@ export function useAgentChatNotifications(
   const selectedChatIdRef = useRef(selectedChatId);
   const assignedProfileIdsRef = useRef(assignedProfileIds);
   const agentRoomIdsRef = useRef(agentRoomIds);
+  const routerRef = useRef(router);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -60,6 +63,7 @@ export function useAgentChatNotifications(
     selectedChatIdRef.current = selectedChatId;
     assignedProfileIdsRef.current = assignedProfileIds;
     agentRoomIdsRef.current = agentRoomIds;
+    routerRef.current = router;
   }, [
     settings,
     playSound,
@@ -68,6 +72,7 @@ export function useAgentChatNotifications(
     selectedChatId,
     assignedProfileIds,
     agentRoomIds,
+    router,
   ]);
 
   // 에이전트에게 할당된 프로필의 채팅방 ID 목록 가져오기
@@ -104,8 +109,9 @@ export function useAgentChatNotifications(
     fetchAgentRooms();
 
     // 새 채팅방 생성 시 목록 갱신
+    const roomChannelSuffix = crypto.randomUUID();
     const roomChannel = supabaseAdmin
-      .channel("agent-rooms-watch")
+      .channel(`agent-rooms-watch-${roomChannelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -139,8 +145,9 @@ export function useAgentChatNotifications(
     if (!settings.globalEnabled || !settings.agentChatEnabled) return;
     if (assignedProfileIds.length === 0) return;
 
+    const channelSuffix = crypto.randomUUID();
     const channel = supabaseAdmin
-      .channel("agent-chat-notifications")
+      .channel(`agent-chat-notifications-${channelSuffix}`)
       .on(
         "postgres_changes",
         {
@@ -266,6 +273,21 @@ export function useAgentChatNotifications(
               typedMessage.content && typedMessage.content.length > 30
                 ? typedMessage.content.slice(0, 30) + "..."
                 : typedMessage.content || "",
+            action: {
+              label: "확인하기",
+              onClick: () => {
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(
+                    new CustomEvent("agent-chat-notification-open", {
+                      detail: { roomId: typedMessage.room_id },
+                    }),
+                  );
+                }
+                routerRef.current.push(
+                  `/agent/chats?chatId=${typedMessage.room_id}`,
+                );
+              },
+            },
           });
         },
       )

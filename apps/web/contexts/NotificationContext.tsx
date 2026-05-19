@@ -8,6 +8,7 @@ import {
   useRef,
   ReactNode,
 } from "react";
+import { useAppScope } from "./AppScopeContext";
 
 // 알림음 목록
 export const NOTIFICATION_SOUNDS = [
@@ -67,12 +68,16 @@ const NotificationContext = createContext<NotificationContextValue | undefined>(
   undefined,
 );
 
-const STORAGE_KEY = "notification_settings";
+const getNotificationStorageKey = (appScope: string) =>
+  `dating:${appScope}:notification_settings`;
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
+  const { appScope } = useAppScope();
+  const storageKey = getNotificationStorageKey(appScope);
   const [settings, setSettings] = useState<NotificationSettings>(() => {
+    if (typeof window === "undefined") return DEFAULT_SETTINGS;
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(storageKey);
       if (stored) {
         return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
       }
@@ -94,11 +99,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // 설정 변경 시 localStorage에 저장
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      localStorage.setItem(storageKey, JSON.stringify(settings));
     } catch {
       // ignore
     }
-  }, [settings]);
+  }, [settings, storageKey]);
 
   const updateSettings = useCallback(
     (updates: Partial<NotificationSettings>) => {

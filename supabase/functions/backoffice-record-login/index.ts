@@ -34,11 +34,21 @@ function firstIp(value: string | null): string | null {
 }
 
 function getClientIp(req: Request): string | null {
-  const cf = req.headers.get("cf-connecting-ip");
-  const realIp = req.headers.get("x-real-ip");
-  const forwardedFor = req.headers.get("x-forwarded-for");
+  const candidates = [
+    req.headers.get("cf-connecting-ip"),
+    req.headers.get("true-client-ip"),
+    req.headers.get("fastly-client-ip"),
+    req.headers.get("fly-client-ip"),
+    req.headers.get("x-real-ip"),
+    req.headers.get("x-forwarded-for"),
+  ];
 
-  return firstIp(cf) || firstIp(realIp) || firstIp(forwardedFor) || null;
+  for (const c of candidates) {
+    const ip = firstIp(c);
+    if (ip) return ip;
+  }
+
+  return null;
 }
 
 Deno.serve(async (req: Request) => {

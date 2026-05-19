@@ -1,13 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 
 export default function ErrorPage({
+  error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.error("[GlobalErrorBoundary]", error);
+  }, [error]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
       <h1 className="text-5xl font-bold text-white mb-4">500</h1>

@@ -28,9 +28,10 @@ import { ChatNotificationRenderer } from "./ChatNotificationRenderer";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
+  contentClassName?: string;
 }
 
-export function AdminLayout({ children }: AdminLayoutProps) {
+export function AdminLayout({ children, contentClassName }: AdminLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, adminAccount, isAgent, signOut, isLoading } = useAuth();
@@ -322,7 +323,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         >
           <div
             className={`mx-auto p-4 lg:p-6 ${
-              isAgent ? "max-w-7xl" : "max-w-4xl"
+              contentClassName ?? (isAgent ? "max-w-7xl" : "max-w-4xl")
             }`}
           >
             {children}

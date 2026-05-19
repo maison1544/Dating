@@ -136,6 +136,11 @@ export function AdminMiniGamesPage() {
     startDate: startDateIso,
     endDate: endDateIso,
   });
+  const { bets: statsBets, refetch: refetchStatsBets } = useAllGameBets({
+    gameType: dbGameTypeFilter,
+    startDate: startDateIso,
+    endDate: endDateIso,
+  });
   const { reserveResult, cancelReservation } = useReserveResult();
 
   const roundsRefetchTimerRef = useRef<number | null>(null);
@@ -173,6 +178,8 @@ export function AdminMiniGamesPage() {
       }
       roundsRefetchTimerRef.current = window.setTimeout(() => {
         void refetchRounds();
+        void refetchBets();
+        void refetchStatsBets();
       }, 250);
     };
 
@@ -182,11 +189,13 @@ export function AdminMiniGamesPage() {
       }
       betsRefetchTimerRef.current = window.setTimeout(() => {
         void refetchBets();
+        void refetchStatsBets();
       }, 100);
     };
 
+    const channelSuffix = crypto.randomUUID();
     const channel = supabaseAdmin
-      .channel("admin-minigames-realtime")
+      .channel(`admin-minigames-realtime-${channelSuffix}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "game_rounds" },
@@ -194,12 +203,7 @@ export function AdminMiniGamesPage() {
       )
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "game_bets" },
-        scheduleBetsRefetch,
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "game_bets" },
+        { event: "*", schema: "public", table: "game_bets" },
         scheduleBetsRefetch,
       )
       .subscribe();
@@ -213,7 +217,7 @@ export function AdminMiniGamesPage() {
       }
       void supabaseAdmin.removeChannel(channel);
     };
-  }, [refetchBets, refetchRounds]);
+  }, [refetchBets, refetchRounds, refetchStatsBets]);
 
   // 라운드 자동 완료 트리거 - 배팅 마감 시간이 지난 라운드 처리
   useEffect(() => {
@@ -237,8 +241,7 @@ export function AdminMiniGamesPage() {
       }
 
       if (expiredRounds.length > 0) {
-        await refetchRounds();
-        await refetchBets();
+        await Promise.all([refetchRounds(), refetchBets(), refetchStatsBets()]);
       }
     };
 
@@ -247,7 +250,7 @@ export function AdminMiniGamesPage() {
     const interval = setInterval(checkAndProcessRounds, 2000);
 
     return () => clearInterval(interval);
-  }, [dbRounds, refetchRounds, refetchBets]);
+  }, [dbRounds, refetchRounds, refetchBets, refetchStatsBets]);
 
   // 타이머 종료 시 즉시 새 라운드 생성 및 데이터 갱신
   const handleTimerEnd = useCallback(
@@ -256,12 +259,12 @@ export function AdminMiniGamesPage() {
       try {
         await supabase.rpc("game_tick_client", { p_game_type: dbGameType });
         // 즉시 refetch (debounce 없이)
-        await Promise.all([refetchRounds(), refetchBets()]);
+        await Promise.all([refetchRounds(), refetchBets(), refetchStatsBets()]);
       } catch (e) {
         console.error("handleTimerEnd error:", e);
       }
     },
-    [refetchRounds, refetchBets],
+    [refetchRounds, refetchBets, refetchStatsBets],
   );
 
   const formatDateTime = formatDatetime;
@@ -756,7 +759,7 @@ export function AdminMiniGamesPage() {
     }
   };
 
-  const calcBetPayout = (b: any) => {
+  const calcBetPayout = useCallback((b: any) => {
     const winAmount = typeof b?.win_amount === "number" ? b.win_amount : 0;
     if (winAmount > 0) return winAmount;
     if (b?.status === "won") {
@@ -765,10 +768,44 @@ export function AdminMiniGamesPage() {
       return Math.floor(betAmount * odds);
     }
     return 0;
-  };
+  }, []);
 
-  const totalBetsCount = gameRounds.reduce((sum, r) => sum + r.totalBets, 0);
-  const totalBetsAmount = gameRounds.reduce((sum, r) => sum + r.totalAmount, 0);
+  const minigameStats = useMemo(() => {
+    return (statsBets || []).reduce(
+      (acc, bet: any) => {
+        const amount =
+          typeof bet?.bet_amount === "number" ? bet.bet_amount : 0;
+        const payout = calcBetPayout(bet);
+        const gameType = bet?.game_rounds?.game_type;
+
+        acc.totalBetsCount += 1;
+        acc.totalBetsAmount += amount;
+        acc.totalPayoutAmount += payout;
+
+        if (gameType === "ladder") {
+          acc.ladderRollingAmount += amount;
+        } else if (gameType === "powerball") {
+          acc.powerballRollingAmount += amount;
+        }
+
+        return acc;
+      },
+      {
+        totalBetsCount: 0,
+        totalBetsAmount: 0,
+        totalPayoutAmount: 0,
+        ladderRollingAmount: 0,
+        powerballRollingAmount: 0,
+      },
+    );
+  }, [calcBetPayout, statsBets]);
+
+  const totalBetsCount = minigameStats.totalBetsCount;
+  const totalBetsAmount = minigameStats.totalBetsAmount;
+  const totalPayoutAmount = minigameStats.totalPayoutAmount;
+  const ladderRollingAmount = minigameStats.ladderRollingAmount;
+  const powerballRollingAmount = minigameStats.powerballRollingAmount;
+  const totalRollingAmount = totalBetsAmount;
   const activeRounds = gameRounds.filter((r) => r.status === "진행중").length;
   const avgParticipants =
     gameRounds.length > 0
@@ -777,13 +814,6 @@ export function AdminMiniGamesPage() {
             gameRounds.length,
         )
       : 0;
-
-  const totalPayoutAmount = useMemo(() => {
-    return (dbBets || []).reduce((sum: number, b: any) => {
-      if (!b?.round_id) return sum;
-      return sum + calcBetPayout(b);
-    }, 0);
-  }, [dbBets]);
 
   const netProfitAmount = totalBetsAmount - totalPayoutAmount;
 
@@ -995,6 +1025,19 @@ export function AdminMiniGamesPage() {
                 title="총 배팅 금액 - 총 지급"
               >
                 순손익 {netProfitAmount.toLocaleString()}P
+              </span>
+            </div>
+            <div className="flex items-center gap-4 text-sm mt-2">
+              <span className="text-indigo-400">
+                전체 롤링금액: {totalRollingAmount.toLocaleString()}P
+              </span>
+              <span className="text-gray-500">|</span>
+              <span className="text-blue-400">
+                사다리 롤링금액: {ladderRollingAmount.toLocaleString()}P
+              </span>
+              <span className="text-gray-500">|</span>
+              <span className="text-purple-400">
+                파워볼 롤링금액: {powerballRollingAmount.toLocaleString()}P
               </span>
             </div>
           </div>

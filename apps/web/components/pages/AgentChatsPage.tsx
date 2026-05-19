@@ -27,7 +27,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  checkIsUserOnline,
   OnlineStatusIndicator,
   OnlineStatusText,
 } from "@/components/layout/OnlineStatus";
@@ -316,6 +315,8 @@ export function AgentChatsPage() {
   const [totalRoomCountByUser, setTotalRoomCountByUser] = useState<
     Map<string, number>
   >(new Map());
+  const [requestedChatId, setRequestedChatId] = useState<string | null>(null);
+  const chatModalsRef = useRef<ChatModal[]>([]);
 
   // Supabase hooks for real data
   const { rooms: dbChatRooms, isLoading: roomsLoading } = useAgentChatRooms(
@@ -333,6 +334,29 @@ export function AgentChatsPage() {
   const { sendMessage, isLoading: sendingMessage } = useSendMessage();
 
   void roomsLoading;
+
+  useEffect(() => {
+    chatModalsRef.current = chatModals;
+  }, [chatModals]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setRequestedChatId(new URLSearchParams(window.location.search).get("chatId"));
+  }, []);
+
+  useEffect(() => {
+    const handleOpenChat = (event: Event) => {
+      const customEvent = event as CustomEvent<{ roomId?: string }>;
+      if (customEvent.detail?.roomId) {
+        setRequestedChatId(customEvent.detail.roomId);
+      }
+    };
+
+    window.addEventListener("agent-chat-notification-open", handleOpenChat);
+    return () => {
+      window.removeEventListener("agent-chat-notification-open", handleOpenChat);
+    };
+  }, []);
 
   const isSelectedChatMuted = selectedChat
     ? isChatMuted(selectedChat.id, true)
@@ -390,7 +414,7 @@ export function AgentChatsPage() {
           ? formatKST(room.last_message_at, "datetime")
           : "",
         unreadCount: room.profile_unread_count || 0,
-        isOnline: checkIsUserOnline(room.users),
+        isOnline: !!room.users?.is_online,
         messages: [],
       })),
     [dbChatRooms],
@@ -516,23 +540,44 @@ export function AgentChatsPage() {
       ? conversations
       : conversations.filter((c) => c.profileId === profileFilter);
 
+  useEffect(() => {
+    if (!requestedChatId) return;
+    const target = conversations.find((conversation) => {
+      return conversation.id === requestedChatId;
+    });
+    if (!target) return;
+    setSelectedChat((current) => {
+      return current?.id === target.id ? current : target;
+    });
+  }, [requestedChatId, conversations]);
+
   const handleChatClick = (conv: ChatConversation, isCtrlClick: boolean) => {
     if (isCtrlClick) {
+      const existingModal = chatModalsRef.current.find(
+        (modal) => modal.conversation.id === conv.id,
+      );
+      if (existingModal) {
+        setActiveModalId(existingModal.id);
+        return;
+      }
+
       // Ctrl+클릭: 새 모달 추가
       // 마지막 모달의 크기를 사용하거나, 없으면 기본 크기 사용
-      const lastModal = chatModals[chatModals.length - 1];
+      const currentModals = chatModalsRef.current;
+      const lastModal = currentModals[currentModals.length - 1];
       const baseSize = lastModal ? lastModal.size : { width: 600, height: 700 };
+      const modalCount = currentModals.length;
 
       const newModal: ChatModal = {
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         conversation: conv,
         position: {
           x:
-            window.innerWidth / 2 - baseSize.width / 2 + chatModals.length * 30,
+            window.innerWidth / 2 - baseSize.width / 2 + modalCount * 30,
           y:
             window.innerHeight / 2 -
             baseSize.height / 2 +
-            chatModals.length * 30,
+            modalCount * 30,
         },
         size: baseSize,
         isBubbleMode: true,
@@ -541,7 +586,13 @@ export function AgentChatsPage() {
         dragStart: { x: 0, y: 0 },
         resizeStart: { x: 0, y: 0, width: 0, height: 0 },
       };
-      setChatModals([...chatModals, newModal]);
+      chatModalsRef.current = [...currentModals, newModal];
+      setChatModals((prev) => {
+        if (prev.some((modal) => modal.conversation.id === conv.id)) {
+          return prev;
+        }
+        return [...prev, newModal];
+      });
       setActiveModalId(newModal.id);
     } else {
       // 일반 클릭: 우측 영역에 표시
@@ -550,15 +601,15 @@ export function AgentChatsPage() {
   };
 
   const closeModal = (modalId: string) => {
-    setChatModals(chatModals.filter((m) => m.id !== modalId));
+    setChatModals((prev) => prev.filter((m) => m.id !== modalId));
     if (activeModalId === modalId) {
       setActiveModalId(null);
     }
   };
 
   const updateModal = (modalId: string, updates: Partial<ChatModal>) => {
-    setChatModals(
-      chatModals.map((m) => (m.id === modalId ? { ...m, ...updates } : m)),
+    setChatModals((prev) =>
+      prev.map((m) => (m.id === modalId ? { ...m, ...updates } : m)),
     );
   };
 
@@ -1017,9 +1068,10 @@ export function AgentChatsPage() {
                                 {conv.lastMessageTime}
                               </p>
                             </div>
-                            <p className="text-indigo-400 text-xs truncate">
-                              {conv.profileName}
-                            </p>
+                            <OnlineStatusText
+                              isOnline={!!conv.isOnline}
+                              className="text-xs"
+                            />
                             <p className="text-gray-400 text-xs truncate">
                               {conv.lastMessage || ""}
                             </p>
@@ -1062,9 +1114,10 @@ export function AgentChatsPage() {
                       <h3 className="text-white font-medium text-sm">
                         {selectedChat.userName}
                       </h3>
-                      <p className="text-gray-400 text-xs">
-                        {selectedChat.profileName}
-                      </p>
+                      <OnlineStatusText
+                        isOnline={!!selectedChat.isOnline}
+                        className="text-xs"
+                      />
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
