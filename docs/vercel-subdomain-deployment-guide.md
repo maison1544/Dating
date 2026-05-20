@@ -126,15 +126,18 @@ B 방식은 다음 경우에만 검토한다.
 - **Root Directory**: repository root
 - **Install Command**: `pnpm install --frozen-lockfile`
 - **Build Command**: `pnpm --filter web build`
-- **Output Directory**: 비워둔다. Next.js 기본값을 사용한다.
+- **Output Directory**: `apps/web/.next`
 
-repository root의 `vercel.json`도 같은 install/build command를 고정한다. Vercel UI가 `apps/admin`, `apps/agent`, `apps/user`를 자동 선택하면 잘못된 설정이다. 운영 Next.js app은 `apps/web`이고, monorepo lockfile/workspace를 안정적으로 사용하려면 repository root 배포를 우선한다.
+repository root의 `vercel.json`도 같은 install/build/output directory를 고정한다. Vercel UI가 `apps/admin`, `apps/agent`, `apps/user`를 자동 선택하면 잘못된 설정이다. 운영 Next.js app은 `apps/web`이고, monorepo lockfile/workspace를 안정적으로 사용하려면 repository root 배포를 우선한다.
+
+root 배포에서 Vercel Project의 Framework가 `Other`/`null`로 남으면 build가 성공해도 Vercel이 static output인 `public`을 찾을 수 있다. 이 경우 root 기준 실제 Next.js output인 `apps/web/.next`를 Output Directory로 지정한다.
 
 대안 설정:
 
 - **Root Directory**: `apps/web`
 - **Install Command**: monorepo lockfile 인식과 workspace dependency 처리 방식을 별도 검증해야 한다.
 - **Build Command**: `pnpm build` 또는 `next build`
+- **Output Directory**: 비워둔다. Next.js 기본값을 사용한다.
 
 현재 구조에서는 root에 `pnpm-lock.yaml`과 `pnpm-workspace.yaml`이 있으므로 **repository root를 Root Directory로 두는 방식을 권장**한다.
 

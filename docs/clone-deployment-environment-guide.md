@@ -380,7 +380,7 @@ Host 기반 로컬 테스트를 하는 경우 hosts/DNS 또는 browser 환경에
 - 이 repository의 운영 대상 Next.js app은 `apps/web`이다.
 - `apps/admin`, `apps/agent`, `apps/user`는 legacy Vite app 구조이므로 새 Vercel Project의 Root Directory로 선택하지 않는다.
 - clone 재배포에서는 Root Directory를 repository root로 두는 방식을 우선 사용한다.
-- repository root의 `vercel.json`이 install/build command를 고정한다.
+- repository root의 `vercel.json`이 install/build/output directory를 고정한다.
 
 Vercel 설정:
 
@@ -390,7 +390,7 @@ Vercel 설정:
 | Root Directory | repository root, `./` |
 | Install Command | `pnpm install --frozen-lockfile` |
 | Build Command | `pnpm --filter web build` |
-| Output Directory | 비움, Next.js default |
+| Output Directory | `apps/web/.next` |
 
 Vercel UI가 자동으로 `apps/admin`을 선택한 경우:
 
@@ -399,8 +399,30 @@ Vercel UI가 자동으로 `apps/admin`을 선택한 경우:
 3. repository root, 즉 `./`로 변경한다.
 4. Framework Preset은 `Next.js`를 유지한다.
 5. Output Directory는 `public`으로 설정하지 않는다.
+6. root 배포 방식에서는 Output Directory를 `apps/web/.next`로 둔다.
 
-대안으로 Root Directory를 `apps/web`으로 둘 수도 있지만, 이 경우 monorepo root의 `pnpm-lock.yaml`과 workspace 설정 인식을 별도로 검증해야 한다. 운영 재배포 매뉴얼에서는 repository root 방식을 기준으로 한다.
+대안으로 Root Directory를 `apps/web`으로 둘 수도 있다. 이 방식에서는 Framework Preset이 Next.js로 더 잘 감지될 수 있으므로, 신규 Project 생성 화면에서 Vercel이 Next.js를 정확히 인식하지 못하거나 Project Settings의 Framework가 `Other`/`null`로 남는다면 `apps/web` root 방식을 선택한다.
+
+`apps/web` root 방식의 설정:
+
+| 항목 | 권장값 |
+| --- | --- |
+| Framework Preset | Next.js |
+| Root Directory | `apps/web` |
+| Install Command | `pnpm install --frozen-lockfile` |
+| Build Command | `next build` 또는 비움 |
+| Output Directory | 비움, Next.js default |
+
+Vercel build가 성공한 뒤 다음 오류가 나면 Project가 static/custom output으로 잘못 처리되는 상태다.
+
+```text
+No Output Directory named "public" found after the Build completed.
+```
+
+이 경우 다음 중 하나로 해결한다.
+
+1. repository root 배포를 유지한다면 `vercel.json`에 `outputDirectory: "apps/web/.next"`가 포함되어 있는 최신 commit을 배포한다.
+2. 새 Project를 다시 만들 수 있다면 Root Directory를 `apps/web`, Framework Preset을 `Next.js`, Output Directory를 비움으로 설정한다.
 
 ## 13. Vercel 환경변수 등록
 
