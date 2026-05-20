@@ -1,5 +1,0 @@
-export const config = {
-  framework: "nextjs",
-  installCommand: "pnpm install --frozen-lockfile",
-  buildCommand: "pnpm --filter web build",
-};

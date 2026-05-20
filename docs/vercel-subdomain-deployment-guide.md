@@ -123,23 +123,26 @@ B 방식은 다음 경우에만 검토한다.
 
 권장 설정:
 
-- **Root Directory**: repository root
-- **Install Command**: `pnpm install --frozen-lockfile`
-- **Build Command**: `pnpm --filter web build`
-- **Output Directory**: 비워둔다. Next.js 기본값을 사용한다.
-
-repository root의 `vercel.ts`도 Framework Preset과 install/build command를 고정한다. Vercel UI가 `apps/admin`, `apps/agent`, `apps/user`를 자동 선택하면 잘못된 설정이다. 운영 Next.js app은 `apps/web`이고, monorepo lockfile/workspace를 안정적으로 사용하려면 repository root 배포를 우선한다.
-
-root 배포에서 Vercel Project의 Framework가 `Other`/`null`로 남으면 build가 성공해도 Vercel이 static output인 `public`을 찾을 수 있다. 이 경우 `vercel.ts`의 `framework: "nextjs"` 설정을 사용하고, Dashboard에서도 Framework Preset을 Next.js로 맞춘다. `apps/web/.next`를 Output Directory로 지정하면 READY가 되더라도 Next.js routing이 `NOT_FOUND`를 반환할 수 있으므로 최종 설정으로 사용하지 않는다.
-
-대안 설정:
-
 - **Root Directory**: `apps/web`
-- **Install Command**: monorepo lockfile 인식과 workspace dependency 처리 방식을 별도 검증해야 한다.
-- **Build Command**: `pnpm build` 또는 `next build`
+- **Install Command**: 비워두고 Vercel 자동 감지를 사용한다.
+- **Build Command**: 비움 또는 `pnpm build`
 - **Output Directory**: 비워둔다. Next.js 기본값을 사용한다.
 
-현재 구조에서는 root에 `pnpm-lock.yaml`과 `pnpm-workspace.yaml`이 있으므로 **repository root를 Root Directory로 두는 방식을 권장**한다.
+Vercel UI가 `apps/admin`, `apps/agent`, `apps/user`를 자동 선택하면 잘못된 설정이다. 운영 Next.js app은 `apps/web`이고, `next` dependency도 `apps/web/package.json`에 있다.
+
+repository root를 Root Directory로 두면 Vercel이 root `package.json`에서 `next` dependency를 찾지 못하거나 Framework가 `Other`/`null`로 남아 build 후 `public` output을 찾을 수 있다. `apps/web/.next`를 Output Directory로 지정하면 READY가 되더라도 Next.js routing이 `NOT_FOUND`를 반환할 수 있으므로 최종 설정으로 사용하지 않는다.
+
+repository root 배포에서 발생할 수 있는 대표 오류:
+
+```text
+No Output Directory named "public" found after the Build completed.
+```
+
+```text
+No Next.js version detected. Make sure your package.json has "next" in either "dependencies" or "devDependencies".
+```
+
+위 오류가 발생하면 Root Directory를 `apps/web`, Framework Preset을 `Next.js`, Output Directory를 비움으로 수정한 뒤 Redeploy 한다.
 
 ### Node.js version
 
@@ -371,10 +374,10 @@ Cross-scope path는 redirect된다.
 
 | 항목 | 권장값 |
 | --- | --- |
-| Framework Preset | Next.js |
-| Root Directory | repository root |
-| Install Command | `pnpm install --frozen-lockfile` |
-| Build Command | `pnpm --filter web build` |
+| Framework | Next.js |
+| Root Directory | `apps/web` |
+| Install Command | 비움, Vercel 자동 감지 |
+| Build Command | 비움 또는 `pnpm build` |
 | Output Directory | 비움, Next.js 기본값 |
 | Production Domains | `app.example.com`, `admin.example.com`, `agent.example.com` |
 | Required env | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` |

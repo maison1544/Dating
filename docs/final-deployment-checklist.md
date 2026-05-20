@@ -190,9 +190,9 @@ Supabase Dashboard에서 확인한다.
 
 - [ ] **Repository 연결**: 올바른 GitHub repository와 branch가 연결되어 있는지 확인한다.
 - [ ] **Framework Preset**: Next.js로 설정한다.
-- [ ] **Root Directory**: monorepo root 사용을 권장한다.
-- [ ] **Install Command**: `pnpm install --frozen-lockfile`.
-- [ ] **Build Command**: `pnpm --filter web build`.
+- [ ] **Root Directory**: `apps/web`을 사용한다.
+- [ ] **Install Command**: 비워두고 Vercel 자동 감지를 사용한다.
+- [ ] **Build Command**: 비움 또는 `pnpm build`.
 - [ ] **Output Directory**: Next.js 기본값을 사용하며 별도 지정하지 않는다.
 - [ ] **Node.js version**: Next.js 16과 호환되는 LTS 버전을 사용한다.
 - [ ] **Production env**: Production 환경변수가 모두 설정되어 있는지 확인한다.
