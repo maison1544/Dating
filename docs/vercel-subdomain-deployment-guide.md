@@ -128,6 +128,8 @@ B 방식은 다음 경우에만 검토한다.
 - **Build Command**: `pnpm --filter web build`
 - **Output Directory**: 비워둔다. Next.js 기본값을 사용한다.
 
+repository root의 `vercel.json`도 같은 install/build command를 고정한다. Vercel UI가 `apps/admin`, `apps/agent`, `apps/user`를 자동 선택하면 잘못된 설정이다. 운영 Next.js app은 `apps/web`이고, monorepo lockfile/workspace를 안정적으로 사용하려면 repository root 배포를 우선한다.
+
 대안 설정:
 
 - **Root Directory**: `apps/web`

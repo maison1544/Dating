@@ -375,17 +375,68 @@ Host 기반 로컬 테스트를 하는 경우 hosts/DNS 또는 browser 환경에
 
 권장 방식은 하나의 Vercel Project에 세 subdomain을 연결하는 방식이다.
 
+중요:
+
+- 이 repository의 운영 대상 Next.js app은 `apps/web`이다.
+- `apps/admin`, `apps/agent`, `apps/user`는 legacy Vite app 구조이므로 새 Vercel Project의 Root Directory로 선택하지 않는다.
+- clone 재배포에서는 Root Directory를 repository root로 두는 방식을 우선 사용한다.
+- repository root의 `vercel.json`이 install/build command를 고정한다.
+
 Vercel 설정:
 
 | 항목 | 권장값 |
 | --- | --- |
 | Framework Preset | Next.js |
-| Root Directory | repository root |
+| Root Directory | repository root, `./` |
 | Install Command | `pnpm install --frozen-lockfile` |
 | Build Command | `pnpm --filter web build` |
-| Output Directory | 비움 |
+| Output Directory | 비움, Next.js default |
+
+Vercel UI가 자동으로 `apps/admin`을 선택한 경우:
+
+1. Root Directory의 **Edit**을 누른다.
+2. `apps/admin`을 선택하지 않는다.
+3. repository root, 즉 `./`로 변경한다.
+4. Framework Preset은 `Next.js`를 유지한다.
+5. Output Directory는 `public`으로 설정하지 않는다.
+
+대안으로 Root Directory를 `apps/web`으로 둘 수도 있지만, 이 경우 monorepo root의 `pnpm-lock.yaml`과 workspace 설정 인식을 별도로 검증해야 한다. 운영 재배포 매뉴얼에서는 repository root 방식을 기준으로 한다.
 
 ## 13. Vercel 환경변수 등록
+
+Vercel build는 client component도 prerender 단계에서 평가할 수 있다. 따라서 Supabase browser client를 사용하는 page는 build 중에도 `NEXT_PUBLIC_SUPABASE_URL`과 `NEXT_PUBLIC_SUPABASE_ANON_KEY`가 필요하다.
+
+등록 위치:
+
+1. Vercel Project Dashboard로 이동한다.
+2. **Settings**를 연다.
+3. **Environment Variables**를 연다.
+4. 아래 두 값을 `Production`에 등록한다.
+5. preview deployment를 사용할 경우 `Preview`에도 등록한다.
+6. 환경변수 추가/수정 후에는 반드시 새 deployment를 실행한다.
+
+필수 값:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-or-publishable-key>
+```
+
+값 형식:
+
+- `NEXT_PUBLIC_SUPABASE_URL`은 반드시 `https://`로 시작하는 Supabase Project URL이어야 한다.
+- `<project-ref>` placeholder를 그대로 넣지 않는다.
+- `https://<project-ref>.supabase.co` 예시 문자열을 그대로 넣지 않는다.
+- URL 끝에 `/rest/v1`, `/auth/v1`, `/functions/v1`을 붙이지 않는다.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`에는 Supabase Dashboard의 anon public key 또는 publishable key를 넣는다.
+- `SUPABASE_SERVICE_ROLE_KEY`는 Vercel client env에 넣지 않는다.
+
+이 값이 없거나 URL 형식이 아니면 Vercel build 중 다음 오류가 날 수 있다.
+
+```text
+Error: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
+Export encountered an error on /(user)/ladder-game/page: /ladder-game
+```
 
 ### 실제 코드 기준 env 사용 목록
 
