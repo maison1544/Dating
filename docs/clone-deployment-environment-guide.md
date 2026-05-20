@@ -380,7 +380,7 @@ Host 기반 로컬 테스트를 하는 경우 hosts/DNS 또는 browser 환경에
 - 이 repository의 운영 대상 Next.js app은 `apps/web`이다.
 - `apps/admin`, `apps/agent`, `apps/user`는 legacy Vite app 구조이므로 새 Vercel Project의 Root Directory로 선택하지 않는다.
 - clone 재배포에서는 Root Directory를 repository root로 두는 방식을 우선 사용한다.
-- repository root의 `vercel.json`이 install/build/output directory를 고정한다.
+- repository root의 `vercel.ts`가 Framework Preset과 install/build command를 고정한다.
 
 Vercel 설정:
 
@@ -390,7 +390,7 @@ Vercel 설정:
 | Root Directory | repository root, `./` |
 | Install Command | `pnpm install --frozen-lockfile` |
 | Build Command | `pnpm --filter web build` |
-| Output Directory | `apps/web/.next` |
+| Output Directory | 비움, Next.js default |
 
 Vercel UI가 자동으로 `apps/admin`을 선택한 경우:
 
@@ -399,7 +399,7 @@ Vercel UI가 자동으로 `apps/admin`을 선택한 경우:
 3. repository root, 즉 `./`로 변경한다.
 4. Framework Preset은 `Next.js`를 유지한다.
 5. Output Directory는 `public`으로 설정하지 않는다.
-6. root 배포 방식에서는 Output Directory를 `apps/web/.next`로 둔다.
+6. Output Directory에 `apps/web/.next`를 넣지 않는다. 이 값은 build를 READY로 만들 수는 있어도 Next.js route가 Vercel `NOT_FOUND`를 반환할 수 있다.
 
 대안으로 Root Directory를 `apps/web`으로 둘 수도 있다. 이 방식에서는 Framework Preset이 Next.js로 더 잘 감지될 수 있으므로, 신규 Project 생성 화면에서 Vercel이 Next.js를 정확히 인식하지 못하거나 Project Settings의 Framework가 `Other`/`null`로 남는다면 `apps/web` root 방식을 선택한다.
 
@@ -421,8 +421,18 @@ No Output Directory named "public" found after the Build completed.
 
 이 경우 다음 중 하나로 해결한다.
 
-1. repository root 배포를 유지한다면 `vercel.json`에 `outputDirectory: "apps/web/.next"`가 포함되어 있는 최신 commit을 배포한다.
-2. 새 Project를 다시 만들 수 있다면 Root Directory를 `apps/web`, Framework Preset을 `Next.js`, Output Directory를 비움으로 설정한다.
+1. repository root 배포를 유지한다면 `vercel.ts`에 `framework: "nextjs"`가 포함되어 있는 최신 commit을 배포한다.
+2. Vercel Dashboard의 Project Settings에서 Framework Preset을 `Next.js`, Output Directory를 비움으로 설정한다.
+3. 새 Project를 다시 만들 수 있다면 Root Directory를 `apps/web`, Framework Preset을 `Next.js`, Output Directory를 비움으로 설정한다.
+
+현재 repository는 `vercel.ts`로 `framework: "nextjs"`를 명시한다. 그래도 Vercel Project Settings의 Framework가 `Other`/`null`로 남고 `public` 오류가 반복되면 Dashboard에서 직접 다음을 확인한다.
+
+```text
+Framework Preset: Next.js
+Output Directory: 비움
+```
+
+`apps/web/.next`를 Output Directory로 지정하는 것은 최종 해결책으로 사용하지 않는다.
 
 ## 13. Vercel 환경변수 등록
 
