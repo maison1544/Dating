@@ -30,7 +30,8 @@ export function AdminLoginPage() {
     if (!user) return;
     if (!adminAccount) return;
 
-    router.push(isAgent ? "/agent" : "/admin");
+    router.refresh();
+    router.replace(isAgent ? "/agent" : "/admin");
   }, [authLoading, user, adminAccount, isAgent, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {

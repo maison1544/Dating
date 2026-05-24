@@ -274,6 +274,7 @@ export function AdminLayout({ children, contentClassName }: AdminLayoutProps) {
                 <Link
                   key={item.path}
                   href={item.path}
+                  prefetch={false}
                   onClick={() => setIsSidebarOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative group ${
                     isActive

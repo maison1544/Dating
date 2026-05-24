@@ -455,6 +455,12 @@ export function AuthProvider({
       // ignore - login tracking failure should not block login
     }
 
+    setUser(authUser);
+    setSession(data.session);
+    setAdminAccount(null);
+    setProfile(userProfile);
+    setIsLoading(false);
+
     return { error: null };
   };
 

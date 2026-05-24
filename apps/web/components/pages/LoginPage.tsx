@@ -37,7 +37,8 @@ export function LoginPage() {
       if (error) {
         setError(error.message);
       } else {
-        router.push("/");
+        router.refresh();
+        router.replace("/");
       }
     } catch (err) {
       setError("로그인 중 오류가 발생했습니다.");

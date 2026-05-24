@@ -127,6 +127,7 @@ export function Header() {
             </Link>
             <Link
               href="/point"
+              prefetch={false}
               className={`transition-colors ${
                 isActive("/point")
                   ? "text-pink-400"
@@ -138,6 +139,7 @@ export function Header() {
             {isLoggedIn && (
               <Link
                 href="/mypage"
+                prefetch={false}
                 className={`transition-colors ${
                   isActive("/mypage")
                     ? "text-pink-400"
@@ -254,6 +256,7 @@ export function Header() {
               </Link>
               <Link
                 href="/point"
+                prefetch={false}
                 className={`transition-colors ${
                   isActive("/point")
                     ? "text-pink-400"
@@ -266,6 +269,7 @@ export function Header() {
               {isLoggedIn && (
                 <Link
                   href="/mypage"
+                  prefetch={false}
                   className={`transition-colors ${
                     isActive("/mypage")
                       ? "text-pink-400"
