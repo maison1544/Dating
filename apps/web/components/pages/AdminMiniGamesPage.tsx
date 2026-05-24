@@ -219,54 +219,6 @@ export function AdminMiniGamesPage() {
     };
   }, [refetchBets, refetchRounds, refetchStatsBets]);
 
-  // 라운드 자동 완료 트리거 - 배팅 마감 시간이 지난 라운드 처리
-  useEffect(() => {
-    const checkAndProcessRounds = async () => {
-      const now = new Date();
-      const expiredRounds = (dbRounds || []).filter((r: any) => {
-        if (r.status !== "betting") return false;
-        if (!r.betting_end_time) return false;
-        const endTime = new Date(r.betting_end_time);
-        return endTime <= now;
-      });
-
-      for (const round of expiredRounds) {
-        try {
-          await supabase.rpc("game_tick_client", {
-            p_game_type: round.game_type,
-          });
-        } catch (e) {
-          console.error("game_tick_client error:", e);
-        }
-      }
-
-      if (expiredRounds.length > 0) {
-        await Promise.all([refetchRounds(), refetchBets(), refetchStatsBets()]);
-      }
-    };
-
-    // 초기 실행 및 2초마다 체크 (5초에서 단축)
-    checkAndProcessRounds();
-    const interval = setInterval(checkAndProcessRounds, 2000);
-
-    return () => clearInterval(interval);
-  }, [dbRounds, refetchRounds, refetchBets, refetchStatsBets]);
-
-  // 타이머 종료 시 즉시 새 라운드 생성 및 데이터 갱신
-  const handleTimerEnd = useCallback(
-    async (gameType: string) => {
-      const dbGameType = gameType === "사다리" ? "ladder" : "powerball";
-      try {
-        await supabase.rpc("game_tick_client", { p_game_type: dbGameType });
-        // 즉시 refetch (debounce 없이)
-        await Promise.all([refetchRounds(), refetchBets(), refetchStatsBets()]);
-      } catch (e) {
-        console.error("handleTimerEnd error:", e);
-      }
-    },
-    [refetchRounds, refetchBets, refetchStatsBets],
-  );
-
   const formatDateTime = formatDatetime;
 
   const mapStatus = (
@@ -2253,7 +2205,6 @@ export function AdminMiniGamesPage() {
           gameRounds={gameRounds}
           onUpdateReservedResult={handleUpdateReservedResult}
           serverTimeOffset={serverTimeOffset}
-          onTimerEnd={handleTimerEnd}
         />
       </div>
     </AdminLayout>
