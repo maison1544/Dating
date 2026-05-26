@@ -51,6 +51,12 @@ function getClientIp(req: Request): string | null {
   return null;
 }
 
+type BackofficeScope = "admin" | "agent";
+
+function isBackofficeScope(value: unknown): value is BackofficeScope {
+  return value === "admin" || value === "agent";
+}
+
 Deno.serve(async (req: Request) => {
   try {
     if (req.method === "OPTIONS") {
@@ -84,58 +90,41 @@ Deno.serve(async (req: Request) => {
     const userId = authData.user.id;
     const now = new Date().toISOString();
     const ip = getClientIp(req);
+    const body = await req.json().catch(() => ({}));
+    const scope = body?.scope;
 
-    const { data: adminRow, error: adminError } = await supabaseAdmin
-      .from("admins")
+    if (!isBackofficeScope(scope)) {
+      return jsonResponse({ error: "Invalid scope" }, 400);
+    }
+
+    const tableName = scope === "admin" ? "admins" : "agents";
+
+    const { data: accountRow, error: accountError } = await supabaseAdmin
+      .from(tableName)
       .select("id")
       .eq("id", userId)
       .maybeSingle();
 
-    if (adminError) {
-      return jsonResponse({ error: adminError.message }, 400);
+    if (accountError) {
+      return jsonResponse({ error: accountError.message }, 400);
     }
 
-    if (adminRow) {
-      const { error: updateErr } = await supabaseAdmin
-        .from("admins")
-        .update({
-          last_login_at: now,
-          last_login_ip: ip,
-          updated_at: now,
-        })
-        .eq("id", userId);
-
-      if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
-
-      return jsonResponse({ success: true, accountType: "admin", ip }, 200);
+    if (!accountRow) {
+      return jsonResponse({ error: "Account not found" }, 404);
     }
 
-    const { data: agentRow, error: agentError } = await supabaseAdmin
-      .from("agents")
-      .select("id")
-      .eq("id", userId)
-      .maybeSingle();
+    const { error: updateErr } = await supabaseAdmin
+      .from(tableName)
+      .update({
+        last_login_at: now,
+        last_login_ip: ip,
+        updated_at: now,
+      })
+      .eq("id", userId);
 
-    if (agentError) {
-      return jsonResponse({ error: agentError.message }, 400);
-    }
+    if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
 
-    if (agentRow) {
-      const { error: updateErr } = await supabaseAdmin
-        .from("agents")
-        .update({
-          last_login_at: now,
-          last_login_ip: ip,
-          updated_at: now,
-        })
-        .eq("id", userId);
-
-      if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
-
-      return jsonResponse({ success: true, accountType: "agent", ip }, 200);
-    }
-
-    return jsonResponse({ error: "Account not found" }, 404);
+    return jsonResponse({ success: true, accountType: scope, ip }, 200);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return jsonResponse({ error: message }, 500);

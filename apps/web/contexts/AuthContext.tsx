@@ -85,7 +85,7 @@ export function AuthProvider({
     adminAccountRef.current = adminAccount;
   }, [adminAccount]);
 
-  const fetchOrCreateProfile = async (authUser: User) => {
+  const fetchUserProfile = async (authUser: User) => {
     const { data, error } = await supabase
       .from("user_profiles")
       .select("*")
@@ -100,38 +100,10 @@ export function AuthProvider({
       return data;
     }
 
-    const email = authUser.email;
-    if (!email) {
-      return null;
-    }
-
-    const emailPrefix = email.split("@")[0] || "user";
-    const name =
-      (authUser.user_metadata?.name as string | undefined) || emailPrefix;
-    const nickname =
-      (authUser.user_metadata?.nickname as string | undefined) || name;
-
-    const { data: created, error: createError } = await supabase
-      .from("user_profiles")
-      .insert({
-        id: authUser.id,
-        email,
-        name,
-        nickname,
-        phone: (authUser.user_metadata?.phone as string | undefined) || null,
-        status: "pending",
-      })
-      .select("*")
-      .single();
-
-    if (createError) {
-      return null;
-    }
-    return created;
+    return null;
   };
 
-  const fetchAdminAccount = async (userId: string) => {
-    // Use supabaseAdmin to ensure we get the latest is_active value without RLS interference
+  const fetchAdminAccountForAdminScope = async (userId: string) => {
     const { data: adminData, error: adminError } = await supabaseAdmin
       .from("admins")
       .select("*")
@@ -146,6 +118,10 @@ export function AuthProvider({
       return adminData;
     }
 
+    return null;
+  };
+
+  const fetchAgentAccountForAgentScope = async (userId: string) => {
     const { data: agentData, error: agentError } = await supabaseAdmin
       .from("agents")
       .select("*")
@@ -157,6 +133,15 @@ export function AuthProvider({
     }
 
     return agentData ?? null;
+  };
+
+  const fetchBackofficeAccountForScope = async (
+    userId: string,
+    scope: "admin" | "agent",
+  ) => {
+    return scope === "admin"
+      ? fetchAdminAccountForAdminScope(userId)
+      : fetchAgentAccountForAgentScope(userId);
   };
 
   useEffect(() => {
@@ -180,22 +165,9 @@ export function AuthProvider({
 
         const authUser = nextSession.user;
 
-        // 관리자/에이전트 계정인지 확인
-        const account = await fetchAdminAccount(authUser.id);
-        if (account) {
-          // 유저 클라이언트에 관리자 계정이 로그인됨 - 로그아웃 처리
-          await supabase.auth.signOut();
-          if (cancelled || syncSeq !== authSyncSeq.current) return;
-          setSession(null);
-          setUser(null);
-          setAdminAccount(null);
-          setProfile(null);
-          return;
-        }
+        const userProfile = await fetchUserProfile(authUser);
 
-        const userProfile = await fetchOrCreateProfile(authUser);
-
-        if (userProfile && userProfile.status !== "active") {
+        if (!userProfile || userProfile.status !== "active") {
           await supabase.auth.signOut();
 
           if (cancelled || syncSeq !== authSyncSeq.current) return;
@@ -232,23 +204,12 @@ export function AuthProvider({
       }
 
       const authUser = nextSession.user;
-      const account = await fetchAdminAccount(authUser.id);
+      const account =
+        appScope === "admin"
+          ? await fetchAdminAccountForAdminScope(authUser.id)
+          : await fetchAgentAccountForAgentScope(authUser.id);
 
       if (account) {
-        const isAgentAccount = "referral_code" in account;
-        if (
-          (appScope === "admin" && isAgentAccount) ||
-          (appScope === "agent" && !isAgentAccount)
-        ) {
-          await supabaseAdmin.auth.signOut();
-          setSession(null);
-          setUser(null);
-          setAdminAccount(null);
-          setProfile(null);
-          setIsLoading(false);
-          return;
-        }
-
         // Check if account is suspended
         if (account.is_active === false) {
           // Sign out suspended account
@@ -395,20 +356,10 @@ export function AuthProvider({
       return { error: new Error("로그인에 실패했습니다.") };
     }
 
-    const account = await fetchAdminAccount(authUser.id);
-    if (account) {
-      await supabase.auth.signOut();
-      return {
-        error: new Error(
-          "관리자/에이전트 계정은 관리자 로그인 페이지에서 아이디/비밀번호로 로그인해주세요.",
-        ),
-      };
-    }
-
-    const userProfile = await fetchOrCreateProfile(authUser);
+    const userProfile = await fetchUserProfile(authUser);
     if (!userProfile) {
       await supabase.auth.signOut();
-      return { error: new Error("로그인에 실패했습니다.") };
+      return { error: new Error("이메일 또는 비밀번호가 올바르지 않습니다.") };
     }
 
     if (userProfile.status !== "active") {
@@ -485,6 +436,16 @@ export function AuthProvider({
         };
       }
 
+      const loginScope =
+        expectedRole ?? (appScope === "admin" || appScope === "agent"
+          ? appScope
+          : null);
+      if (!loginScope) {
+        return {
+          error: new Error("아이디 또는 비밀번호가 올바르지 않습니다."),
+        };
+      }
+
       const email = `${safe}@backoffice.local`;
 
       // 관리자/에이전트는 별도 supabaseAdmin 클라이언트로 로그인
@@ -499,39 +460,20 @@ export function AuthProvider({
         };
       }
 
+      if (!data.user) {
+        await supabaseAdmin.auth.signOut();
+        return {
+          error: new Error("아이디 또는 비밀번호가 올바르지 않습니다."),
+        };
+      }
+
       // 관리자/에이전트 세션 수동 설정
       if (data.user) {
-        const account = await fetchAdminAccount(data.user.id);
+        const account = await fetchBackofficeAccountForScope(
+          data.user.id,
+          loginScope,
+        );
         if (account) {
-          // 역할 검증: expectedRole이 지정된 경우 계정 유형 확인
-          if (expectedRole) {
-            const isAdminAccount = "role" in account;
-            const isAgentAccount = "referral_code" in account;
-            if (expectedRole === "admin" && !isAdminAccount) {
-              await supabaseAdmin.auth.signOut();
-              setSession(null);
-              setUser(null);
-              setAdminAccount(null);
-              setProfile(null);
-              return {
-                error: new Error(
-                  "에이전트 계정은 에이전트 로그인 페이지를 이용해주세요.",
-                ),
-              };
-            }
-            if (expectedRole === "agent" && !isAgentAccount) {
-              await supabaseAdmin.auth.signOut();
-              setSession(null);
-              setUser(null);
-              setAdminAccount(null);
-              setProfile(null);
-              return {
-                error: new Error(
-                  "관리자 계정은 관리자 로그인 페이지를 이용해주세요.",
-                ),
-              };
-            }
-          }
           // Check if account is suspended
           if (account.is_active === false) {
             // Sign out the user immediately
@@ -562,7 +504,7 @@ export function AuthProvider({
                       apikey: anonKey,
                       Authorization: `Bearer ${token}`,
                     },
-                    body: JSON.stringify({}),
+                    body: JSON.stringify({ scope: loginScope }),
                   },
                 );
               }
@@ -570,6 +512,15 @@ export function AuthProvider({
           } catch {
             // ignore
           }
+        } else {
+          await supabaseAdmin.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setAdminAccount(null);
+          setProfile(null);
+          return {
+            error: new Error("아이디 또는 비밀번호가 올바르지 않습니다."),
+          };
         }
       }
 
@@ -718,7 +669,7 @@ export function AuthProvider({
       .eq("id", user.id);
 
     if (!error) {
-      const updatedProfile = await fetchOrCreateProfile(user);
+      const updatedProfile = await fetchUserProfile(user);
       setProfile(updatedProfile);
     }
 
@@ -727,9 +678,22 @@ export function AuthProvider({
 
   const refreshProfile = async () => {
     if (user) {
-      const account = await fetchAdminAccount(user.id);
-      const userProfile = account ? null : await fetchOrCreateProfile(user);
-      setAdminAccount(account);
+      if (appScope === "admin") {
+        const account = await fetchAdminAccountForAdminScope(user.id);
+        setAdminAccount(account);
+        setProfile(null);
+        return;
+      }
+
+      if (appScope === "agent") {
+        const account = await fetchAgentAccountForAgentScope(user.id);
+        setAdminAccount(account);
+        setProfile(null);
+        return;
+      }
+
+      const userProfile = await fetchUserProfile(user);
+      setAdminAccount(null);
       setProfile(userProfile);
     }
   };
