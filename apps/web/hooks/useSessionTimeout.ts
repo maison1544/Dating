@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useCallback } from "react";
-import { supabase, supabaseAdmin } from "@/lib/supabase/client";
+import { supabase, supabaseScopedBackoffice } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlert } from "@/contexts/AlertContext";
 
@@ -22,7 +22,7 @@ export function useSessionTimeout() {
 
   // Supabase 클라이언트 선택
   const getClient = useCallback(() => {
-    return adminAccount ? supabaseAdmin : supabase;
+    return adminAccount ? supabaseScopedBackoffice : supabase;
   }, [adminAccount]);
 
   // 서버에 heartbeat 전송 (throttled: 2분 간격)

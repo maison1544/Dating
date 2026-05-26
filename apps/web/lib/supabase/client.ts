@@ -68,6 +68,7 @@ function createLazyClient(instance?: SupabaseAuthInstance): SupabaseBrowserClien
 }
 
 const supabase = createLazyClient();
-const supabaseAdmin = createLazyClient("backoffice");
+const supabaseScopedBackoffice = createLazyClient("backoffice");
+const supabaseAdmin = supabaseScopedBackoffice;
 
-export { supabase, supabaseAdmin };
+export { supabase, supabaseScopedBackoffice, supabaseAdmin };

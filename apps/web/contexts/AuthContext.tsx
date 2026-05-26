@@ -72,7 +72,7 @@ export function AuthProvider({
   );
   const activeClient = appScope === "user" ? userClient : scopedClient;
   const supabase = userClient;
-  const supabaseAdmin = activeClient;
+  const supabaseBackoffice = activeClient;
 
   const isAdmin = !!(
     adminAccount &&
@@ -104,7 +104,7 @@ export function AuthProvider({
   };
 
   const fetchAdminAccountForAdminScope = async (userId: string) => {
-    const { data: adminData, error: adminError } = await supabaseAdmin
+    const { data: adminData, error: adminError } = await supabaseBackoffice
       .from("admins")
       .select("*")
       .eq("id", userId)
@@ -122,7 +122,7 @@ export function AuthProvider({
   };
 
   const fetchAgentAccountForAgentScope = async (userId: string) => {
-    const { data: agentData, error: agentError } = await supabaseAdmin
+    const { data: agentData, error: agentError } = await supabaseBackoffice
       .from("agents")
       .select("*")
       .eq("id", userId)
@@ -213,7 +213,7 @@ export function AuthProvider({
         // Check if account is suspended
         if (account.is_active === false) {
           // Sign out suspended account
-          await supabaseAdmin.auth.signOut();
+          await supabaseBackoffice.auth.signOut();
           setSession(null);
           setUser(null);
           setAdminAccount(null);
@@ -230,7 +230,7 @@ export function AuthProvider({
         return;
       }
 
-      await supabaseAdmin.auth.signOut();
+      await supabaseBackoffice.auth.signOut();
       setSession(null);
       setUser(null);
       setAdminAccount(null);
@@ -252,7 +252,7 @@ export function AuthProvider({
 
         const {
           data: { session: adminSession },
-        } = await supabaseAdmin.auth.getSession();
+        } = await supabaseBackoffice.auth.getSession();
         if (!cancelled) {
           await syncAdminSession(adminSession);
         }
@@ -276,7 +276,7 @@ export function AuthProvider({
               void syncUserSession(session);
             },
           )
-        : supabaseAdmin.auth.onAuthStateChange(
+        : supabaseBackoffice.auth.onAuthStateChange(
             (_event: AuthChangeEvent, session: Session | null) => {
               if (cancelled) return;
               // signInWithUsername 실행 중에는 syncAdminSession 차단 (역할 검증 레이스컨디션 방지)
@@ -415,7 +415,7 @@ export function AuthProvider({
     return { error: null };
   };
 
-  // 관리자/에이전트용 아이디 로그인 (별도 supabaseAdmin 클라이언트 사용)
+  // 관리자/에이전트용 아이디 로그인 (별도 backoffice 클라이언트 사용)
   const signInWithUsername = async (
     username: string,
     password: string,
@@ -448,8 +448,8 @@ export function AuthProvider({
 
       const email = `${safe}@backoffice.local`;
 
-      // 관리자/에이전트는 별도 supabaseAdmin 클라이언트로 로그인
-      const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      // 관리자/에이전트는 별도 backoffice 클라이언트로 로그인
+      const { data, error } = await supabaseBackoffice.auth.signInWithPassword({
         email,
         password,
       });
@@ -461,7 +461,7 @@ export function AuthProvider({
       }
 
       if (!data.user) {
-        await supabaseAdmin.auth.signOut();
+        await supabaseBackoffice.auth.signOut();
         return {
           error: new Error("아이디 또는 비밀번호가 올바르지 않습니다."),
         };
@@ -477,7 +477,7 @@ export function AuthProvider({
           // Check if account is suspended
           if (account.is_active === false) {
             // Sign out the user immediately
-            await supabaseAdmin.auth.signOut();
+            await supabaseBackoffice.auth.signOut();
             return {
               error: new Error("계정이 정지되었습니다. 관리자에게 문의하세요."),
             };
@@ -513,7 +513,7 @@ export function AuthProvider({
             // ignore
           }
         } else {
-          await supabaseAdmin.auth.signOut();
+          await supabaseBackoffice.auth.signOut();
           setSession(null);
           setUser(null);
           setAdminAccount(null);
@@ -570,7 +570,7 @@ export function AuthProvider({
       // 현재 계정 타입에 따라 적절한 클라이언트에서 로그아웃
       if (adminAccount) {
         // 관리자/에이전트 로그아웃
-        await supabaseAdmin.auth.signOut();
+        await supabaseBackoffice.auth.signOut();
         localStorage.removeItem(getSupabaseAuthStorageKey(appScope));
       } else {
         // Set is_online = false before logout (if user exists)
@@ -641,7 +641,7 @@ export function AuthProvider({
     if (!user?.id) return;
     if (!adminAccount) return; // 유저는 위에서 처리
 
-    const channel = supabaseAdmin
+    const channel = supabaseBackoffice
       .channel(`force-logout:${user.id}`)
       .on("broadcast", { event: "forced_logout" }, () => {
         showAlert({
@@ -656,7 +656,7 @@ export function AuthProvider({
       .subscribe();
 
     return () => {
-      supabaseAdmin.removeChannel(channel);
+      supabaseBackoffice.removeChannel(channel);
     };
   }, [showAlert, signOut, user?.id, adminAccount]);
 

@@ -19,6 +19,10 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function recordLoginError(message: string, detail?: unknown) {
+  console.error("backoffice-record-login:", message, detail);
+}
+
 function getBearer(req: Request): string | null {
   const auth = req.headers.get("Authorization") || "";
   if (!auth) return null;
@@ -70,8 +74,9 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceRoleKey) {
+      recordLoginError("Missing Supabase environment variables");
       return jsonResponse(
-        { error: "Missing Supabase environment variables" },
+        { error: "Unable to record login" },
         500
       );
     }
@@ -84,6 +89,7 @@ Deno.serve(async (req: Request) => {
     const { data: authData, error: authError } =
       await supabaseAdmin.auth.getUser(jwt);
     if (authError || !authData?.user) {
+      recordLoginError("Invalid auth token", authError?.message);
       return jsonResponse({ error: "Invalid auth token" }, 401);
     }
 
@@ -106,11 +112,13 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (accountError) {
-      return jsonResponse({ error: accountError.message }, 400);
+      recordLoginError("Account lookup failed", accountError.message);
+      return jsonResponse({ error: "Unable to record login" }, 400);
     }
 
     if (!accountRow) {
-      return jsonResponse({ error: "Account not found" }, 404);
+      recordLoginError("Account not found for scope", scope);
+      return jsonResponse({ error: "Unable to record login" }, 404);
     }
 
     const { error: updateErr } = await supabaseAdmin
@@ -122,11 +130,15 @@ Deno.serve(async (req: Request) => {
       })
       .eq("id", userId);
 
-    if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
+    if (updateErr) {
+      recordLoginError("Login update failed", updateErr.message);
+      return jsonResponse({ error: "Unable to record login" }, 400);
+    }
 
-    return jsonResponse({ success: true, accountType: scope, ip }, 200);
+    return jsonResponse({ success: true }, 200);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
-    return jsonResponse({ error: message }, 500);
+    recordLoginError("Unhandled error", message);
+    return jsonResponse({ error: "Unable to record login" }, 500);
   }
 });
