@@ -1,7 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr";
 import {
   getSupabaseCookieOptions,
-  getSupabaseAuthStorageKey,
   resolveBrowserAppInstance,
   resolveBackofficeAuthInstance,
   type SupabaseAuthInstance,
@@ -39,9 +38,6 @@ export function createClient(instance?: SupabaseAuthInstance) {
     {
       isSingleton: false,
       cookieOptions: getSupabaseCookieOptions(resolvedInstance),
-      auth: {
-        storageKey: getSupabaseAuthStorageKey(resolvedInstance),
-      },
     },
   );
 }

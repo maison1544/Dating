@@ -7,7 +7,7 @@ export async function updateSession(
   appScope: AppInstance = "user",
 ) {
   let supabaseResponse = NextResponse.next({ request });
-  const cookieName = getSupabaseCookieOptions(appScope).name;
+  const cookieOptions = getSupabaseCookieOptions(appScope);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,15 +27,26 @@ export async function updateSession(
           );
         },
       },
-      cookieOptions: {
-        name: cookieName,
-      },
+      cookieOptions,
     },
   );
 
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+
+  if (error && process.env.NEXT_PUBLIC_DEBUG_AUTH === "true") {
+    console.warn("Supabase middleware getUser failed", {
+      hostname: request.nextUrl.hostname,
+      pathname: request.nextUrl.pathname,
+      appScope,
+      cookieName: cookieOptions.name,
+      requestCookieNames: request.cookies.getAll().map((cookie) => cookie.name),
+      message: error.message,
+      code: error.code,
+    });
+  }
 
   return { response: supabaseResponse, user };
 }

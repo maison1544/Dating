@@ -14,6 +14,7 @@ import {
   getSupabaseAuthStorageKey,
   type AppInstance,
 } from "@/lib/supabase/config";
+import { clearStaleSupabaseAuthCookies } from "@/lib/supabase/cookies";
 import type { Tables } from "@/lib/types/database.types";
 import { useAlert } from "./AlertContext";
 
@@ -341,6 +342,8 @@ export function AuthProvider({
   // Heartbeat는 useSessionTimeout 훅에서 통합 처리 (유저/관리자/에이전트 모두)
 
   const signIn = async (email: string, password: string) => {
+    clearStaleSupabaseAuthCookies("user");
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -445,6 +448,8 @@ export function AuthProvider({
           error: new Error("아이디 또는 비밀번호가 올바르지 않습니다."),
         };
       }
+
+      clearStaleSupabaseAuthCookies(loginScope);
 
       const email = `${safe}@backoffice.local`;
 

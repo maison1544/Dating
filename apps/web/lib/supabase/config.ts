@@ -72,7 +72,12 @@ export function getSupabaseAuthStorageKey(instance: SupabaseAuthInstance = resol
 }
 
 export function getSupabaseCookieOptions(instance: SupabaseAuthInstance = resolveAppInstance()) {
+  const domain = process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN?.trim();
+
   return {
     name: getSupabaseAuthCookieName(instance),
+    path: "/",
+    sameSite: "lax" as const,
+    ...(domain ? { domain, secure: true } : {}),
   };
 }
